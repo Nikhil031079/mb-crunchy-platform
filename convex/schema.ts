@@ -1,0 +1,595 @@
+// ============================================================================
+// MB CRUNCHY - Convex Database Schema (v1.2 + Auth)
+// Unified schema: auth tables + all business tables
+// ============================================================================
+
+import { authTables } from "@convex-dev/auth/server";
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+// ============================================================================
+// AUTH TABLES (from @convex-dev/auth)
+// ============================================================================
+
+// Auth tables are spread in the defineSchema call below
+
+// ============================================================================
+// BUSINESS UNITS
+// ============================================================================
+
+const businessUnits = defineTable({
+  name: v.string(),
+  slug: v.string(),
+  logo: v.optional(v.string()),
+  banner: v.optional(v.string()),
+  coverImage: v.optional(v.string()),
+  icon: v.optional(v.string()),
+  description: v.optional(v.string()),
+  themeColor: v.string(),
+  secondaryColor: v.optional(v.string()),
+  homepageVisible: v.boolean(),
+  displayOrder: v.number(),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  enableCombos: v.boolean(),
+  enablePartyPacks: v.boolean(),
+  enableOffers: v.boolean(),
+  enableSearch: v.boolean(),
+  enableCheckout: v.boolean(),
+  enableDelivery: v.boolean(),
+  enablePickup: v.boolean(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_slug", ["slug"])
+  .index("by_status", ["status"])
+  .index("by_homepage_visible", ["homepageVisible", "displayOrder"]);
+
+// ============================================================================
+// CATEGORIES
+// ============================================================================
+
+const categories = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  name: v.string(),
+  slug: v.string(),
+  description: v.optional(v.string()),
+  images: v.array(v.string()),
+  coverImage: v.optional(v.string()),
+  thumbnail: v.optional(v.string()),
+  displayOrder: v.number(),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  metaTitle: v.optional(v.string()),
+  metaDescription: v.optional(v.string()),
+  metaKeywords: v.optional(v.string()),
+  canonicalUrl: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_business_unit_slug", ["businessUnitId", "slug"])
+  .index("by_status", ["status"]);
+
+// ============================================================================
+// PRODUCTS (Catalog only — stock moved to inventory)
+// ============================================================================
+
+const productVariants = v.object({
+  name: v.string(),
+  price: v.number(),
+  compareAtPrice: v.optional(v.number()),
+});
+
+const products = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  categoryId: v.id("categories"),
+  name: v.string(),
+  slug: v.string(),
+  description: v.optional(v.string()),
+  images: v.array(v.string()),
+  coverImage: v.optional(v.string()),
+  thumbnail: v.optional(v.string()),
+  variants: v.array(productVariants),
+  tags: v.array(v.string()),
+  metaTitle: v.optional(v.string()),
+  metaDescription: v.optional(v.string()),
+  metaKeywords: v.optional(v.string()),
+  canonicalUrl: v.optional(v.string()),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  featured: v.boolean(),
+  displayOrder: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_category", ["categoryId", "displayOrder"])
+  .index("by_slug_in_business_unit", ["businessUnitId", "slug"])
+  .index("by_status", ["status"])
+  .index("by_featured", ["businessUnitId", "featured"])
+  .index("by_tags", ["tags"]);
+
+// ============================================================================
+// COMBOS
+// ============================================================================
+
+const comboItems = v.object({
+  catalogItemId: v.id("catalogItems"),
+  quantity: v.number(),
+});
+
+const combos = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  name: v.string(),
+  slug: v.string(),
+  description: v.optional(v.string()),
+  images: v.array(v.string()),
+  coverImage: v.optional(v.string()),
+  thumbnail: v.optional(v.string()),
+  items: v.array(comboItems),
+  price: v.number(),
+  compareAtPrice: v.optional(v.number()),
+  savingsPercentage: v.optional(v.number()),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  featured: v.boolean(),
+  displayOrder: v.number(),
+  metaTitle: v.optional(v.string()),
+  metaDescription: v.optional(v.string()),
+  metaKeywords: v.optional(v.string()),
+  canonicalUrl: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_slug_in_business_unit", ["businessUnitId", "slug"])
+  .index("by_status", ["status"])
+  .index("by_featured", ["businessUnitId", "featured"]);
+
+// ============================================================================
+// PARTY PACKS
+// ============================================================================
+
+const partyPackItems = v.object({
+  catalogItemId: v.id("catalogItems"),
+  quantity: v.number(),
+});
+
+const partyPacks = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  name: v.string(),
+  slug: v.string(),
+  description: v.optional(v.string()),
+  images: v.array(v.string()),
+  coverImage: v.optional(v.string()),
+  thumbnail: v.optional(v.string()),
+  items: v.array(partyPackItems),
+  minServings: v.number(),
+  maxServings: v.number(),
+  price: v.number(),
+  compareAtPrice: v.optional(v.number()),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  featured: v.boolean(),
+  displayOrder: v.number(),
+  metaTitle: v.optional(v.string()),
+  metaDescription: v.optional(v.string()),
+  metaKeywords: v.optional(v.string()),
+  canonicalUrl: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_slug_in_business_unit", ["businessUnitId", "slug"])
+  .index("by_status", ["status"])
+  .index("by_featured", ["businessUnitId", "featured"]);
+
+// ============================================================================
+// CATALOG ITEMS (Unified index)
+// ============================================================================
+
+const catalogItems = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  itemType: v.union(v.literal("product"), v.literal("combo"), v.literal("partyPack")),
+  sourceId: v.string(),
+  name: v.string(),
+  slug: v.string(),
+  description: v.optional(v.string()),
+  price: v.number(),
+  compareAtPrice: v.optional(v.number()),
+  coverImage: v.optional(v.string()),
+  thumbnail: v.optional(v.string()),
+  tags: v.array(v.string()),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  featured: v.boolean(),
+  displayOrder: v.number(),
+  metaTitle: v.optional(v.string()),
+  metaDescription: v.optional(v.string()),
+  metaKeywords: v.optional(v.string()),
+  canonicalUrl: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_slug_in_business_unit", ["businessUnitId", "slug"])
+  .index("by_source", ["sourceId"])
+  .index("by_item_type", ["itemType"])
+  .index("by_status", ["status"])
+  .index("by_featured", ["businessUnitId", "featured"])
+  .index("by_tags", ["tags"]);
+
+// ============================================================================
+// INVENTORY (Separate from Catalog)
+// ============================================================================
+
+const inventory = defineTable({
+  catalogItemId: v.id("catalogItems"),
+  businessUnitId: v.id("businessUnits"),
+  variantName: v.string(),
+  sku: v.optional(v.string()),
+  stockQuantity: v.number(),
+  available: v.boolean(),
+  lowStockAlert: v.optional(v.number()),
+  costPrice: v.optional(v.number()),
+  supplier: v.optional(v.string()),
+  barcode: v.optional(v.string()),
+  lastRestocked: v.optional(v.number()),
+  expiryDate: v.optional(v.number()),
+  location: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_catalog_item", ["catalogItemId"])
+  .index("by_business_unit", ["businessUnitId"])
+  .index("by_sku", ["sku"])
+  .index("by_available", ["available"])
+  .index("by_barcode", ["barcode"]);
+
+// ============================================================================
+// OFFERS
+// ============================================================================
+
+const offers = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  title: v.string(),
+  description: v.optional(v.string()),
+  code: v.optional(v.string()),
+  discountType: v.union(v.literal("percentage"), v.literal("fixed")),
+  discountValue: v.number(),
+  minOrderValue: v.optional(v.number()),
+  maxDiscount: v.optional(v.number()),
+  startsAt: v.number(),
+  endsAt: v.number(),
+  applicableCatalogItemIds: v.array(v.id("catalogItems")),
+  applicableCategoryIds: v.array(v.id("categories")),
+  usageLimit: v.optional(v.number()),
+  usedCount: v.number(),
+  displayOrder: v.number(),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  banner: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_code", ["code"])
+  .index("by_status", ["status"])
+  .index("by_active_period", ["startsAt", "endsAt"]);
+
+// ============================================================================
+// ORDERS
+// ============================================================================
+
+const orderItems = v.object({
+  catalogItemId: v.id("catalogItems"),
+  itemType: v.union(v.literal("product"), v.literal("combo"), v.literal("partyPack")),
+  name: v.string(),
+  variantName: v.string(),
+  quantity: v.number(),
+  unitPrice: v.number(),
+  totalPrice: v.number(),
+  image: v.optional(v.string()),
+});
+
+const orders = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  orderNumber: v.string(),
+  customerId: v.optional(v.id("customers")),
+  customerName: v.string(),
+  customerPhone: v.string(),
+  customerEmail: v.optional(v.string()),
+  items: v.array(orderItems),
+  subtotal: v.number(),
+  discount: v.number(),
+  deliveryFee: v.number(),
+  tax: v.number(),
+  total: v.number(),
+  orderType: v.union(v.literal("delivery"), v.literal("pickup")),
+  deliveryAddress: v.optional(v.string()),
+  deliveryZoneId: v.optional(v.id("deliveryZones")),
+  deliveryNotes: v.optional(v.string()),
+  status: v.union(
+    v.literal("pending"), v.literal("confirmed"), v.literal("preparing"),
+    v.literal("ready"), v.literal("out_for_delivery"), v.literal("delivered"),
+    v.literal("cancelled"), v.literal("refunded")
+  ),
+  paymentStatus: v.union(
+    v.literal("pending"), v.literal("paid"), v.literal("failed"), v.literal("refunded")
+  ),
+  offerId: v.optional(v.id("offers")),
+  offerCode: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId"])
+  .index("by_order_number", ["orderNumber"])
+  .index("by_customer", ["customerId"])
+  .index("by_status", ["status"])
+  .index("by_phone", ["customerPhone"]);
+
+// ============================================================================
+// CUSTOMERS
+// ============================================================================
+
+const customers = defineTable({
+  authUserId: v.optional(v.string()),
+  name: v.string(),
+  email: v.optional(v.string()),
+  phone: v.optional(v.string()),
+  totalOrders: v.number(),
+  totalSpent: v.number(),
+  notes: v.optional(v.string()),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_auth_user", ["authUserId"])
+  .index("by_email", ["email"])
+  .index("by_phone", ["phone"])
+  .index("by_status", ["status"]);
+
+// ============================================================================
+// CUSTOMER ADDRESSES (Separate collection)
+// ============================================================================
+
+const addresses = defineTable({
+  customerId: v.id("customers"),
+  label: v.string(),
+  address: v.string(),
+  city: v.optional(v.string()),
+  state: v.optional(v.string()),
+  zipCode: v.optional(v.string()),
+  isDefault: v.boolean(),
+  latitude: v.optional(v.number()),
+  longitude: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_customer", ["customerId"])
+  .index("by_default", ["customerId", "isDefault"]);
+
+// ============================================================================
+// DELIVERY ZONES
+// ============================================================================
+
+const deliveryZones = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  name: v.string(),
+  radius: v.number(),
+  charge: v.number(),
+  minOrder: v.optional(v.number()),
+  freeDeliveryThreshold: v.optional(v.number()),
+  estimatedMinutes: v.optional(v.number()),
+  status: v.union(v.literal("active"), v.literal("inactive")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId"]);
+
+// ============================================================================
+// CONTENT (Generic — replaces banners with hero, promo, announcement, etc.)
+// ============================================================================
+
+const content = defineTable({
+  businessUnitId: v.optional(v.id("businessUnits")),
+  contentType: v.union(
+    v.literal("hero"),
+    v.literal("promotion"),
+    v.literal("offer"),
+    v.literal("homepageCard"),
+    v.literal("announcement"),
+    v.literal("popup"),
+    v.literal("seasonal")
+  ),
+  title: v.string(),
+  subtitle: v.optional(v.string()),
+  body: v.optional(v.string()),
+  images: v.array(v.string()),
+  coverImage: v.optional(v.string()),
+  thumbnail: v.optional(v.string()),
+  buttonText: v.optional(v.string()),
+  buttonLink: v.optional(v.string()),
+  displayOrder: v.number(),
+  status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+  startDate: v.optional(v.number()),
+  endDate: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_content_type", ["contentType"])
+  .index("by_status", ["status"])
+  .index("by_active_range", ["status", "startDate", "endDate"]);
+
+// ============================================================================
+// HOMEPAGE SECTIONS (Layout builder)
+// ============================================================================
+
+const homepageSections = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  sectionType: v.union(
+    v.literal("hero"),
+    v.literal("businessUnits"),
+    v.literal("featuredProducts"),
+    v.literal("combos"),
+    v.literal("partyPacks"),
+    v.literal("offers"),
+    v.literal("content"),
+    v.literal("testimonials"),
+    v.literal("footer")
+  ),
+  title: v.optional(v.string()),
+  displayOrder: v.number(),
+  visible: v.boolean(),
+  settings: v.optional(v.any()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_visible", ["businessUnitId", "visible"]);
+
+// ============================================================================
+// NOTIFICATIONS (Separate module from Settings)
+// ============================================================================
+
+const notifications = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  channel: v.union(
+    v.literal("whatsapp"),
+    v.literal("sms"),
+    v.literal("email"),
+    v.literal("push")
+  ),
+  enabled: v.boolean(),
+  config: v.optional(v.any()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId"])
+  .index("by_channel", ["businessUnitId", "channel"]);
+
+// ============================================================================
+// ANALYTICS — Daily Metrics
+// ============================================================================
+
+const dailyMetrics = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  date: v.string(),
+  totalOrders: v.number(),
+  totalRevenue: v.number(),
+  averageOrderValue: v.number(),
+  topProducts: v.optional(v.any()),
+  topCombos: v.optional(v.any()),
+  popularCategories: v.optional(v.any()),
+  mostSearched: v.optional(v.any()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_business_unit", ["businessUnitId", "date"])
+  .index("by_date", ["date"]);
+
+// ============================================================================
+// Analytics — Event Log (for raw view/search data)
+// ============================================================================
+
+const analyticsEvents = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  eventType: v.union(
+    v.literal("view"),
+    v.literal("search"),
+    v.literal("add_to_cart"),
+    v.literal("purchase"),
+    v.literal("share")
+  ),
+  catalogItemId: v.optional(v.id("catalogItems")),
+  sessionId: v.optional(v.string()),
+  metadata: v.optional(v.any()),
+  createdAt: v.number(),
+})
+  .index("by_business_unit", ["businessUnitId", "createdAt"])
+  .index("by_event_type", ["eventType"])
+  .index("by_catalog_item", ["catalogItemId"]);
+
+// ============================================================================
+// SETTINGS (Simplified — WhatsApp moved to notifications)
+// ============================================================================
+
+const settings = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  currency: v.string(),
+  taxRate: v.number(),
+  deliveryFee: v.number(),
+  freeDeliveryThreshold: v.optional(v.number()),
+  openingHours: v.optional(v.any()),
+  isOpen: v.boolean(),
+  phone: v.optional(v.string()),
+  email: v.optional(v.string()),
+  address: v.optional(v.string()),
+  socialLinks: v.optional(
+    v.object({
+      instagram: v.optional(v.string()),
+      facebook: v.optional(v.string()),
+      twitter: v.optional(v.string()),
+    })
+  ),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId"]);
+
+// ============================================================================
+// GLOBAL SETTINGS
+// ============================================================================
+
+const globalSettings = defineTable({
+  siteName: v.string(),
+  siteDescription: v.optional(v.string()),
+  logo: v.optional(v.string()),
+  favicon: v.optional(v.string()),
+  primaryColor: v.string(),
+  supportEmail: v.optional(v.string()),
+  supportPhone: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+});
+
+// ============================================================================
+// Export Schema (auth tables + business tables merged)
+// ============================================================================
+
+export default defineSchema({
+  ...authTables,
+  businessUnits,
+  categories,
+  products,
+  combos,
+  partyPacks,
+  catalogItems,
+  inventory,
+  offers,
+  orders,
+  customers,
+  addresses,
+  deliveryZones,
+  content,
+  homepageSections,
+  notifications,
+  dailyMetrics,
+  analyticsEvents,
+  settings,
+  globalSettings,
+}, {
+  schemaValidation: false,
+});

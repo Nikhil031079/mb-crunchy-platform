@@ -1,0 +1,228 @@
+// ============================================================================
+// MB CRUNCHY - Party Packs Queries & Mutations
+// ============================================================================
+
+import { v } from "convex/values";
+import { query, mutation } from "./_generated/server";
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+async function slugExists(
+  ctx: any,
+  businessUnitId: string,
+  slug: string,
+  excludeId?: string
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query("partyPacks")
+    .withIndex("by_slug_in_business_unit", (q: any) =>
+      q.eq("businessUnitId", businessUnitId).eq("slug", slug)
+    )
+    .first();
+  if (!existing) return false;
+  if (excludeId && existing._id === excludeId) return false;
+  return true;
+}
+
+// ============================================================================
+// Queries
+// ============================================================================
+
+export const getByBusinessUnit = query({
+  args: { businessUnitId: v.id("businessUnits") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("partyPacks")
+      .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+  },
+});
+
+export const getFeatured = query({
+  args: { businessUnitId: v.id("businessUnits") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("partyPacks")
+      .withIndex("by_featured", (q) =>
+        q.eq("businessUnitId", args.businessUnitId).eq("featured", true)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+  },
+});
+
+// ============================================================================
+// Mutations
+// ============================================================================
+
+export const create = mutation({
+  args: {
+    businessUnitId: v.id("businessUnits"),
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    images: v.array(v.string()),
+    coverImage: v.optional(v.string()),
+    thumbnail: v.optional(v.string()),
+    items: v.array(
+      v.object({ catalogItemId: v.id("catalogItems"), quantity: v.number() })
+    ),
+    minServings: v.number(),
+    maxServings: v.number(),
+    price: v.number(),
+    compareAtPrice: v.optional(v.number()),
+    status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
+    featured: v.boolean(),
+    displayOrder: v.number(),
+    metaTitle: v.optional(v.string()),
+    metaDescription: v.optional(v.string()),
+    metaKeywords: v.optional(v.string()),
+    canonicalUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    // Enforce unique slug
+    if (await slugExists(ctx, args.businessUnitId, args.slug)) {
+      throw new Error(`Slug "${args.slug}" is already in use`);
+    }
+
+    const now = Date.now();
+
+    const packId = await ctx.db.insert("partyPacks", {
+      ...args,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Sync to catalog
+    await ctx.runMutation("catalogItems:sync", {
+      sourceId: packId,
+      businessUnitId: args.businessUnitId,
+      itemType: "partyPack",
+      name: args.name,
+      slug: args.slug,
+      description: args.description,
+      price: args.price,
+      compareAtPrice: args.compareAtPrice,
+      coverImage: args.coverImage,
+      thumbnail: args.thumbnail,
+      tags: [],
+      status: args.status,
+      featured: args.featured,
+      displayOrder: args.displayOrder,
+      metaTitle: args.metaTitle,
+      metaDescription: args.metaDescription,
+      metaKeywords: args.metaKeywords,
+      canonicalUrl: args.canonicalUrl,
+    });
+
+    return packId;
+  },
+});
+
+export const update = mutation({
+  args: {
+    id: v.id("partyPacks"),
+    name: v.optional(v.string()),
+    slug: v.optional(v.string()),
+    description: v.optional(v.string()),
+    images: v.optional(v.array(v.string())),
+    coverImage: v.optional(v.string()),
+    thumbnail: v.optional(v.string()),
+    items: v.optional(
+      v.array(
+        v.object({ catalogItemId: v.id("catalogItems"), quantity: v.number() })
+      )
+    ),
+    minServings: v.optional(v.number()),
+    maxServings: v.optional(v.number()),
+    price: v.optional(v.number()),
+    compareAtPrice: v.optional(v.number()),
+    status: v.optional(
+      v.union(v.literal("active"), v.literal("inactive"), v.literal("archived"))
+    ),
+    featured: v.optional(v.boolean()),
+    displayOrder: v.optional(v.number()),
+    metaTitle: v.optional(v.string()),
+    metaDescription: v.optional(v.string()),
+    metaKeywords: v.optional(v.string()),
+    canonicalUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const { id, ...fields } = args;
+
+    // Enforce unique slug on update
+    if (fields.slug) {
+      const existingDoc = await ctx.db.get(id);
+      if (existingDoc && (await slugExists(ctx, existingDoc.businessUnitId, fields.slug, id))) {
+        throw new Error(`Slug "${fields.slug}" is already in use`);
+      }
+    }
+
+    await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
+
+    // Sync to catalog
+    const pack = await ctx.db.get(id);
+    if (pack) {
+      await ctx.runMutation("catalogItems:sync", {
+        sourceId: id,
+        businessUnitId: pack.businessUnitId,
+        itemType: "partyPack",
+        name: pack.name,
+        slug: pack.slug,
+        description: pack.description,
+        price: pack.price,
+        compareAtPrice: pack.compareAtPrice,
+        coverImage: pack.coverImage,
+        thumbnail: pack.thumbnail,
+        tags: [],
+        status: pack.status,
+        featured: pack.featured,
+        displayOrder: pack.displayOrder,
+        metaTitle: pack.metaTitle,
+        metaDescription: pack.metaDescription,
+        metaKeywords: pack.metaKeywords,
+        canonicalUrl: pack.canonicalUrl,
+      });
+    }
+  },
+});
+
+export const softDelete = mutation({
+  args: { id: v.id("partyPacks") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "archived",
+      deletedAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.runMutation("catalogItems:softDeleteBySource", {
+      sourceId: args.id,
+    });
+  },
+});

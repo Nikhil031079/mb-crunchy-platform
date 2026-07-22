@@ -1,0 +1,187 @@
+import { useState, useCallback, useEffect } from "react";
+
+import type { CartItem, CartState } from "@/types";
+import { STORAGE_KEYS } from "@/constants";
+import { safeJsonParse } from "@/utils";
+
+// ============================================================================
+// Cart Store
+// ============================================================================
+
+const CART_STORAGE_KEY = STORAGE_KEYS.CART;
+
+const defaultCartState: CartState = {
+  items: [],
+  businessUnitId: null,
+  subtotal: 0,
+  discount: 0,
+  deliveryFee: 0,
+  tax: 0,
+  total: 0,
+  note: undefined,
+};
+
+function recalculateTotals(items: CartItem[]): CartState["subtotal"] {
+  return items.reduce((sum, item) => sum + item.totalPrice, 0);
+}
+
+function persistCart(state: CartState): void {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Storage full or unavailable - silently fail
+  }
+}
+
+function loadPersistedCart(): CartState | undefined {
+  try {
+    const stored = localStorage.getItem(CART_STORAGE_KEY);
+    if (!stored) return undefined;
+
+    // Migrate legacy carts that still use productId
+    const parsed = safeJsonParse<CartState | undefined>(stored, undefined);
+    if (!parsed) return undefined;
+
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+// ============================================================================
+// Cart Hook
+// ============================================================================
+
+export function useCart() {
+  const [cart, setCart] = useState<CartState>(() => {
+    const persisted = loadPersistedCart();
+    return persisted ?? defaultCartState;
+  });
+
+  // Persist cart on changes
+  useEffect(() => {
+    persistCart(cart);
+  }, [cart]);
+
+  const addItem = useCallback(
+    (item: Omit<CartItem, "totalPrice">) => {
+      setCart((prev) => {
+        // If adding from a different business unit, clear cart first
+        if (prev.businessUnitId && prev.businessUnitId !== item.businessUnitId) {
+          const newItems = [{ ...item, totalPrice: item.unitPrice * item.quantity }];
+          return {
+            ...defaultCartState,
+            items: newItems,
+            businessUnitId: item.businessUnitId,
+            subtotal: recalculateTotals(newItems),
+          };
+        }
+
+        // Check if item already exists (same catalogItemId + variant)
+        const existingIndex = prev.items.findIndex(
+          (i) => i.catalogItemId === item.catalogItemId && i.variantName === item.variantName
+        );
+
+        let newItems: CartItem[];
+
+        if (existingIndex >= 0) {
+          newItems = prev.items.map((existing, index) => {
+            if (index !== existingIndex) return existing;
+            const newQty = existing.quantity + item.quantity;
+            return {
+              ...existing,
+              quantity: newQty,
+              totalPrice: existing.unitPrice * newQty,
+            };
+          });
+        } else {
+          newItems = [
+            ...prev.items,
+            { ...item, totalPrice: item.unitPrice * item.quantity },
+          ];
+        }
+
+        const subtotal = recalculateTotals(newItems);
+
+        return {
+          ...prev,
+          items: newItems,
+          businessUnitId: item.businessUnitId,
+          subtotal,
+        };
+      });
+    },
+    []
+  );
+
+  const updateQuantity = useCallback(
+    (catalogItemId: string, variantName: string, quantity: number) => {
+      setCart((prev) => {
+        if (quantity <= 0) {
+          return removeItemInternal(prev, catalogItemId, variantName);
+        }
+
+        const newItems = prev.items.map((item) => {
+          if (item.catalogItemId !== catalogItemId || item.variantName !== variantName)
+            return item;
+          return {
+            ...item,
+            quantity,
+            totalPrice: item.unitPrice * quantity,
+          };
+        });
+
+        const subtotal = recalculateTotals(newItems);
+
+        return { ...prev, items: newItems, subtotal };
+      });
+    },
+    []
+  );
+
+  const removeItem = useCallback(
+    (catalogItemId: string, variantName: string) => {
+      setCart((prev) => removeItemInternal(prev, catalogItemId, variantName));
+    },
+    []
+  );
+
+  const clearCart = useCallback(() => {
+    setCart(defaultCartState);
+    try {
+      localStorage.removeItem(CART_STORAGE_KEY);
+    } catch {
+      // Silently fail
+    }
+  }, []);
+
+  const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+
+  return {
+    cart,
+    addItem,
+    updateQuantity,
+    removeItem,
+    clearCart,
+    itemCount,
+  };
+}
+
+// Internal helper to avoid recreating the callback
+function removeItemInternal(
+  prev: CartState,
+  catalogItemId: string,
+  variantName: string
+): CartState {
+  const newItems = prev.items.filter(
+    (item) => !(item.catalogItemId === catalogItemId && item.variantName === variantName)
+  );
+
+  if (newItems.length === 0) {
+    return defaultCartState;
+  }
+
+  const subtotal = recalculateTotals(newItems);
+
+  return { ...prev, items: newItems, subtotal };
+}
