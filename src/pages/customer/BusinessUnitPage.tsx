@@ -113,33 +113,54 @@ export default function BusinessUnitPage() {
   const isBuNotFound = businessUnit === null;
 
   // Once BU is loaded, fetch all related data
-  const categories = useQuery(api.categories.getByBusinessUnit, {
-    businessUnitId: businessUnit?._id ?? ("" as any),
-  }) as Category[] | undefined;
+  const categories = useQuery(
+    api.categories.getByBusinessUnit,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  ) as Category[] | undefined;
 
-  const catalogItems = useQuery(api.catalogItems.getByBusinessUnit, {
-    businessUnitId: businessUnit?._id ?? ("" as any),
-  });
+  const catalogItems = useQuery(
+    api.catalogItems.getByBusinessUnit,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  );
 
-  const featuredItems = useQuery(api.catalogItems.getFeatured, {
-    businessUnitId: businessUnit?._id ?? ("" as any),
-  });
+  const featuredItems = useQuery(
+    api.catalogItems.getFeatured,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  );
 
-  const offers = useQuery(api.offers.getActive, {
-    businessUnitId: businessUnit?._id ?? ("" as any),
-  }) as Offer[] | undefined;
+  const offers = useQuery(
+    api.offers.getActive,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  ) as Offer[] | undefined;
 
-  const combos = useQuery(api.combos.getByBusinessUnit, {
-    businessUnitId: businessUnit?._id ?? ("" as any),
-  }) as Combo[] | undefined;
+  const combos = useQuery(
+    api.combos.getByBusinessUnit,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  ) as Combo[] | undefined;
 
-  const partyPacks = useQuery(api.partyPacks.getByBusinessUnit, {
-    businessUnitId: businessUnit?._id ?? ("" as any),
-  }) as PartyPack[] | undefined;
+  const partyPacks = useQuery(
+    api.partyPacks.getByBusinessUnit,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  ) as PartyPack[] | undefined;
 
-  const buSettings = useQuery(api.settings.getBusinessUnitSettings, {
-    businessUnitId: businessUnit?._id ?? ("" as any),
-  }) as BusinessUnitSettings | null | undefined;
+  const buSettings = useQuery(
+    api.settings.getBusinessUnitSettings,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  ) as BusinessUnitSettings | null | undefined;
 
   const inventoryItems = useQuery(
     api.inventory.getByBusinessUnit,

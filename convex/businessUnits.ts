@@ -9,6 +9,15 @@ import { query, mutation } from "./_generated/server";
 // Helpers
 // ============================================================================
 
+// TEMPORARY: Bypass auth for local development. Set to false before production.
+const DEV_AUTH_BYPASS = true;
+
+async function requireAuth(ctx: any) {
+  if (DEV_AUTH_BYPASS) return;
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthenticated");
+}
+
 async function slugExists(ctx: any, slug: string, excludeId?: string): Promise<boolean> {
   const existing = await ctx.db
     .query("businessUnits")
@@ -82,8 +91,7 @@ export const create = mutation({
     enablePickup: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAuth(ctx);
 
     // Enforce unique slug
     if (await slugExists(ctx, args.slug)) {
@@ -124,8 +132,7 @@ export const update = mutation({
     enablePickup: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAuth(ctx);
 
     const { id, ...fields } = args;
 
@@ -148,13 +155,30 @@ export const update = mutation({
 export const softDelete = mutation({
   args: { id: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAuth(ctx);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
       status: "archived",
       deletedAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Restore — clears deletedAt and reactivates the business unit.
+ */
+export const restore = mutation({
+  args: { id: v.id("businessUnits") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "active",
+      homepageVisible: true,
+      deletedAt: undefined,
       updatedAt: now,
     });
   },

@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, Building2, Plus, RefreshCw } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 import { BusinessUnitDialogs } from "@/components/admin/business-units/BusinessUnitDialogs";
 import { BusinessUnitFormDialog } from "@/components/admin/business-units/BusinessUnitFormDialog";
-import { mockBusinessUnits } from "@/components/admin/business-units/mock-data";
 import { BusinessUnitTable } from "@/components/admin/business-units/BusinessUnitTable";
 import { BusinessUnitToolbar } from "@/components/admin/business-units/BusinessUnitToolbar";
 import type { BusinessUnit, BusinessUnitFilters, BusinessUnitFormValues, BusinessUnitSortKey, SortDirection } from "@/components/admin/business-units/types";
@@ -16,11 +17,71 @@ import { EMPTY_MESSAGES } from "@/constants";
 
 const PAGE_SIZE = 8;
 
+// ---------------------------------------------------------------------------
+// Mapping helpers — keep Convex document shapes out of the UI layer
+// ---------------------------------------------------------------------------
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function fromConvex(doc: any): BusinessUnit {
+  return {
+    id: doc._id,
+    name: doc.name,
+    slug: doc.slug,
+    status: doc.status,
+    homepageVisible: doc.homepageVisible,
+    themeColor: doc.themeColor,
+    displayOrder: doc.displayOrder,
+    logoUrl: doc.logo ?? undefined,
+  };
+}
+
+function toCreateArgs(values: BusinessUnitFormValues) {
+  return {
+    name: values.name,
+    slug: values.slug,
+    logo: values.logoUrl || undefined,
+    themeColor: values.themeColor,
+    displayOrder: values.displayOrder,
+    homepageVisible: values.homepageVisible,
+    status: values.status,
+    enableCombos: false,
+    enablePartyPacks: false,
+    enableOffers: false,
+    enableSearch: false,
+    enableCheckout: false,
+    enableDelivery: false,
+    enablePickup: false,
+  };
+}
+
+function toUpdateArgs(id: string, values: BusinessUnitFormValues) {
+  return {
+    id: id as any,
+    name: values.name,
+    slug: values.slug,
+    logo: values.logoUrl || undefined,
+    themeColor: values.themeColor,
+    displayOrder: values.displayOrder,
+    homepageVisible: values.homepageVisible,
+    status: values.status,
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function BusinessUnitsPage() {
-  // Replace this local state with a Convex query + mutations without changing presentational components.
-  const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>(mockBusinessUnits);
-  const [isLoading] = useState(false);
+  const allDocs = useQuery(api.businessUnits.getAll);
+  const createBU = useMutation(api.businessUnits.create);
+  const updateBU = useMutation(api.businessUnits.update);
+  const softDeleteBU = useMutation(api.businessUnits.softDelete);
+  const restoreBU = useMutation(api.businessUnits.restore);
+
+  const isLoading = allDocs === undefined;
   const [error, setError] = useState<string | null>(null);
+
   const [filters, setFilters] = useState<BusinessUnitFilters>({ query: "", status: "all" });
   const [sortKey, setSortKey] = useState<BusinessUnitSortKey>("displayOrder");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -29,6 +90,8 @@ export default function BusinessUnitsPage() {
   const [editingBusinessUnit, setEditingBusinessUnit] = useState<BusinessUnit>();
   const [deleteTarget, setDeleteTarget] = useState<BusinessUnit>();
   const [restoreTarget, setRestoreTarget] = useState<BusinessUnit>();
+
+  const businessUnits = useMemo(() => (allDocs ?? []).map(fromConvex), [allDocs]);
 
   const filteredBusinessUnits = useMemo(() => {
     const query = filters.query.trim().toLowerCase();
@@ -48,12 +111,39 @@ export default function BusinessUnitsPage() {
   const resetPageAndSetFilters = (nextFilters: BusinessUnitFilters) => { setFilters(nextFilters); setPage(1); };
   const handleSort = (nextKey: BusinessUnitSortKey) => { if (nextKey === sortKey) setSortDirection((direction) => direction === "asc" ? "desc" : "asc"); else { setSortKey(nextKey); setSortDirection("asc"); } };
   const openCreateDialog = () => { setEditingBusinessUnit(undefined); setFormOpen(true); };
-  const saveBusinessUnit = (values: BusinessUnitFormValues) => {
-    if (editingBusinessUnit) setBusinessUnits((current) => current.map((unit) => unit.id === editingBusinessUnit.id ? { ...unit, ...values, logoUrl: values.logoUrl || undefined } : unit));
-    else setBusinessUnits((current) => [{ id: `bu-${crypto.randomUUID()}`, ...values, logoUrl: values.logoUrl || undefined }, ...current]);
-    setFormOpen(false);
+
+  const saveBusinessUnit = async (values: BusinessUnitFormValues) => {
+    try {
+      if (editingBusinessUnit) {
+        await updateBU(toUpdateArgs(editingBusinessUnit.id, values));
+      } else {
+        await createBU(toCreateArgs(values));
+      }
+      setFormOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save business unit");
+    }
   };
-  const archiveBusinessUnit = () => { if (deleteTarget) setBusinessUnits((current) => current.map((unit) => unit.id === deleteTarget.id ? { ...unit, status: "archived", homepageVisible: false } : unit)); setDeleteTarget(undefined); };
+
+  const archiveBusinessUnit = async () => {
+    if (!deleteTarget) return;
+    try {
+      await softDeleteBU({ id: deleteTarget.id as any });
+      setDeleteTarget(undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to archive business unit");
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreTarget) return;
+    try {
+      await restoreBU({ id: restoreTarget.id as any });
+      setRestoreTarget(undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to restore business unit");
+    }
+  };
 
   return <div>
     <PageHeader title="Business Units" description="Manage business unit availability, storefront visibility, and presentation.">
@@ -68,6 +158,6 @@ export default function BusinessUnitsPage() {
       </>}
     </section>}
     <BusinessUnitFormDialog open={formOpen} businessUnit={editingBusinessUnit} onOpenChange={setFormOpen} onSubmit={saveBusinessUnit} />
-    <BusinessUnitDialogs deleteTarget={deleteTarget} restoreTarget={restoreTarget} onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }} onRestoreOpenChange={(open) => { if (!open) setRestoreTarget(undefined); }} onConfirmDelete={archiveBusinessUnit} />
+    <BusinessUnitDialogs deleteTarget={deleteTarget} restoreTarget={restoreTarget} onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }} onRestoreOpenChange={(open) => { if (!open) setRestoreTarget(undefined); }} onConfirmDelete={archiveBusinessUnit} onConfirmRestore={confirmRestore} />
   </div>;
 }

@@ -27,14 +27,13 @@ export const getActive = query({
     const now = Date.now();
     return await ctx.db
       .query("offers")
-      .withIndex("by_active_period", (q) =>
-        q.lte("startsAt", now).gte("endsAt", now)
-      )
+      .withIndex("by_status", (q) => q.eq("status", "active"))
       .filter((q) =>
         q.and(
           q.eq(q.field("businessUnitId"), args.businessUnitId),
-          q.eq(q.field("status"), "active"),
-          q.eq(q.field("deletedAt"), undefined)
+          q.eq(q.field("deletedAt"), undefined),
+          q.lte(q.field("startsAt"), now),
+          q.gte(q.field("endsAt"), now)
         )
       )
       .order("asc")
