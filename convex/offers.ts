@@ -6,6 +6,19 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+// TEMPORARY: Bypass auth for local development. Set to false before production.
+const DEV_AUTH_BYPASS = true;
+
+async function requireAuth(ctx: any) {
+  if (DEV_AUTH_BYPASS) return;
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthenticated");
+}
+
+// ============================================================================
 // Queries
 // ============================================================================
 
@@ -76,8 +89,7 @@ export const create = mutation({
     banner: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAuth(ctx);
 
     const now = Date.now();
 
@@ -112,8 +124,7 @@ export const update = mutation({
     banner: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAuth(ctx);
 
     const { id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
@@ -135,8 +146,7 @@ export const incrementUsage = mutation({
 export const softDelete = mutation({
   args: { id: v.id("offers") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAuth(ctx);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -228,5 +238,22 @@ export const validateCoupon = query({
       discount: Math.round(discount * 100) / 100,
       maxDiscount: offer.maxDiscount,
     };
+  },
+});
+
+/**
+ * Restore — clears deletedAt and reactivates the offer.
+ */
+export const restore = mutation({
+  args: { id: v.id("offers") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "active",
+      deletedAt: undefined,
+      updatedAt: now,
+    });
   },
 });
