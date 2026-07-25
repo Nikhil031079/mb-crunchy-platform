@@ -1,5 +1,7 @@
 import type { Order, OrderItem, OrderStatus, PaymentStatus, OrderType } from "@/types";
 
+export type { OrderStatus, PaymentStatus, OrderType };
+
 // ---------------------------------------------------------------------------
 // Valid status transitions
 // ---------------------------------------------------------------------------

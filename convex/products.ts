@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { api } from "./_generated/api";
 
 // ============================================================================
 // Helpers
@@ -158,7 +159,7 @@ export const create = mutation({
     });
 
     // Sync to catalog
-    await ctx.runMutation("catalogItems:sync", {
+    await ctx.runMutation(api.catalogItems.sync, {
       sourceId: productId,
       businessUnitId: args.businessUnitId,
       itemType: "product",
@@ -237,7 +238,7 @@ export const update = mutation({
       const defaultPrice = product.variants[0]?.price ?? 0;
       const defaultCompare = product.variants[0]?.compareAtPrice;
 
-      await ctx.runMutation("catalogItems:sync", {
+      await ctx.runMutation(api.catalogItems.sync, {
         sourceId: id,
         businessUnitId: product.businessUnitId,
         itemType: "product",
@@ -274,7 +275,7 @@ export const softDelete = mutation({
     });
 
     // Soft delete from catalog
-    await ctx.runMutation("catalogItems:softDeleteBySource", {
+    await ctx.runMutation(api.catalogItems.softDeleteBySource, {
       sourceId: args.id,
     });
   },
@@ -311,7 +312,7 @@ export const restore = mutation({
       const defaultPrice = product.variants[0]?.price ?? 0;
       const defaultCompare = product.variants[0]?.compareAtPrice;
 
-      await ctx.runMutation("catalogItems:sync", {
+      await ctx.runMutation(api.catalogItems.sync, {
         sourceId: args.id,
         businessUnitId: product.businessUnitId,
         itemType: "product",

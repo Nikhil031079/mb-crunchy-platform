@@ -399,6 +399,9 @@ const addresses = defineTable({
   city: v.optional(v.string()),
   state: v.optional(v.string()),
   zipCode: v.optional(v.string()),
+  landmark: v.optional(v.string()),
+  deliveryInstructions: v.optional(v.string()),
+  deliveryZone: v.optional(v.string()),
   isDefault: v.boolean(),
   latitude: v.optional(v.number()),
   longitude: v.optional(v.number()),
@@ -408,6 +411,98 @@ const addresses = defineTable({
 })
   .index("by_customer", ["customerId"])
   .index("by_default", ["customerId", "isDefault"]);
+
+// ============================================================================
+// LOYALTY SETTINGS (Single record — configurable loyalty program)
+// ============================================================================
+
+const loyaltySettings = defineTable({
+  pointsPerRupee: v.number(),
+  rupeesPerPointRedemption: v.number(),
+  minRedeemPoints: v.number(),
+  maxRedeemPercentOfOrder: v.number(),
+  tierThresholds: v.object({
+    silver: v.number(),
+    gold: v.number(),
+    platinum: v.number(),
+  }),
+  tierMultipliers: v.object({
+    bronze: v.number(),
+    silver: v.number(),
+    gold: v.number(),
+    platinum: v.number(),
+  }),
+  pointsExpiryDays: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+});
+
+// ============================================================================
+// LOYALTY ACCOUNTS (Per-customer loyalty state)
+// ============================================================================
+
+const loyaltyAccounts = defineTable({
+  customerId: v.id("customers"),
+  pointsBalance: v.number(),
+  totalEarned: v.number(),
+  totalRedeemed: v.number(),
+  tier: v.union(
+    v.literal("bronze"),
+    v.literal("silver"),
+    v.literal("gold"),
+    v.literal("platinum"),
+  ),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_customer", ["customerId"]);
+
+// ============================================================================
+// LOYALTY TRANSACTIONS (Immutable ledger)
+// ============================================================================
+
+const loyaltyTransactions = defineTable({
+  customerId: v.id("customers"),
+  orderId: v.optional(v.id("orders")),
+  type: v.union(
+    v.literal("earned"),
+    v.literal("redeemed"),
+    v.literal("expired"),
+    v.literal("adjusted"),
+  ),
+  points: v.number(),
+  description: v.string(),
+  balanceAfter: v.number(),
+  createdAt: v.number(),
+})
+  .index("by_customer", ["customerId"])
+  .index("by_order", ["orderId"]);
+
+// ============================================================================
+// CUSTOMER COLLECTIONS (Generic — favorites, wishlist, recently viewed, etc.)
+// ============================================================================
+
+const customerCollections = defineTable({
+  customerId: v.id("customers"),
+  collectionType: v.union(
+    v.literal("favorites"),
+    v.literal("wishlist"),
+    v.literal("recentlyViewed"),
+    v.literal("savedForLater"),
+  ),
+  itemType: v.union(
+    v.literal("product"),
+    v.literal("combo"),
+    v.literal("partyPack"),
+  ),
+  itemId: v.id("catalogItems"),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_customer_item", ["customerId", "collectionType", "itemType", "itemId"])
+  .index("by_customer_type", ["customerId", "collectionType"]);
 
 // ============================================================================
 // DELIVERY ZONES
@@ -618,6 +713,10 @@ export default defineSchema({
   orders,
   customers,
   addresses,
+  loyaltySettings,
+  loyaltyAccounts,
+  loyaltyTransactions,
+  customerCollections,
   deliveryZones,
   content,
   homepageSections,

@@ -264,6 +264,15 @@ export const updateStatus = mutation({
       }
     }
 
+    // Auto-award loyalty points on delivery
+    if (args.status === "delivered" && order.status !== "delivered" && order.customerId) {
+      await ctx.runMutation(api.loyalty.awardPoints, {
+        customerId: order.customerId,
+        orderId: args.id,
+        orderTotal: order.total,
+      });
+    }
+
     await ctx.db.patch(args.id, { ...args, updatedAt: now });
   },
 });

@@ -22,6 +22,13 @@ const CartPage = lazy(() => import("@/pages/customer/CartPage"));
 const CheckoutPage = lazy(() => import("@/pages/customer/CheckoutPage"));
 const OrderTrackingPage = lazy(() => import("@/pages/customer/OrderTrackingPage"));
 
+// Account Pages
+const AccountLayout = lazy(() => import("@/pages/customer/account/AccountLayout"));
+const AccountDashboardPage = lazy(() => import("@/pages/customer/account/AccountDashboardPage"));
+const ProfilePage = lazy(() => import("@/pages/customer/account/ProfilePage"));
+const OrderHistoryPage = lazy(() => import("@/pages/customer/account/OrderHistoryPage"));
+const AddressesPage = lazy(() => import("@/pages/customer/account/AddressesPage"));
+
 // Admin Layout & Pages
 const AdminLayout = lazy(() => import("@/layouts/admin/AdminLayout"));
 const DashboardPage = lazy(() => import("@/pages/admin/DashboardPage"));
@@ -163,6 +170,14 @@ function AppRoutes() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/track-order" element={<OrderTrackingPage />} />
+
+          {/* Account Routes (nested under CustomerLayout) */}
+          <Route path="/account" element={<AccountLayout />}>
+            <Route index element={<AccountDashboardPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="orders" element={<OrderHistoryPage />} />
+            <Route path="addresses" element={<AddressesPage />} />
+          </Route>
         </Route>
 
         {/* ============ Admin Routes ============ */}

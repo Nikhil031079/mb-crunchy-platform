@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 
 import { useCart } from "@/stores/cart";
+import { useAuth } from "@/hooks/use-auth";
 
 import { CustomerNavbar } from "./CustomerNavbar";
 import { CustomerFooter } from "./CustomerFooter";
@@ -15,23 +16,24 @@ export function CustomerLayout() {
   const businessUnits =
     (useQuery(api.businessUnits.getActive) as BusinessUnit[] | undefined) ?? [];
   const { itemCount } = useCart();
+  const { isAuthenticated, user, signOut } = useAuth();
 
   const buIds = useMemo(
     () => businessUnits.map((bu) => bu._id),
-    [businessUnits]
+    [businessUnits],
   );
 
   const s1 = useQuery(
     api.settings.getBusinessUnitSettings,
-    buIds[0] ? { businessUnitId: buIds[0] as any } : "skip"
+    buIds[0] ? { businessUnitId: buIds[0] as any } : "skip",
   );
   const s2 = useQuery(
     api.settings.getBusinessUnitSettings,
-    buIds[1] ? { businessUnitId: buIds[1] as any } : "skip"
+    buIds[1] ? { businessUnitId: buIds[1] as any } : "skip",
   );
   const s3 = useQuery(
     api.settings.getBusinessUnitSettings,
-    buIds[2] ? { businessUnitId: buIds[2] as any } : "skip"
+    buIds[2] ? { businessUnitId: buIds[2] as any } : "skip",
   );
 
   const settingsMap = useMemo(() => {
@@ -48,6 +50,9 @@ export function CustomerLayout() {
         businessUnits={businessUnits}
         cartItemCount={itemCount}
         settingsMap={settingsMap}
+        isAuthenticated={isAuthenticated}
+        user={user}
+        onSignOut={() => signOut()}
       />
       <main className="flex-1">
         <Outlet />

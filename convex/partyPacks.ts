@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { api } from "./_generated/api";
 
 // ============================================================================
 // Helpers
@@ -120,7 +121,7 @@ export const create = mutation({
     });
 
     // Sync to catalog
-    await ctx.runMutation("catalogItems:sync", {
+    await ctx.runMutation(api.catalogItems.sync, {
       sourceId: packId,
       businessUnitId: args.businessUnitId,
       itemType: "partyPack",
@@ -191,7 +192,7 @@ export const update = mutation({
     // Sync to catalog
     const pack = await ctx.db.get(id);
     if (pack) {
-      await ctx.runMutation("catalogItems:sync", {
+      await ctx.runMutation(api.catalogItems.sync, {
         sourceId: id,
         businessUnitId: pack.businessUnitId,
         itemType: "partyPack",
@@ -227,7 +228,7 @@ export const softDelete = mutation({
       updatedAt: now,
     });
 
-    await ctx.runMutation("catalogItems:softDeleteBySource", {
+    await ctx.runMutation(api.catalogItems.softDeleteBySource, {
       sourceId: args.id,
     });
   },
@@ -261,7 +262,7 @@ export const restore = mutation({
     // Restore in catalog
     const pack = await ctx.db.get(args.id);
     if (pack) {
-      await ctx.runMutation("catalogItems:sync", {
+      await ctx.runMutation(api.catalogItems.sync, {
         sourceId: args.id,
         businessUnitId: pack.businessUnitId,
         itemType: "partyPack",

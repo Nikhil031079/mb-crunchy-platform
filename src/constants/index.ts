@@ -31,6 +31,14 @@ export const ROUTES = {
     SETTINGS: "/admin/settings",
     BANNERS: "/admin/banners",
   },
+  ACCOUNT: {
+    ROOT: "/account",
+    PROFILE: "/account/profile",
+    ORDERS: "/account/orders",
+    ADDRESSES: "/account/addresses",
+    FAVOURITES: "/account/favourites",
+    LOYALTY: "/account/loyalty",
+  },
 } as const;
 
 // ============================================================================

@@ -1,3 +1,5 @@
+import type { Id as ConvexId } from "@convex/_generated/dataModel";
+
 // ============================================================================
 // Core Entity Types (v1.2)
 // ============================================================================
@@ -16,7 +18,7 @@ export interface Timestamps {
 // ============================================================================
 
 export interface BusinessUnit extends Timestamps {
-  _id: string;
+  _id: ConvexId<"businessUnits">;
   _creationTime: number;
   name: string;
   slug: string;
@@ -448,6 +450,9 @@ export interface CustomerAddress extends Timestamps {
   city?: string;
   state?: string;
   zipCode?: string;
+  landmark?: string;
+  deliveryInstructions?: string;
+  deliveryZone?: string;
   isDefault: boolean;
   latitude?: number;
   longitude?: number;
@@ -694,4 +699,80 @@ export interface HomepageLayout {
   content: Content[];
   businessUnits: BusinessUnit[];
   catalogItems: CatalogItem[];
+}
+
+// ============================================================================
+// Loyalty Settings
+// ============================================================================
+
+export interface LoyaltySettings extends Timestamps {
+  _id: string;
+  _creationTime: number;
+  pointsPerRupee: number;
+  rupeesPerPointRedemption: number;
+  minRedeemPoints: number;
+  maxRedeemPercentOfOrder: number;
+  tierThresholds: {
+    silver: number;
+    gold: number;
+    platinum: number;
+  };
+  tierMultipliers: {
+    bronze: number;
+    silver: number;
+    gold: number;
+    platinum: number;
+  };
+  pointsExpiryDays?: number;
+}
+
+// ============================================================================
+// Loyalty Account
+// ============================================================================
+
+export type LoyaltyTier = "bronze" | "silver" | "gold" | "platinum";
+
+export interface LoyaltyAccount extends Timestamps {
+  _id: string;
+  _creationTime: number;
+  customerId: string;
+  pointsBalance: number;
+  totalEarned: number;
+  totalRedeemed: number;
+  tier: LoyaltyTier;
+  deletedAt?: number;
+}
+
+// ============================================================================
+// Loyalty Transaction
+// ============================================================================
+
+export type LoyaltyTransactionType = "earned" | "redeemed" | "expired" | "adjusted";
+
+export interface LoyaltyTransaction {
+  _id: string;
+  _creationTime: number;
+  customerId: string;
+  orderId?: string;
+  type: LoyaltyTransactionType;
+  points: number;
+  description: string;
+  balanceAfter: number;
+  createdAt: number;
+}
+
+// ============================================================================
+// Customer Collection
+// ============================================================================
+
+export type CollectionType = "favorites" | "wishlist" | "recentlyViewed" | "savedForLater";
+
+export interface CustomerCollection extends Timestamps {
+  _id: string;
+  _creationTime: number;
+  customerId: string;
+  collectionType: CollectionType;
+  itemType: CatalogItemType;
+  itemId: string;
+  deletedAt?: number;
 }

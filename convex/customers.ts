@@ -87,6 +87,48 @@ export const update = mutation({
   },
 });
 
+export const getByAuthUser = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    return await ctx.db
+      .query("customers")
+      .withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .first();
+  },
+});
+
+export const updateProfile = mutation({
+  args: {
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const customer = await ctx.db
+      .query("customers")
+      .withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .first();
+
+    if (!customer) throw new Error("Customer not found");
+
+    const { name, email, phone } = args;
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    if (name !== undefined) patch.name = name;
+    if (email !== undefined) patch.email = email;
+    if (phone !== undefined) patch.phone = phone;
+
+    await ctx.db.patch(customer._id, patch);
+    return customer._id;
+  },
+});
+
 export const softDelete = mutation({
   args: { id: v.id("customers") },
   handler: async (ctx, args) => {
