@@ -75,6 +75,23 @@ export const getByStatus = query({
   },
 });
 
+export const getAll = query({
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("orders")
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .order("desc")
+      .collect();
+  },
+});
+
+export const getById = query({
+  args: { orderId: v.id("orders") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.orderId);
+  },
+});
+
 // ============================================================================
 // Helpers
 // ============================================================================
