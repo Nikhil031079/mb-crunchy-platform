@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { api } from "./_generated/api";
 
 // ============================================================================
 // Queries
@@ -75,6 +76,31 @@ export const getByStatus = query({
 });
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+async function findInventoryForOrderItem(
+  ctx: any,
+  catalogItemId: string,
+  variantName: string,
+) {
+  const items = await ctx.db
+    .query("inventory")
+    .withIndex("by_catalog_item", (q: any) =>
+      q.eq("catalogItemId", catalogItemId),
+    )
+    .filter((q: any) =>
+      q.and(
+        q.eq(q.field("variantName"), variantName),
+        q.eq(q.field("deletedAt"), undefined),
+      ),
+    )
+    .collect();
+
+  return items[0] ?? null;
+}
+
+// ============================================================================
 // Mutations
 // ============================================================================
 
@@ -120,7 +146,7 @@ export const create = mutation({
     const orderNumber = `${prefix}-${timestamp}-${random}`;
     const now = Date.now();
 
-    return await ctx.db.insert("orders", {
+    const orderId = await ctx.db.insert("orders", {
       ...args,
       orderNumber,
       status: "pending",
@@ -128,6 +154,25 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    // Reserve stock for each item
+    for (const item of args.items) {
+      const inventory = await findInventoryForOrderItem(
+        ctx,
+        item.catalogItemId,
+        item.variantName,
+      );
+
+      if (inventory) {
+        await ctx.runMutation(api.inventory.reserveStock, {
+          inventoryId: inventory._id,
+          quantity: item.quantity,
+          orderId,
+        });
+      }
+    }
+
+    return orderId;
   },
 });
 
@@ -157,8 +202,52 @@ export const updateStatus = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
-    const { id, ...fields } = args;
-    await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
+    const order = await ctx.db.get(args.id);
+    if (!order) throw new Error("Order not found");
+
+    const now = Date.now();
+
+    // On confirm: deduct reserved stock from actual stock
+    if (args.status === "confirmed" && order.status !== "confirmed") {
+      for (const item of order.items) {
+        const inventory = await findInventoryForOrderItem(
+          ctx,
+          item.catalogItemId,
+          item.variantName,
+        );
+        if (inventory) {
+          await ctx.runMutation(api.inventory.confirmReservation, {
+            inventoryId: inventory._id,
+            quantity: item.quantity,
+            orderId: args.id,
+          });
+        }
+      }
+    }
+
+    // On cancel/refund: release reserved stock
+    if (
+      (args.status === "cancelled" || args.status === "refunded") &&
+      order.status !== "cancelled" &&
+      order.status !== "refunded"
+    ) {
+      for (const item of order.items) {
+        const inventory = await findInventoryForOrderItem(
+          ctx,
+          item.catalogItemId,
+          item.variantName,
+        );
+        if (inventory) {
+          await ctx.runMutation(api.inventory.restoreStock, {
+            inventoryId: inventory._id,
+            quantity: item.quantity,
+            orderId: args.id,
+          });
+        }
+      }
+    }
+
+    await ctx.db.patch(args.id, { ...args, updatedAt: now });
   },
 });
 
@@ -168,7 +257,29 @@ export const softDelete = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
+    const order = await ctx.db.get(args.id);
+    if (!order) throw new Error("Order not found");
+
     const now = Date.now();
+
+    // Release reserved stock if order hasn't been confirmed yet
+    if (order.status !== "cancelled" && order.status !== "refunded") {
+      for (const item of order.items) {
+        const inventory = await findInventoryForOrderItem(
+          ctx,
+          item.catalogItemId,
+          item.variantName,
+        );
+        if (inventory) {
+          await ctx.runMutation(api.inventory.restoreStock, {
+            inventoryId: inventory._id,
+            quantity: item.quantity,
+            orderId: args.id,
+          });
+        }
+      }
+    }
+
     await ctx.db.patch(args.id, {
       status: "cancelled",
       deletedAt: now,

@@ -26,6 +26,7 @@ export const ROUTES = {
     PARTY_PACKS: "/admin/party-packs",
     OFFERS: "/admin/offers",
     ORDERS: "/admin/orders",
+    INVENTORY: "/admin/inventory",
     CUSTOMERS: "/admin/customers",
     SETTINGS: "/admin/settings",
     BANNERS: "/admin/banners",
@@ -60,7 +61,8 @@ export type AdminNavigationIcon =
   | "ShoppingCart"
   | "Users"
   | "Image"
-  | "Settings";
+  | "Settings"
+  | "Warehouse";
 
 export interface AdminNavigationItem {
   label: string;
@@ -86,6 +88,7 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = [
       { label: "Products", href: ROUTES.ADMIN.PRODUCTS, icon: "Package" },
       { label: "Combos", href: ROUTES.ADMIN.COMBOS, icon: "Combine" },
       { label: "Party Packs", href: ROUTES.ADMIN.PARTY_PACKS, icon: "PartyPopper" },
+      { label: "Inventory", href: ROUTES.ADMIN.INVENTORY, icon: "Warehouse" },
     ],
   },
   {
@@ -213,6 +216,7 @@ export const EMPTY_MESSAGES = {
   PARTY_PACKS: "No party packs configured. Create packs for events.",
   OFFERS: "No active offers. Create promotions to boost sales.",
   ORDERS: "No orders received yet. Orders will appear here.",
+  INVENTORY: "No inventory items yet. Add stock for your catalog items.",
   CUSTOMERS: "No customers registered yet.",
   BANNERS: "No banners created. Add banners for promotions.",
   CART: "Your cart is empty. Browse our business units to add items.",

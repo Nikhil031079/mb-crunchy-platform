@@ -163,6 +163,7 @@ export interface InventoryItem extends Timestamps {
   variantName: string;
   sku?: string;
   stockQuantity: number;
+  reservedStock?: number;
   available: boolean;
   lowStockAlert?: number;
   costPrice?: number;
@@ -180,6 +181,65 @@ export type CreateInventoryInput = Omit<
 >;
 
 export type UpdateInventoryInput = Partial<CreateInventoryInput>;
+
+// ============================================================================
+// Stock Movements (Audit trail)
+// ============================================================================
+
+export interface StockMovement {
+  _id: string;
+  _creationTime: number;
+  inventoryId: string;
+  businessUnitId: string;
+  type: "adjustment" | "reservation" | "reservation_release" | "deduction" | "restoration" | "restock";
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason?: string;
+  orderId?: string;
+  performedBy?: string;
+  createdAt: number;
+}
+
+// ============================================================================
+// Inventory Dashboard Summary
+// ============================================================================
+
+export interface InventorySummary {
+  totalItems: number;
+  totalStock: number;
+  totalReserved: number;
+  totalAvailable: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  inventoryValue: number;
+}
+
+// ============================================================================
+// Inventory Admin (enriched record for table display)
+// ============================================================================
+
+export interface InventoryRecord {
+  id: string;
+  catalogItemId: string;
+  businessUnitId: string;
+  businessUnitName: string;
+  itemName: string;
+  variantName: string;
+  sku?: string;
+  barcode?: string;
+  stockQuantity: number;
+  reservedStock: number;
+  availableStock: number;
+  lowStockAlert?: number;
+  costPrice?: number;
+  supplier?: string;
+  location?: string;
+  lastRestocked?: number;
+  expiryDate?: number;
+  available: boolean;
+  status: "in_stock" | "low_stock" | "out_of_stock";
+}
 
 // ============================================================================
 // Combo

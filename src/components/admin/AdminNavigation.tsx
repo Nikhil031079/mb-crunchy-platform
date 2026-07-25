@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   Tag,
   Users,
+  Warehouse,
 } from "lucide-react";
 
 import {
@@ -35,6 +36,7 @@ const iconMap: Record<AdminNavigationIcon, ComponentType<{ className?: string }>
   Users,
   Image,
   Settings,
+  Warehouse,
 };
 
 interface AdminNavigationProps {

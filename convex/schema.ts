@@ -236,6 +236,7 @@ const inventory = defineTable({
   variantName: v.string(),
   sku: v.optional(v.string()),
   stockQuantity: v.number(),
+  reservedStock: v.number(),
   available: v.boolean(),
   lowStockAlert: v.optional(v.number()),
   costPrice: v.optional(v.number()),
@@ -253,6 +254,34 @@ const inventory = defineTable({
   .index("by_sku", ["sku"])
   .index("by_available", ["available"])
   .index("by_barcode", ["barcode"]);
+
+// ============================================================================
+// STOCK MOVEMENTS (Audit trail for all inventory changes)
+// ============================================================================
+
+const stockMovements = defineTable({
+  inventoryId: v.id("inventory"),
+  businessUnitId: v.id("businessUnits"),
+  type: v.union(
+    v.literal("adjustment"),
+    v.literal("reservation"),
+    v.literal("reservation_release"),
+    v.literal("deduction"),
+    v.literal("restoration"),
+    v.literal("restock"),
+  ),
+  quantity: v.number(),
+  previousStock: v.number(),
+  newStock: v.number(),
+  reason: v.optional(v.string()),
+  orderId: v.optional(v.id("orders")),
+  performedBy: v.optional(v.string()),
+  createdAt: v.number(),
+})
+  .index("by_inventory", ["inventoryId"])
+  .index("by_business_unit", ["businessUnitId", "createdAt"])
+  .index("by_order", ["orderId"])
+  .index("by_type", ["type"]);
 
 // ============================================================================
 // OFFERS
@@ -584,6 +613,7 @@ export default defineSchema({
   partyPacks,
   catalogItems,
   inventory,
+  stockMovements,
   offers,
   orders,
   customers,
