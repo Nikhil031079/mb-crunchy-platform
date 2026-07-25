@@ -14,6 +14,7 @@ import {
   Clock,
   CreditCard,
   Package,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +28,7 @@ import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 // Hooks
 import { useCart } from "@/stores/cart";
 import { useRazorpay } from "@/hooks/use-razorpay";
+import { useAuth } from "@/hooks/use-auth";
 
 // Customer components
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
@@ -42,7 +44,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-import type { BusinessUnitSettings, DeliveryZone } from "@/types";
+import type {
+  BusinessUnitSettings,
+  DeliveryZone,
+  Customer,
+  CustomerAddress,
+  LoyaltySettings,
+  LoyaltyAccount,
+} from "@/types";
 
 // ============================================================================
 // CheckoutPage — Contact form, delivery/pickup, order summary, submit
@@ -74,6 +83,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const { cart, clearCart } = useCart();
   const createOrder = useMutation(api.orders.create);
+  const redeemPointsMutation = useMutation(api.loyalty.redeemPoints);
   const { openCheckout } = useRazorpay();
 
   // ==========================================================================
@@ -93,6 +103,8 @@ export default function CheckoutPage() {
     discount?: number;
     title?: string;
   } | null>(null);
+  const [redeemPoints, setRedeemPoints] = useState(0);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
   // ==========================================================================
   // Data Fetching — BU settings + delivery zones
@@ -120,13 +132,83 @@ export default function CheckoutPage() {
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
 
   // ==========================================================================
+  // Customer Profile + Saved Addresses + Loyalty
+  // ==========================================================================
+
+  const { isAuthenticated } = useAuth();
+  const customer = useQuery(
+    api.customers.getByAuthUser,
+    isAuthenticated ? {} : "skip",
+  ) as Customer | null | undefined;
+
+  const savedAddresses = useQuery(
+    api.addresses.getByCustomer,
+    customer?._id ? { customerId: customer._id } : "skip",
+  ) as CustomerAddress[] | undefined;
+
+  const loyaltySettings = useQuery(api.loyalty.getSettings, {});
+  const loyaltyAccount = useQuery(
+    api.loyalty.getBalance,
+    customer?._id ? { customerId: customer._id } : "skip",
+  ) as LoyaltyAccount | undefined;
+
+  const maxRedeemable = useQuery(
+    api.loyalty.getMaxRedeemable,
+    customer?._id && loyaltySettings
+      ? {
+          customerId: customer._id,
+          orderSubtotal: cart.subtotal,
+        }
+      : "skip",
+  );
+
+  // ==========================================================================
+  // Auto-fill from customer profile (once on load)
+  // ==========================================================================
+
+  const [profileAutoFilled, setProfileAutoFilled] = useState(false);
+
+  useEffect(() => {
+    if (profileAutoFilled || !customer) return;
+    setForm((prev) => ({
+      ...prev,
+      customerName: prev.customerName || customer.name || "",
+      customerPhone: prev.customerPhone || customer.phone || "",
+      customerEmail: prev.customerEmail || customer.email || "",
+    }));
+    // Auto-select default address
+    if (savedAddresses && savedAddresses.length > 0 && !selectedAddressId) {
+      const defaultAddr = savedAddresses.find((a) => a.isDefault) ?? savedAddresses[0];
+      setSelectedAddressId(defaultAddr._id);
+      setForm((prev) => ({
+        ...prev,
+        deliveryAddress: defaultAddr.address,
+        deliveryNotes: defaultAddr.landmark ? `Landmark: ${defaultAddr.landmark}` : "",
+      }));
+    }
+    setProfileAutoFilled(true);
+  }, [customer, savedAddresses, profileAutoFilled, selectedAddressId]);
+
+  // ==========================================================================
+  // Loyalty Discount Calculation
+  // ==========================================================================
+
+  const loyaltyDiscount = useMemo(() => {
+    if (!loyaltySettings || redeemPoints <= 0) return 0;
+    const valuePerPoint = loyaltySettings.rupeesPerPointRedemption ?? 1;
+    const maxDiscountByPercent = cart.subtotal * (loyaltySettings.maxRedeemPercentOfOrder / 100);
+    const rawDiscount = redeemPoints * valuePerPoint;
+    return Math.min(rawDiscount, maxDiscountByPercent, cart.subtotal);
+  }, [loyaltySettings, redeemPoints, cart.subtotal]);
+
+  // ==========================================================================
   // Pricing Calculation
   // ==========================================================================
 
   const pricing = useMemo(() => {
     const subtotal = cart.subtotal;
     const couponDiscount = couponApplied?.valid ? (couponApplied.discount ?? 0) : 0;
-    const discount = cart.discount + couponDiscount;
+    const discount = cart.discount + couponDiscount + loyaltyDiscount;
     const afterDiscount = Math.max(0, subtotal - discount);
 
     // Tax
@@ -160,7 +242,7 @@ export default function CheckoutPage() {
     const total = afterDiscount + deliveryFee + tax;
 
     return { subtotal, discount, afterDiscount, tax, taxRate, deliveryFee, freeDelivery, estimatedMinutes, total };
-  }, [cart.subtotal, cart.discount, form.orderType, form.selectedZoneId, buSettings, deliveryZones, couponApplied]);
+  }, [cart.subtotal, cart.discount, form.orderType, form.selectedZoneId, buSettings, deliveryZones, couponApplied, loyaltyDiscount]);
 
   // ==========================================================================
   // Coupon Validation
@@ -352,6 +434,17 @@ export default function CheckoutPage() {
           orderId: result as unknown as string,
         });
 
+        // Redeem loyalty points after order creation
+        if (redeemPoints > 0 && customer?._id) {
+          redeemPointsMutation({
+            customerId: customer._id,
+            orderId: result as unknown as any,
+            points: redeemPoints,
+          }).catch((err) => {
+            console.error("Loyalty redemption failed:", err);
+          });
+        }
+
         clearCart();
 
         toast.success("Payment successful!", {
@@ -370,7 +463,7 @@ export default function CheckoutPage() {
         setIsSubmitting(false);
       }
     },
-    [validate, cart, form, pricing, createOrder, clearCart, openCheckout, storeIsOpen, nextOpenTime, couponApplied, buSettings]
+    [validate, cart, form, pricing, createOrder, clearCart, openCheckout, storeIsOpen, nextOpenTime, couponApplied, buSettings, redeemPoints, customer, redeemPointsMutation]
   );
 
   // ==========================================================================
@@ -732,11 +825,67 @@ export default function CheckoutPage() {
                         </div>
                       )}
 
+                      {/* Saved Addresses */}
+                      {savedAddresses && savedAddresses.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>Saved Addresses</Label>
+                          <div className="space-y-2">
+                            {savedAddresses.map((addr) => (
+                              <label
+                                key={addr._id}
+                                className={cn(
+                                  "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-all",
+                                  selectedAddressId === addr._id
+                                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                    : "border-border/60 bg-card hover:border-border"
+                                )}
+                                onClick={() => {
+                                  setSelectedAddressId(addr._id);
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    deliveryAddress: addr.address,
+                                    deliveryNotes: addr.landmark
+                                      ? `Landmark: ${addr.landmark}`
+                                      : addr.deliveryInstructions || prev.deliveryNotes,
+                                  }));
+                                }}
+                              >
+                                <div
+                                  className={cn(
+                                    "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                                    selectedAddressId === addr._id
+                                      ? "border-primary"
+                                      : "border-muted-foreground/30"
+                                  )}
+                                >
+                                  {selectedAddressId === addr._id && (
+                                    <div className="h-2 w-2 rounded-full bg-primary" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{addr.label}</span>
+                                    {addr.isDefault && (
+                                      <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+                                        Default
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                    {addr.address}
+                                  </p>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                          <Separator className="my-2" />
+                          <p className="text-xs text-muted-foreground">
+                            Or enter a custom address below:
+                          </p>
+                        </div>
+                      )}
+
                       <div className="space-y-2">
-                        <Label htmlFor="deliveryAddress">
-                          Delivery Address{" "}
-                          <span className="text-destructive">*</span>
-                        </Label>
                         <Textarea
                           id="deliveryAddress"
                           placeholder="Enter your full delivery address..."
@@ -905,6 +1054,65 @@ export default function CheckoutPage() {
                   )}
                 </div>
 
+                {/* Loyalty Points Redemption */}
+                {customer && loyaltyAccount && loyaltyAccount.pointsBalance > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium flex items-center gap-1.5">
+                          <Star className="h-3.5 w-3.5 text-amber-500" />
+                          Loyalty Points
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          {loyaltyAccount.pointsBalance} available
+                        </span>
+                      </div>
+                      {maxRedeemable && maxRedeemable.maxPoints > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={maxRedeemable.maxPoints}
+                              value={redeemPoints || ""}
+                              onChange={(e) => {
+                                const val = Math.max(
+                                  0,
+                                  Math.min(
+                                    maxRedeemable.maxPoints,
+                                    parseInt(e.target.value) || 0,
+                                  ),
+                                );
+                                setRedeemPoints(val);
+                              }}
+                              placeholder="0"
+                              className="h-8 text-xs"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs shrink-0"
+                              onClick={() => setRedeemPoints(maxRedeemable.maxPoints)}
+                            >
+                              Use Max
+                            </Button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Up to {maxRedeemable.maxPoints} points ({formatCurrency(maxRedeemable.maxDiscount)} value)
+                          </p>
+                        </div>
+                      )}
+                      {!maxRedeemable && (
+                        <p className="text-xs text-muted-foreground">
+                          Checking redeemable points...
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+
                 {/* Totals */}
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -918,6 +1126,17 @@ export default function CheckoutPage() {
                       <span>Discount</span>
                       <span className="font-medium">
                         -{formatCurrency(pricing.discount)}
+                      </span>
+                    </div>
+                  )}
+                  {loyaltyDiscount > 0 && (
+                    <div className="flex justify-between text-amber-600">
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3 w-3" />
+                        Points Redeemed
+                      </span>
+                      <span className="font-medium">
+                        -{formatCurrency(loyaltyDiscount)}
                       </span>
                     </div>
                   )}

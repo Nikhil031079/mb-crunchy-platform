@@ -23,6 +23,9 @@ export { CustomerReviewCard, CustomerReviewCardSkeleton } from "./CustomerReview
 // Interactive
 export { QuantitySelector } from "./QuantitySelector";
 
+// Collections
+export { CollectionGrid } from "./CollectionGrid";
+
 // Store Status
 export { StoreStatusDot, StoreStatusBadge, StoreSchedule } from "./StoreStatusBadge";
 

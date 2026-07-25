@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "convex/react";
-import { Package, ChevronDown, ChevronUp } from "lucide-react";
+import { Package, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
 import { formatCurrency } from "@/utils";
+import { useCart } from "@/stores/cart";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +46,8 @@ export default function OrderHistoryPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
+  const { addItem } = useCart();
+
   const filteredOrders =
     orders?.filter(
       (o) => statusFilter === "all" || o.status === statusFilter,
@@ -52,6 +56,29 @@ export default function OrderHistoryPage() {
   const toggleExpand = (orderId: string) => {
     setExpandedOrderId((prev) => (prev === orderId ? null : orderId));
   };
+
+  const handleReorder = useCallback(
+    (order: Order) => {
+      let addedCount = 0;
+      for (const item of order.items) {
+        addItem({
+          catalogItemId: item.catalogItemId,
+          itemType: item.itemType,
+          businessUnitId: order.businessUnitId,
+          name: item.name,
+          variantName: item.variantName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          image: item.image,
+        });
+        addedCount++;
+      }
+      toast.success("Items added to cart", {
+        description: `${addedCount} item(s) from order ${order.orderNumber}.`,
+      });
+    },
+    [addItem],
+  );
 
   return (
     <div className="space-y-6">
@@ -177,6 +204,18 @@ export default function OrderHistoryPage() {
                             <span className="font-medium">Delivery: </span>
                             {order.deliveryAddress}
                           </div>
+                        )}
+                        {/* Reorder */}
+                        {order.status === "delivered" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => handleReorder(order)}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Reorder
+                          </Button>
                         )}
                       </div>
                     )}

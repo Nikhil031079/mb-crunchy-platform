@@ -28,6 +28,7 @@ const AccountDashboardPage = lazy(() => import("@/pages/customer/account/Account
 const ProfilePage = lazy(() => import("@/pages/customer/account/ProfilePage"));
 const OrderHistoryPage = lazy(() => import("@/pages/customer/account/OrderHistoryPage"));
 const AddressesPage = lazy(() => import("@/pages/customer/account/AddressesPage"));
+const FavouritesPage = lazy(() => import("@/pages/customer/account/FavouritesPage"));
 
 // Admin Layout & Pages
 const AdminLayout = lazy(() => import("@/layouts/admin/AdminLayout"));
@@ -177,6 +178,7 @@ function AppRoutes() {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="orders" element={<OrderHistoryPage />} />
             <Route path="addresses" element={<AddressesPage />} />
+            <Route path="favourites" element={<FavouritesPage />} />
           </Route>
         </Route>
 

@@ -14,6 +14,7 @@ import {
   Star,
   Utensils,
   Package,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,6 +23,7 @@ import { api } from "@convex/_generated/api";
 import { SITE_NAME, SITE_DESCRIPTION } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
+import { useAuth } from "@/hooks/use-auth";
 
 // Customer Reusable Components
 import {
@@ -165,6 +167,11 @@ function BusinessUnitSection({
       }) as PartyPack[] | undefined)
     : ([] as PartyPack[]);
 
+  const bestSellers = useQuery(api.catalogItems.getBestSellers, {
+    businessUnitId: bu._id,
+    limit: 8,
+  });
+
   const { addItem } = useCart();
 
   const handleAddToCart = useCallback(
@@ -190,17 +197,19 @@ function BusinessUnitSection({
   const isDataLoaded =
     featuredProducts !== undefined &&
     combos !== undefined &&
-    partyPacks !== undefined;
+    partyPacks !== undefined &&
+    bestSellers !== undefined;
 
   const hasFeatured = featuredProducts && featuredProducts.length > 0;
   const hasCombos = combos && combos.length > 0;
   const hasPartyPacks = partyPacks && partyPacks.length > 0;
+  const hasBestSellers = bestSellers && bestSellers.length > 0 && bestSellers.length !== (featuredProducts?.length ?? 0);
 
   if (!isDataLoaded) {
     return <BusinessUnitSectionSkeleton buIndex={buIndex} />;
   }
 
-  if (!hasFeatured && !hasCombos && !hasPartyPacks) return null;
+  if (!hasFeatured && !hasCombos && !hasPartyPacks && !hasBestSellers) return null;
 
   const buSlug = bu.slug;
 
@@ -256,6 +265,33 @@ function BusinessUnitSection({
             />
             <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {featuredProducts!.slice(0, 10).map((item: any, index: number) => (
+                <ProductCard
+                  key={item._id}
+                  product={item}
+                  businessUnitSlug={buSlug}
+                  index={index}
+                  compact
+                  onAddToCart={handleAddToCart}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Best Sellers */}
+        {hasBestSellers && (
+          <div className="mb-10">
+            <SectionHeader
+              title="Best Sellers"
+              subtitle="Top picks from our customers"
+              action={{
+                label: `Browse ${bu.name}`,
+                onClick: () => (window.location.href = `/${buSlug}`),
+              }}
+              size="sm"
+            />
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {bestSellers!.slice(0, 10).map((item: any, index: number) => (
                 <ProductCard
                   key={item._id}
                   product={item}
@@ -340,6 +376,184 @@ function BusinessUnitSectionSkeleton({ buIndex }: { buIndex: number }) {
         <div className="grid gap-4 sm:grid-cols-2">
           {[1, 2].map((i) => (
             <ComboCardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================================
+// RecentlyViewedSection — Per-BU child component with its own hooks
+// ============================================================================
+
+function RecentlyViewedSection() {
+  const { user } = useAuth();
+  const customer = useQuery(api.customers.getByAuthUser, {});
+
+  const recentCollections = useQuery(
+    api.collections.getByCustomerAndType,
+    customer?._id
+      ? { customerId: customer._id, collectionType: "recentlyViewed" }
+      : "skip",
+  );
+
+  const recentIds = useMemo(() => {
+    if (!recentCollections || recentCollections.length === 0) return [];
+    return recentCollections
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 8)
+      .map((c) => c.itemId as any);
+  }, [recentCollections]);
+
+  const recentItems = useQuery(
+    api.catalogItems.getByIds,
+    recentIds.length > 0 ? { ids: recentIds } : "skip",
+  );
+
+  const { addItem } = useCart();
+
+  const handleAddToCart = useCallback(
+    (product: any) => {
+      const defaultVariant = product.variants?.[0];
+      addItem({
+        catalogItemId: product._id,
+        itemType: "product",
+        businessUnitId: product.businessUnitId,
+        name: product.name,
+        variantName: defaultVariant?.name ?? "Default",
+        quantity: 1,
+        unitPrice: product.price ?? defaultVariant?.price ?? 0,
+        image: product.coverImage || product.thumbnail,
+      });
+      toast.success("Added to cart", { description: product.name });
+    },
+    [addItem],
+  );
+
+  if (!customer?._id || !recentItems || recentItems.length === 0) return null;
+
+  return (
+    <section className="bg-secondary/20 py-16">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <SectionHeader
+          title="Recently Viewed"
+          subtitle="Items you've browsed recently"
+          size="sm"
+        />
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {recentItems.slice(0, 10).map((item: any, index: number) => (
+            <ProductCard
+              key={item._id}
+              product={item}
+              index={index}
+              compact
+              onAddToCart={handleAddToCart}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================================
+// RecommendedSection — Personalized recommendations based on browsing history
+// ============================================================================
+
+function RecommendedSection() {
+  const { user } = useAuth();
+  const customer = useQuery(api.customers.getByAuthUser, {});
+
+  const recentCollections = useQuery(
+    api.collections.getByCustomerAndType,
+    customer?._id
+      ? { customerId: customer._id, collectionType: "recentlyViewed" }
+      : "skip",
+  );
+
+  // Get the business unit IDs from recently viewed items
+  const viewedBuIds = useMemo(() => {
+    if (!recentCollections || recentCollections.length === 0) return [];
+    const ids = new Set<string>();
+    for (const c of recentCollections) {
+      const buId = (c as Record<string, unknown>).businessUnitId;
+      if (buId) ids.add(buId as string);
+    }
+    return Array.from(ids).slice(0, 3);
+  }, [recentCollections]);
+
+  // Exclude already-viewed item IDs
+  const excludeIds = useMemo(() => {
+    if (!recentCollections) return [];
+    return recentCollections.map((c) => c.itemId as any);
+  }, [recentCollections]);
+
+  // Fetch recommended items from each viewed business unit
+  const rec0 = useQuery(
+    api.catalogItems.getRecommended,
+    viewedBuIds[0] ? { businessUnitId: viewedBuIds[0] as any, excludeIds, limit: 4 } : "skip",
+  );
+  const rec1 = useQuery(
+    api.catalogItems.getRecommended,
+    viewedBuIds[1] ? { businessUnitId: viewedBuIds[1] as any, excludeIds, limit: 4 } : "skip",
+  );
+  const rec2 = useQuery(
+    api.catalogItems.getRecommended,
+    viewedBuIds[2] ? { businessUnitId: viewedBuIds[2] as any, excludeIds, limit: 4 } : "skip",
+  );
+
+  const { addItem } = useCart();
+
+  const handleAddToCart = useCallback(
+    (product: any) => {
+      const defaultVariant = product.variants?.[0];
+      addItem({
+        catalogItemId: product._id,
+        itemType: "product",
+        businessUnitId: product.businessUnitId,
+        name: product.name,
+        variantName: defaultVariant?.name ?? "Default",
+        quantity: 1,
+        unitPrice: product.price ?? defaultVariant?.price ?? 0,
+        image: product.coverImage || product.thumbnail,
+      });
+      toast.success("Added to cart", { description: product.name });
+    },
+    [addItem],
+  );
+
+  // Merge all recommended items
+  const recommendedItems = useMemo(() => {
+    const all = [...(rec0 ?? []), ...(rec1 ?? []), ...(rec2 ?? [])];
+    // Deduplicate by _id
+    const seen = new Set<string>();
+    return all.filter((item: any) => {
+      if (seen.has(item._id)) return false;
+      seen.add(item._id);
+      return true;
+    }).slice(0, 10);
+  }, [rec0, rec1, rec2]);
+
+  if (!customer?._id || recommendedItems.length === 0) return null;
+
+  return (
+    <section className="py-16">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <SectionHeader
+          title="Recommended for You"
+          subtitle="Based on your browsing history"
+          size="sm"
+        />
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {recommendedItems.map((item: any, index: number) => (
+            <ProductCard
+              key={item._id}
+              product={item}
+              index={index}
+              compact
+              onAddToCart={handleAddToCart}
+            />
           ))}
         </div>
       </div>
@@ -519,6 +733,18 @@ export default function HomePage() {
           ))}
         </>
       )}
+
+      {/* ================================================================ */}
+      {/* 5. RECENTLY VIEWED                                               */}
+      {/* ================================================================ */}
+
+      {!isLoading && <RecentlyViewedSection />}
+
+      {/* ================================================================ */}
+      {/* 6. RECOMMENDED FOR YOU                                           */}
+      {/* ================================================================ */}
+
+      {!isLoading && <RecommendedSection />}
 
       {/* ================================================================ */}
       {/* WHY CHOOSE MB CRUNCHY                                            */}

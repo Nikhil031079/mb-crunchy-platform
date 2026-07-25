@@ -81,6 +81,20 @@ export const getAll = query({
   },
 });
 
+export const getByIds = query({
+  args: { ids: v.array(v.id("catalogItems")) },
+  handler: async (ctx, args) => {
+    const results = await Promise.all(
+      args.ids.map(async (id) => {
+        const doc = await ctx.db.get(id);
+        if (!doc || doc.deletedAt) return null;
+        return doc;
+      }),
+    );
+    return results.filter(Boolean);
+  },
+});
+
 export const search = query({
   args: {
     businessUnitId: v.id("businessUnits"),
@@ -110,6 +124,53 @@ export const search = query({
         item.tags?.some((t) => t.toLowerCase().includes(normalizedQuery)) ||
         item.description?.toLowerCase().includes(normalizedQuery)
     );
+  },
+});
+
+export const getBestSellers = query({
+  args: { businessUnitId: v.id("businessUnits"), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    return await ctx.db
+      .query("catalogItems")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .take(limit);
+  },
+});
+
+export const getRecommended = query({
+  args: {
+    businessUnitId: v.id("businessUnits"),
+    excludeIds: v.array(v.id("catalogItems")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    const excludeSet = new Set(args.excludeIds);
+    const items = await ctx.db
+      .query("catalogItems")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+
+    return items.filter((item) => !excludeSet.has(item._id)).slice(0, limit);
   },
 });
 

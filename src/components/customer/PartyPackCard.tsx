@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ShoppingCart, ImageOff, Users, Check } from "lucide-react";
+import { ShoppingCart, Heart, ImageOff, Users, Check } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ interface PartyPackCardProps {
   partyPack: PartyPack;
   index?: number;
   onAddToCart?: (partyPack: PartyPack) => void;
+  onFavorite?: (partyPack: PartyPack) => void;
+  isFavorited?: boolean;
   className?: string;
 }
 
@@ -21,6 +23,8 @@ export function PartyPackCard({
   partyPack,
   index = 0,
   onAddToCart,
+  onFavorite,
+  isFavorited = false,
   className,
 }: PartyPackCardProps) {
   const [imageError, setImageError] = useState(false);
@@ -34,6 +38,12 @@ export function PartyPackCard({
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     onAddToCart?.(partyPack);
+  };
+
+  const handleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onFavorite?.(partyPack);
   };
 
   return (
@@ -73,6 +83,24 @@ export function PartyPackCard({
               >
                 -{discount}%
               </Badge>
+            )}
+
+            {/* Favorite Button */}
+            {onFavorite && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleFavorite}
+                className="absolute right-2 top-2 h-7 w-7 rounded-full bg-background/60 backdrop-blur-sm hover:bg-background/80"
+                aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
+              >
+                <Heart
+                  className={cn(
+                    "h-3.5 w-3.5 transition-colors",
+                    isFavorited ? "fill-accent text-accent" : "text-muted-foreground"
+                  )}
+                />
+              </Button>
             )}
 
             {/* Servings Badge */}

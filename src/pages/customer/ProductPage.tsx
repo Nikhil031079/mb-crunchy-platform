@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Link, useParams } from "react-router";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -22,6 +22,7 @@ import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 
 // Hooks
 import { useCart } from "@/stores/cart";
+import { useAuth } from "@/hooks/use-auth";
 
 // Customer components
 import { QuantitySelector } from "@/components/customer";
@@ -61,6 +62,11 @@ export default function ProductPage() {
 
   // Cart
   const { addItem, cart } = useCart();
+
+  // Auth + Recently Viewed
+  const { user } = useAuth();
+  const customer = useQuery(api.customers.getByAuthUser, {});
+  const recordRecentlyViewed = useMutation(api.collections.recordRecentlyViewed);
 
   // ==========================================================================
   // Data Fetching
@@ -179,6 +185,17 @@ export default function ProductPage() {
     setImageLoaded(false);
     setImageError(false);
   }, [productSlug]);
+
+  // Record recently viewed
+  useEffect(() => {
+    if (customer?._id && product?._id) {
+      recordRecentlyViewed({
+        customerId: customer._id,
+        itemType: "product",
+        itemId: product._id,
+      }).catch(() => {});
+    }
+  }, [customer?._id, product?._id, recordRecentlyViewed]);
 
   // ==========================================================================
   // Page Title
