@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 
 import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
@@ -190,9 +191,9 @@ export default function ProductPage() {
   useEffect(() => {
     if (customer?._id && product?._id) {
       recordRecentlyViewed({
-        customerId: customer._id,
+        customerId: customer._id as Id<"customers">,
         itemType: "product",
-        itemId: product._id,
+        itemId: product._id as Id<"catalogItems">,
       }).catch(() => {});
     }
   }, [customer?._id, product?._id, recordRecentlyViewed]);

@@ -4,6 +4,7 @@ import { Heart, Bookmark, Clock, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/stores/cart";
@@ -63,7 +64,7 @@ export default function FavouritesPage() {
 
   // Fetch customer
   const customer = useQuery(api.customers.getByAuthUser, {});
-  const customerId = customer?._id;
+  const customerId = customer?._id as Id<"customers"> | undefined;
 
   // Fetch collection items for each tab
   const favItems = useQuery(
@@ -123,7 +124,7 @@ export default function FavouritesPage() {
           customerId,
           collectionType: activeTab,
           itemType: item.itemType,
-          itemId: item.itemId,
+          itemId: item.itemId as Id<"catalogItems">,
         });
         toast.success("Removed", {
           description: `Item removed from ${currentTab.label}.`,

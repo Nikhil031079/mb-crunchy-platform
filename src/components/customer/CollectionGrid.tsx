@@ -85,11 +85,11 @@ function CollectionItemCard({
 }: CollectionItemCardProps) {
   const [imageError, setImageError] = useState(false);
 
-  const itemName = (item as Record<string, unknown>).name as string | undefined;
-  const itemPrice = (item as Record<string, unknown>).price as number | undefined;
-  const itemImage = (item as Record<string, unknown>).image as string | undefined;
-  const itemSlug = (item as Record<string, unknown>).slug as string | undefined;
-  const buSlug = (item as Record<string, unknown>).businessUnitSlug as string | undefined;
+  const itemName = (item as unknown as Record<string, unknown>).name as string | undefined;
+  const itemPrice = (item as unknown as Record<string, unknown>).price as number | undefined;
+  const itemImage = (item as unknown as Record<string, unknown>).image as string | undefined;
+  const itemSlug = (item as unknown as Record<string, unknown>).slug as string | undefined;
+  const buSlug = (item as unknown as Record<string, unknown>).businessUnitSlug as string | undefined;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();

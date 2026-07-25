@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvex } from "convex/react";
 
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 
 import type { CollectionType, CatalogItemType } from "@/types";
 
@@ -15,7 +16,9 @@ export function useCollectionItems(
 ) {
   return useQuery(
     api.collections.getByCustomerAndType,
-    customerId ? { customerId, collectionType } : "skip",
+    customerId
+      ? { customerId: customerId as Id<"customers">, collectionType }
+      : "skip",
   );
 }
 
@@ -32,10 +35,10 @@ export function useCollectionActions(customerId: string | undefined) {
     async (collectionType: CollectionType, itemType: CatalogItemType, itemId: string) => {
       if (!customerId) return false;
       const result = await toggleMutation({
-        customerId,
+        customerId: customerId as Id<"customers">,
         collectionType,
         itemType,
-        itemId,
+        itemId: itemId as Id<"catalogItems">,
       });
       return result.added;
     },
@@ -45,7 +48,12 @@ export function useCollectionActions(customerId: string | undefined) {
   const add = useCallback(
     async (collectionType: CollectionType, itemType: CatalogItemType, itemId: string) => {
       if (!customerId) return;
-      await addMutation({ customerId, collectionType, itemType, itemId });
+      await addMutation({
+        customerId: customerId as Id<"customers">,
+        collectionType,
+        itemType,
+        itemId: itemId as Id<"catalogItems">,
+      });
     },
     [customerId, addMutation],
   );
@@ -53,7 +61,12 @@ export function useCollectionActions(customerId: string | undefined) {
   const remove = useCallback(
     async (collectionType: CollectionType, itemType: CatalogItemType, itemId: string) => {
       if (!customerId) return;
-      await removeMutation({ customerId, collectionType, itemType, itemId });
+      await removeMutation({
+        customerId: customerId as Id<"customers">,
+        collectionType,
+        itemType,
+        itemId: itemId as Id<"catalogItems">,
+      });
     },
     [customerId, removeMutation],
   );
@@ -66,15 +79,26 @@ export function useCollectionActions(customerId: string | undefined) {
 // ============================================================================
 
 export function useCollectionCheck(customerId: string | undefined) {
-  const bulkCheck = useMutation(api.collections.bulkCheck);
+  const convex = useConvex();
 
   const check = useCallback(
     async (items: { itemType: CatalogItemType; itemId: string }[]) => {
       if (!customerId || items.length === 0) return {} as Record<string, boolean>;
-      const results = await bulkCheck({ customerId, items });
-      return results;
+      const results = await convex.query(api.collections.getByCustomer, {
+        customerId: customerId as Id<"customers">,
+      });
+      const inCollection = new Set(
+        (results as Array<{ itemType: string; itemId: string }>).map(
+          (r) => `${r.itemType}:${r.itemId}`,
+        ),
+      );
+      const result: Record<string, boolean> = {};
+      for (const item of items) {
+        result[item.itemId] = inCollection.has(`${item.itemType}:${item.itemId}`);
+      }
+      return result;
     },
-    [customerId, bulkCheck],
+    [customerId, convex],
   );
 
   return { check };

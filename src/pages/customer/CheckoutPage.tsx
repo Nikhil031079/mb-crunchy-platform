@@ -52,6 +52,7 @@ import type {
   LoyaltySettings,
   LoyaltyAccount,
 } from "@/types";
+import type { Id } from "@convex/_generated/dataModel";
 
 // ============================================================================
 // CheckoutPage — Contact form, delivery/pickup, order summary, submit
@@ -143,21 +144,21 @@ export default function CheckoutPage() {
 
   const savedAddresses = useQuery(
     api.addresses.getByCustomer,
-    customer?._id ? { customerId: customer._id } : "skip",
+    customer?._id ? { customerId: customer._id as Id<"customers"> } : "skip",
   ) as CustomerAddress[] | undefined;
 
   const loyaltySettings = useQuery(api.loyalty.getSettings, {});
   const loyaltyAccount = useQuery(
     api.loyalty.getBalance,
-    customer?._id ? { customerId: customer._id } : "skip",
+    customer?._id ? { customerId: customer._id as Id<"customers"> } : "skip",
   ) as LoyaltyAccount | undefined;
 
   const maxRedeemable = useQuery(
     api.loyalty.getMaxRedeemable,
     customer?._id && loyaltySettings
       ? {
-          customerId: customer._id,
-          orderSubtotal: cart.subtotal,
+          customerId: customer._id as Id<"customers">,
+          orderTotal: cart.subtotal,
         }
       : "skip",
   );
@@ -437,8 +438,8 @@ export default function CheckoutPage() {
         // Redeem loyalty points after order creation
         if (redeemPoints > 0 && customer?._id) {
           redeemPointsMutation({
-            customerId: customer._id,
-            orderId: result as unknown as any,
+            customerId: customer._id as Id<"customers">,
+            orderId: result as unknown as Id<"orders">,
             points: redeemPoints,
           }).catch((err) => {
             console.error("Loyalty redemption failed:", err);
@@ -1100,7 +1101,7 @@ export default function CheckoutPage() {
                             </Button>
                           </div>
                           <p className="text-[10px] text-muted-foreground">
-                            Up to {maxRedeemable.maxPoints} points ({formatCurrency(maxRedeemable.maxDiscount)} value)
+                            Up to {maxRedeemable.maxPoints} points ({formatCurrency(maxRedeemable.maxValue)} value)
                           </p>
                         </div>
                       )}
