@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { motion } from "framer-motion";
 import { ShoppingCart, Heart, ImageOff, Check } from "lucide-react";
 
@@ -19,7 +19,7 @@ interface ComboCardProps {
   className?: string;
 }
 
-export function ComboCard({
+export const ComboCard = memo(function ComboCard({
   combo,
   index = 0,
   onAddToCart,
@@ -176,7 +176,7 @@ export function ComboCard({
       </Card>
     </motion.div>
   );
-}
+});
 
 /**
  * ComboCardSkeleton — loading placeholder

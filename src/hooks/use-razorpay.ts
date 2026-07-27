@@ -30,7 +30,13 @@ export function useRazorpay() {
     (args: RazorpayPaymentArgs): Promise<RazorpayPaymentResult> => {
       if (!RAZORPAY_KEY_ID) {
         return Promise.reject(
-          new Error("Razorpay key not configured. Set VITE_RAZORPAY_KEY_ID in your environment.")
+          new Error("Payment is not configured. Please contact support to enable payments.")
+        );
+      }
+
+      if (typeof window.Razorpay === "undefined") {
+        return Promise.reject(
+          new Error("Payment gateway is loading. Please try again in a moment.")
         );
       }
 

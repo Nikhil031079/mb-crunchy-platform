@@ -5,19 +5,11 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { api } from "./_generated/api";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-// TEMPORARY: Bypass auth for local development. Set to false before production.
-const DEV_AUTH_BYPASS = true;
-
-async function requireAuth(ctx: any) {
-  if (DEV_AUTH_BYPASS) return;
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-}
 
 async function slugExists(
   ctx: any,
@@ -140,7 +132,7 @@ export const create = mutation({
     canonicalUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     // Enforce unique slug within business unit
     if (await slugExists(ctx, args.businessUnitId, args.slug)) {
@@ -159,7 +151,7 @@ export const create = mutation({
     });
 
     // Sync to catalog
-    await ctx.runMutation(api.catalogItems.sync, {
+    const catalogItemId = await ctx.runMutation(api.catalogItems.sync, {
       sourceId: productId,
       businessUnitId: args.businessUnitId,
       itemType: "product",
@@ -179,6 +171,19 @@ export const create = mutation({
       metaKeywords: args.metaKeywords,
       canonicalUrl: args.canonicalUrl,
     });
+
+    // Auto-create inventory records for each variant
+    for (const variant of args.variants) {
+      const stockQty = args.stockQuantity ?? 0;
+      await ctx.runMutation(api.inventory.upsert, {
+        catalogItemId: catalogItemId as any,
+        businessUnitId: args.businessUnitId,
+        variantName: variant.name,
+        sku: args.sku,
+        stockQuantity: stockQty,
+        available: stockQty > 0 && args.available,
+      });
+    }
 
     return productId;
   },
@@ -216,9 +221,10 @@ export const update = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const { id, ...fields } = args;
 
@@ -258,14 +264,37 @@ export const update = mutation({
         metaKeywords: product.metaKeywords,
         canonicalUrl: product.canonicalUrl,
       });
+
+      // Sync inventory when variants, stock, SKU, or availability changes
+      if (fields.variants || fields.stockQuantity !== undefined || fields.sku !== undefined || fields.available !== undefined) {
+        const catalogItem = await ctx.db
+          .query("catalogItems")
+          .withIndex("by_source", (q) => q.eq("sourceId", id))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .first();
+
+        if (catalogItem) {
+          const stockQty = fields.stockQuantity ?? product.stockQuantity ?? 0;
+          for (const variant of product.variants) {
+            await ctx.runMutation(api.inventory.upsert, {
+              catalogItemId: catalogItem._id,
+              businessUnitId: product.businessUnitId,
+              variantName: variant.name,
+              sku: fields.sku ?? product.sku,
+              stockQuantity: stockQty,
+              available: stockQty > 0 && (fields.available ?? product.available),
+            });
+          }
+        }
+      }
     }
   },
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("products") },
+  args: { id: v.id("products"), sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -295,9 +324,9 @@ export const getAll = query({
  * Restore — clears deletedAt and reactivates the product.
  */
 export const restore = mutation({
-  args: { id: v.id("products") },
+  args: { id: v.id("products"), sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

@@ -15,6 +15,8 @@ import {
   CreditCard,
   Package,
   Star,
+  User,
+  CircleDot,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,11 +29,11 @@ import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 
 // Hooks
 import { useCart } from "@/stores/cart";
-import { useRazorpay } from "@/hooks/use-razorpay";
 import { useAuth } from "@/hooks/use-auth";
 
 // Customer components
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
+import { PaymentQR } from "@/components/customer/PaymentQR";
 
 // Shared components
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -82,10 +84,9 @@ const INITIAL_FORM: CheckoutForm = {
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, clearCart } = useCart();
+  const { cart, clearCart, itemCount } = useCart();
   const createOrder = useMutation(api.orders.create);
   const redeemPointsMutation = useMutation(api.loyalty.redeemPoints);
-  const { openCheckout } = useRazorpay();
 
   // ==========================================================================
   // State
@@ -97,6 +98,12 @@ export default function CheckoutPage() {
   const [orderSuccess, setOrderSuccess] = useState<{
     orderNumber: string;
     orderId: string;
+  } | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"idle" | "creating_order">("idle");
+  const [showPaymentQR, setShowPaymentQR] = useState(false);
+  const [pendingOrder, setPendingOrder] = useState<{
+    orderId: string;
+    orderNumber: string;
   } | null>(null);
   const [couponApplied, setCouponApplied] = useState<{
     valid: boolean;
@@ -386,21 +393,10 @@ export default function CheckoutPage() {
       }
 
       setIsSubmitting(true);
+      setPaymentStatus("creating_order");
 
       try {
-        // Initiate Razorpay payment
-        const paymentResponse = await openCheckout({
-          amount: pricing.total,
-          currency: buSettings?.currency === "USD" ? "USD" : "INR",
-          name: SITE_NAME,
-          description: `Order from ${SITE_NAME} (${form.orderType === "delivery" ? "Delivery" : "Pickup"})`,
-          customerName: form.customerName.trim(),
-          customerPhone: form.customerPhone.trim(),
-          customerEmail: form.customerEmail.trim() || undefined,
-        });
-
-        // Payment succeeded — create order
-        const result = await createOrder({
+        const orderResult = await createOrder({
           businessUnitId: cart.businessUnitId! as any,
           customerName: form.customerName.trim(),
           customerPhone: form.customerPhone.trim(),
@@ -427,44 +423,38 @@ export default function CheckoutPage() {
               : undefined,
           deliveryNotes: form.deliveryNotes.trim() || undefined,
           offerCode: couponApplied?.valid ? form.couponCode.trim() : undefined,
-          razorpayPaymentId: paymentResponse.razorpay_payment_id,
+          paymentMethod: "upi_qr",
         });
 
-        setOrderSuccess({
-          orderNumber: result as unknown as string,
-          orderId: result as unknown as string,
-        });
+        const { orderId: newOrderId, orderNumber: newOrderNumber } = orderResult as { orderId: string; orderNumber: string };
 
-        // Redeem loyalty points after order creation
         if (redeemPoints > 0 && customer?._id) {
           redeemPointsMutation({
             customerId: customer._id as Id<"customers">,
-            orderId: result as unknown as Id<"orders">,
+            orderId: newOrderId as unknown as Id<"orders">,
             points: redeemPoints,
           }).catch((err) => {
             console.error("Loyalty redemption failed:", err);
           });
         }
 
-        clearCart();
-
-        toast.success("Payment successful!", {
-          description: `Order #${(result as unknown as string).slice(0, 8)} confirmed.`,
-        });
+        setPendingOrder({ orderId: newOrderId, orderNumber: newOrderNumber });
+        setShowPaymentQR(true);
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Payment or order failed";
+          error instanceof Error ? error.message : "Order creation failed";
         console.error("Checkout failed:", error);
         toast.error("Checkout failed", {
-          description: message.includes("cancelled")
-            ? "Payment was cancelled."
+          description: message.includes("stock")
+            ? "Some items are out of stock. Please review your cart."
             : "Please try again or contact support.",
         });
       } finally {
         setIsSubmitting(false);
+        setPaymentStatus("idle");
       }
     },
-    [validate, cart, form, pricing, createOrder, clearCart, openCheckout, storeIsOpen, nextOpenTime, couponApplied, buSettings, redeemPoints, customer, redeemPointsMutation]
+    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, customer, redeemPointsMutation]
   );
 
   // ==========================================================================
@@ -478,33 +468,51 @@ export default function CheckoutPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
             className="text-center space-y-6"
           >
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-              <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-            </div>
+            {/* Animated success icon */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
+              className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40"
+            >
+              <CheckCircle2 className="h-12 w-12 text-white" />
+            </motion.div>
 
-            <div>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+            >
               <h1 className="text-2xl font-bold tracking-tight">
-                Order Placed!
+                Order Placed Successfully!
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 Thank you for your order. We&apos;ll start preparing it right
                 away.
               </p>
-            </div>
+            </motion.div>
 
-            <div className="rounded-xl border border-border/60 bg-card p-6 space-y-3">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="rounded-xl border border-border/60 bg-card p-6 space-y-3"
+            >
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Order Number</span>
                 <span className="font-mono font-semibold">
-                  {orderSuccess.orderNumber?.slice(0, 12) ?? "Processing..."}
+                  {orderSuccess.orderNumber ?? "Processing..."}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Status</span>
-                <span className="text-emerald-600 font-medium">Pending</span>
+                <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Pending
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Type</span>
@@ -512,32 +520,43 @@ export default function CheckoutPage() {
                   {form.orderType}
                 </span>
               </div>
-            </div>
+              {pricing.estimatedMinutes && form.orderType === "delivery" && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Estimated Delivery</span>
+                  <span className="font-medium">~{pricing.estimatedMinutes} min</span>
+                </div>
+              )}
+            </motion.div>
 
-            <p className="text-xs text-muted-foreground">
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.45 }}
+              className="text-xs text-muted-foreground"
+            >
               You&apos;ll receive updates on your order status. For any
               questions, please contact support.
-            </p>
+            </motion.p>
 
-            <div className="flex gap-3 justify-center">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="flex gap-3 justify-center"
+            >
               <Link to={ROUTES.TRACK_ORDER}>
-                <Button variant="outline" size="sm">
-                  <Package className="mr-1.5 h-3.5 w-3.5" />
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Package className="h-3.5 w-3.5" />
                   Track Order
                 </Button>
               </Link>
               <Link to="/">
-                <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                <Button size="sm" className="gap-2">
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   Back to Home
                 </Button>
               </Link>
-              {cart.businessUnitId && (
-                <Link to={`/${cart.businessUnitId}`}>
-                  <Button size="sm">Order More</Button>
-                </Link>
-              )}
-            </div>
+            </motion.div>
           </motion.div>
         </div>
       </div>
@@ -577,13 +596,38 @@ export default function CheckoutPage() {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mb-8"
+          className="mb-6"
         >
+          <div className="flex items-center gap-2 mb-2">
+            <Link
+              to={ROUTES.CART}
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Cart
+            </Link>
+            <span className="text-muted-foreground">/</span>
+            <span className="text-sm font-medium">Checkout</span>
+          </div>
           <h1 className="text-2xl font-bold tracking-tight">Checkout</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Complete your order details below
           </p>
         </motion.div>
+
+        {/* Loading State — settings still loading */}
+        {buSettings === undefined && cart.businessUnitId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center justify-center py-12"
+          >
+            <div className="flex items-center gap-3 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading checkout details...</span>
+            </div>
+          </motion.div>
+        )}
 
         {/* Store Closed Banner */}
         {buSettings && !storeIsOpen && (
@@ -816,6 +860,51 @@ export default function CheckoutPage() {
                         </div>
                       )}
 
+                      {/* Delivery Info Summary */}
+                      {deliveryZones && deliveryZones.length > 0 && (
+                        <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            <Truck className="h-4 w-4 text-primary" />
+                            <span>Delivery Info</span>
+                          </div>
+                          <div className="space-y-1.5 text-xs text-muted-foreground">
+                            {(() => {
+                              const selectedZone = deliveryZones.find((z) => z._id === form.selectedZoneId) ?? deliveryZones[0];
+                              if (!selectedZone) return null;
+                              return (
+                                <>
+                                  <div className="flex justify-between">
+                                    <span>Zone</span>
+                                    <span className="font-medium text-foreground">{selectedZone.name}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Delivery fee</span>
+                                    <span className={cn("font-medium", pricing.freeDelivery ? "text-emerald-600" : "text-foreground")}>
+                                      {pricing.freeDelivery ? "Free" : formatCurrency(selectedZone.charge)}
+                                    </span>
+                                  </div>
+                                  {selectedZone.estimatedMinutes && (
+                                    <div className="flex justify-between">
+                                      <span>Estimated time</span>
+                                      <span className="font-medium text-foreground">~{selectedZone.estimatedMinutes} min</span>
+                                    </div>
+                                  )}
+                                  {selectedZone.minOrder && (
+                                    <div className="flex justify-between">
+                                      <span>Minimum order</span>
+                                      <span className={cn("font-medium", pricing.afterDiscount >= selectedZone.minOrder ? "text-emerald-600" : "text-foreground")}>
+                                        {formatCurrency(selectedZone.minOrder)}
+                                        {pricing.afterDiscount >= selectedZone.minOrder ? " (met)" : ""}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
+
                       {/* No zones configured fallback */}
                       {deliveryZones && deliveryZones.length === 0 && (
                         <div className="rounded-lg bg-secondary/50 p-3">
@@ -887,8 +976,8 @@ export default function CheckoutPage() {
                       )}
 
                       <div className="space-y-2">
+                        <Label htmlFor="deliveryAddress">Delivery Address *</Label>
                         <Textarea
-                          id="deliveryAddress"
                           placeholder="Enter your full delivery address..."
                           value={form.deliveryAddress}
                           onChange={(e) =>
@@ -938,6 +1027,10 @@ export default function CheckoutPage() {
                       Your order will be ready for pickup at the store. We&apos;ll
                       notify you when it&apos;s ready.
                     </p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span>Ready for pickup in: 15-20 minutes</span>
+                    </div>
                     {buSettings && (
                       <StoreStatusDot
                         isOpen={buSettings.isOpen}
@@ -960,7 +1053,12 @@ export default function CheckoutPage() {
                 transition={{ duration: 0.3, delay: 0.15 }}
                 className="rounded-xl border border-border/60 bg-card p-6 space-y-4"
               >
-                <h2 className="font-semibold">Order Summary</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-semibold">Order Summary</h2>
+                  <span className="text-xs text-muted-foreground">
+                    {itemCount} item{itemCount !== 1 ? "s" : ""}
+                  </span>
+                </div>
 
                 {/* Items */}
                 <div className="max-h-48 space-y-3 overflow-y-auto">
@@ -1169,9 +1267,33 @@ export default function CheckoutPage() {
                       <span>Estimated delivery: ~{pricing.estimatedMinutes} min</span>
                     </div>
                   )}
+                  {form.orderType === "pickup" && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+                      <Clock className="h-3 w-3" />
+                      <span>Ready for pickup in: 15-20 min</span>
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
+
+                {/* Delivery/Pickup Estimate Badge */}
+                {form.orderType === "delivery" && pricing.estimatedMinutes && (
+                  <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2">
+                    <Clock className="h-4 w-4 text-primary shrink-0" />
+                    <p className="text-xs font-medium">
+                      Estimated delivery: ~{pricing.estimatedMinutes} minutes
+                    </p>
+                  </div>
+                )}
+                {form.orderType === "pickup" && (
+                  <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2">
+                    <Clock className="h-4 w-4 text-primary shrink-0" />
+                    <p className="text-xs font-medium">
+                      Ready for pickup in: 15-20 minutes
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
@@ -1182,19 +1304,26 @@ export default function CheckoutPage() {
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full"
+                  className={cn(
+                    "w-full text-base font-semibold h-12 transition-all",
+                    isSubmitting && "opacity-80"
+                  )}
                   disabled={isSubmitting || !storeIsOpen}
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing Payment...
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      {paymentStatus === "processing_payment"
+                        ? "Processing Payment..."
+                        : paymentStatus === "creating_order"
+                          ? "Creating Order..."
+                          : "Processing..."}
                     </>
                   ) : !storeIsOpen ? (
                     "Store is Closed"
                   ) : (
                     <>
-                      <CreditCard className="mr-2 h-4 w-4" />
+                      <CreditCard className="mr-2 h-5 w-5" />
                       Pay {formatCurrency(pricing.total)}
                     </>
                   )}
@@ -1216,6 +1345,43 @@ export default function CheckoutPage() {
           </div>
         </form>
       </div>
+
+      {/* UPI Payment QR Modal */}
+      {showPaymentQR && pendingOrder && (
+        <PaymentQR
+          upiId={buSettings?.paymentConfig?.upiId ?? ""}
+          merchantName={buSettings?.paymentConfig?.merchantName ?? SITE_NAME}
+          amount={pricing.total}
+          orderNumber={pendingOrder.orderNumber}
+          whatsappNumber={buSettings?.paymentConfig?.whatsappNumber}
+          onPaid={() => {
+            setShowPaymentQR(false);
+            setOrderSuccess({
+              orderNumber: pendingOrder.orderNumber,
+              orderId: pendingOrder.orderId,
+            });
+            clearCart();
+            toast.success("Order placed!", {
+              description: "Payment is under verification. We'll confirm shortly.",
+            });
+          }}
+          onWhatsApp={() => {
+            const phone = (buSettings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
+            const msg = encodeURIComponent(
+              `Hi! I've placed order #${pendingOrder.orderNumber} for ${formatCurrency(pricing.total)}. Please confirm my payment.`
+            );
+            window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+          }}
+          onClose={() => {
+            setShowPaymentQR(false);
+            setOrderSuccess({
+              orderNumber: pendingOrder.orderNumber,
+              orderId: pendingOrder.orderId,
+            });
+            clearCart();
+          }}
+        />
+      )}
     </div>
   );
 }

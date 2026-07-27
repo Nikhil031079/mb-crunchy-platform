@@ -4,6 +4,7 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import { AdminAuthProvider } from "@/hooks/use-admin-auth";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
@@ -21,6 +22,7 @@ const ProductPage = lazy(() => import("@/pages/customer/ProductPage"));
 const CartPage = lazy(() => import("@/pages/customer/CartPage"));
 const CheckoutPage = lazy(() => import("@/pages/customer/CheckoutPage"));
 const OrderTrackingPage = lazy(() => import("@/pages/customer/OrderTrackingPage"));
+const SearchPage = lazy(() => import("@/pages/customer/SearchPage"));
 
 // Account Pages
 const AccountLayout = lazy(() => import("@/pages/customer/account/AccountLayout"));
@@ -47,6 +49,9 @@ const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
 
 // Shared Pages
 const AuthPage = lazy(() => import("@/pages/Auth.tsx"));
+const AdminLoginPage = lazy(() => import("@/pages/admin/AdminLoginPage"));
+const AdminSetupPage = lazy(() => import("@/pages/admin/AdminSetupPage"));
+const AdminForgotPasswordPage = lazy(() => import("@/pages/admin/AdminForgotPasswordPage"));
 const NotFound = lazy(() => import("@/pages/NotFound.tsx"));
 
 // ============================================================================
@@ -171,6 +176,7 @@ function AppRoutes() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/track-order" element={<OrderTrackingPage />} />
+          <Route path="/search" element={<SearchPage />} />
 
           {/* Account Routes (nested under CustomerLayout) */}
           <Route path="/account" element={<AccountLayout />}>
@@ -182,8 +188,13 @@ function AppRoutes() {
           </Route>
         </Route>
 
+        {/* ============ Admin Auth (standalone) ============ */}
+        <Route path="/admin/login" element={<AdminAuthProvider><AdminLoginPage /></AdminAuthProvider>} />
+        <Route path="/admin/setup" element={<AdminAuthProvider><AdminSetupPage /></AdminAuthProvider>} />
+        <Route path="/admin/forgot-password" element={<AdminAuthProvider><AdminForgotPasswordPage /></AdminAuthProvider>} />
+
         {/* ============ Admin Routes ============ */}
-        <Route path="/admin" element={<AdminLayout />}>
+        <Route path="/admin" element={<AdminAuthProvider><AdminLayout /></AdminAuthProvider>}>
           <Route index element={<DashboardPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="business-units" element={<BusinessUnitsPage />} />

@@ -174,6 +174,85 @@ export const getRecommended = query({
   },
 });
 
+export const getRelatedByTags = query({
+  args: {
+    catalogItemId: v.id("catalogItems"),
+    tags: v.array(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 6;
+    if (args.tags.length === 0) return [];
+
+    const results: Awaited<ReturnType<typeof ctx.db.get>>[] = [];
+    const seen = new Set<string>();
+    seen.add(args.catalogItemId);
+
+    // Search by each tag
+    for (const tag of args.tags) {
+      const matches = await ctx.db
+        .query("catalogItems")
+        .withIndex("by_tags", (q) =>
+          (q as any).eq("tags", tag)
+        )
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("status"), "active"),
+            q.eq(q.field("deletedAt"), undefined),
+          )
+        )
+        .take(limit + args.tags.length);
+
+      for (const item of matches) {
+        if (!seen.has(item._id as string)) {
+          seen.add(item._id as string);
+          results.push(item);
+        }
+      }
+      if (results.length >= limit) break;
+    }
+
+    return results.slice(0, limit);
+  },
+});
+
+export const getTrending = query({
+  args: {
+    businessUnitId: v.id("businessUnits"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    const events = await ctx.db
+      .query("analyticsEvents")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId).gte("createdAt", cutoff)
+      )
+      .filter((q) => q.neq(q.field("catalogItemId"), undefined))
+      .collect();
+
+    // Count by item
+    const counts = new Map<string, number>();
+    for (const e of events) {
+      if (e.catalogItemId) {
+        const id = e.catalogItemId as string;
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    }
+
+    // Sort by count desc
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
+
+    if (sorted.length === 0) return [];
+
+    const ids = sorted.map(([id]) => id as any);
+    const items = await Promise.all(ids.map(async (id) => await ctx.db.get(id)));
+    return items.filter(Boolean);
+  },
+});
+
 // ============================================================================
 // Internal sync mutation (called by product/combo/partyPack mutations)
 // ============================================================================

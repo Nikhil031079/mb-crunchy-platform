@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, RefreshCw, ShoppingCart } from "lucide-react";
+import { AlertCircle, RefreshCw, ShoppingCart, LayoutGrid, Table2, Printer, Clock } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 
@@ -7,7 +7,7 @@ import { OrderDetailDialog } from "@/components/admin/orders/OrderDetailDialog";
 import { OrderTable } from "@/components/admin/orders/OrderTable";
 import { OrderToolbar } from "@/components/admin/orders/OrderToolbar";
 import { StatusUpdateDialog } from "@/components/admin/orders/StatusUpdateDialog";
-import type { OrderFilters, OrderRecord, OrderSortKey, OrderStatus, SortDirection } from "@/components/admin/orders/types";
+import type { OrderFilters, OrderRecord, OrderSortKey, OrderStatus, PaymentStatus, SortDirection } from "@/components/admin/orders/types";
 import { getNextStatus } from "@/components/admin/orders/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -93,6 +93,7 @@ export default function OrdersPage() {
   const [detailTarget, setDetailTarget] = useState<OrderRecord | null>(null);
   const [statusTarget, setStatusTarget] = useState<OrderRecord | null>(null);
   const [statusGoal, setStatusGoal] = useState<OrderStatus | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "kitchen">("table");
 
   // --- Maps ---
   const buMap = useMemo(() => {
@@ -224,12 +225,35 @@ export default function OrdersPage() {
     }
   };
 
+  const handlePaymentStatusUpdate = async (order: OrderRecord, paymentStatus: PaymentStatus) => {
+    try {
+      await updateStatus({
+        id: order.id as any,
+        status: order.status,
+        paymentStatus,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update payment status");
+    }
+  };
+
   return (
     <div>
       <PageHeader title="Orders" description="Manage customer orders and fulfillment.">
-        <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
-          <RefreshCw className="mr-1.5 size-4" />Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={viewMode === "kitchen" ? "default" : "outline"}
+            onClick={() => setViewMode(viewMode === "kitchen" ? "table" : "kitchen")}
+            className="gap-1.5"
+          >
+            {viewMode === "kitchen" ? <Table2 className="size-3.5" /> : <LayoutGrid className="size-3.5" />}
+            {viewMode === "kitchen" ? "Table View" : "Kitchen View"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+            <RefreshCw className="mr-1.5 size-4" />Refresh
+          </Button>
+        </div>
       </PageHeader>
 
       {/* Dashboard Summary */}
@@ -264,14 +288,86 @@ export default function OrdersPage() {
             onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all", orderType: "all" })}
           />
           {isLoading ? (
-            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} />
+            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} />
           ) : visible.length === 0 ? (
             <EmptyState
               icon={ShoppingCart}
               title="No orders found"
               description={filtered.length === 0 && records.length > 0 ? "Try adjusting your search or filters." : EMPTY_MESSAGES.ORDERS}
             />
-          ) : (
+      ) : viewMode === "kitchen" ? (
+        /* KITCHEN VIEW */
+        <section className="space-y-6" aria-label="Kitchen view">
+          {(["pending", "preparing", "ready"] as const).map((status) => {
+            const ordersForStatus = filtered.filter((r) => {
+              if (status === "pending") return r.status === "pending" || r.status === "confirmed";
+              if (status === "preparing") return r.status === "preparing";
+              return r.status === "ready" || r.status === "out_for_delivery";
+            });
+            if (ordersForStatus.length === 0) return null;
+            const label = status === "pending" ? "New Orders" : status === "preparing" ? "Preparing" : "Ready";
+            const borderColor = status === "pending" ? "border-l-blue-500" : status === "preparing" ? "border-l-amber-500" : "border-l-emerald-500";
+            return (
+              <div key={status}>
+                <h3 className="mb-3 text-sm font-semibold text-muted-foreground">{label} ({ordersForStatus.length})</h3>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {ordersForStatus.map((order) => {
+                    const urgent = order.elapsedMinutes > 30;
+                    return (
+                      <div
+                        key={order.id}
+                        className={`rounded-xl border-l-4 bg-card p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${borderColor} ${urgent ? "ring-2 ring-red-200 dark:ring-red-800" : ""}`}
+                        onClick={() => setDetailTarget(order)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
+                          <span className={`flex items-center gap-1 text-xs font-medium ${urgent ? "text-red-600" : "text-muted-foreground"}`}>
+                            <Clock className="size-3" />
+                            {order.elapsedMinutes}m
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">{order.customerName} · {order.orderType}</p>
+                        <div className="space-y-1">
+                          {order.items.slice(0, 3).map((item, i) => (
+                            <p key={i} className="text-xs">
+                              <span className="font-medium">{item.quantity}×</span> {item.name}
+                            </p>
+                          ))}
+                          {order.items.length > 3 && (
+                            <p className="text-[10px] text-muted-foreground">+{order.items.length - 3} more</p>
+                          )}
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className="text-sm font-semibold">₹{order.total.toLocaleString()}</span>
+                          {status === "pending" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleQuickStatus(order); }}
+                              className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                            >
+                              Start Preparing
+                            </button>
+                          )}
+                          {status === "preparing" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleQuickStatus(order); }}
+                              className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                            >
+                              Mark Ready
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {filtered.filter((r) => ["pending", "confirmed", "preparing", "ready", "out_for_delivery"].includes(r.status)).length === 0 && (
+            <EmptyState icon={ShoppingCart} title="No active orders" description="All caught up! New orders will appear here." />
+          )}
+        </section>
+      ) : (
             <>
               <OrderTable
                 orders={visible}
@@ -281,6 +377,7 @@ export default function OrdersPage() {
                 onViewDetail={setDetailTarget}
                 onQuickStatus={handleQuickStatus}
                 onCancel={handleCancel}
+                onUpdatePaymentStatus={handlePaymentStatusUpdate}
               />
               <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sorted.length)} of {sorted.length}</p>

@@ -53,6 +53,14 @@ export const upsertBusinessUnitSettings = mutation({
         twitter: v.optional(v.string()),
       })
     ),
+    paymentConfig: v.optional(
+      v.object({
+        mode: v.union(v.literal("upi_qr"), v.literal("razorpay")),
+        upiId: v.optional(v.string()),
+        merchantName: v.optional(v.string()),
+        whatsappNumber: v.optional(v.string()),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();

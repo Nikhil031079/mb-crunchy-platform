@@ -11,6 +11,9 @@ import { query, mutation } from "./_generated/server";
 
 export const getAll = query({
   handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     return await ctx.db
       .query("customers")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))

@@ -1,18 +1,38 @@
-import { motion } from "framer-motion";
-import { ArrowRight, ChevronRight } from "lucide-react";
-
+import { useState, useEffect, useCallback, memo } from "react";
+import { Link } from "react-router";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { SITE_NAME } from "@/constants";
+
+import type { Offer, BusinessUnit } from "@/types";
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface HeroAction {
   label: string;
-  href?: string;
   onClick?: () => void;
+  href?: string;
   variant?: "default" | "outline" | "secondary";
 }
 
-interface HeroSectionProps {
+interface HeroBanner {
+  _id: string;
   title: string;
+  subtitle?: string;
+  description?: string;
+  backgroundImage?: string;
+  overlayColor?: string;
+  actions?: HeroAction[];
+  badge?: string;
+}
+
+interface HeroSectionProps {
+  title?: string;
   subtitle?: string;
   description?: string;
   backgroundImage?: string;
@@ -22,203 +42,413 @@ interface HeroSectionProps {
   badge?: string;
   alignment?: "left" | "center" | "right";
   size?: "sm" | "default" | "lg";
-  className?: string;
   themeColor?: string;
+  /** Rotating banners — when provided, hero becomes a carousel */
+  banners?: HeroBanner[];
+  /** Business units for CTA buttons when no banners */
+  businessUnits?: BusinessUnit[];
 }
 
-export function HeroSection({
+// ============================================================================
+// Auto-rotating interval (ms)
+// ============================================================================
+
+const ROTATION_INTERVAL = 5000;
+
+// ============================================================================
+// Default Premium Hero Content
+// ============================================================================
+
+function DefaultHeroContent({
+  title,
+  subtitle,
+  description,
+  actions,
+  badge,
+  alignment,
+  businessUnits,
+}: Pick<HeroSectionProps, "title" | "subtitle" | "description" | "actions" | "badge" | "alignment" | "businessUnits">) {
+  return (
+    <div className="relative z-10 mx-auto max-w-4xl px-4 text-center">
+      {/* Badge */}
+      {badge && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <Badge
+            variant="secondary"
+            className="mb-4 gap-1.5 bg-white/10 text-white/90 backdrop-blur-sm border-white/10 px-3 py-1 text-xs"
+          >
+            <Sparkles className="h-3 w-3" />
+            {badge}
+          </Badge>
+        </motion.div>
+      )}
+
+      {/* Title */}
+      <motion.h1
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className={cn(
+          "text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl",
+          "drop-shadow-lg"
+        )}
+      >
+        {title ?? `Welcome to ${SITE_NAME}`}
+      </motion.h1>
+
+      {/* Subtitle */}
+      {subtitle && (
+        <motion.p
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="mt-4 text-base text-white/80 sm:text-lg drop-shadow-sm"
+        >
+          {subtitle}
+        </motion.p>
+      )}
+
+      {/* Description */}
+      {description && (
+        <motion.p
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.35 }}
+          className="mx-auto mt-3 max-w-xl text-sm text-white/60"
+        >
+          {description}
+        </motion.p>
+      )}
+
+      {/* CTA Buttons */}
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.4 }}
+        className="mt-8 flex flex-wrap items-center justify-center gap-3"
+      >
+        {actions?.map((action) =>
+          action.href ? (
+            <Link key={action.label} to={action.href}>
+              <Button
+                variant={action.variant === "outline" ? "outline" : "default"}
+                size="lg"
+                className={cn(
+                  "rounded-full px-6 text-sm font-semibold shadow-lg",
+                  action.variant === "outline"
+                    ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                    : "bg-white text-foreground hover:bg-white/90"
+                )}
+              >
+                {action.label}
+              </Button>
+            </Link>
+          ) : (
+            <Button
+              key={action.label}
+              variant={action.variant === "outline" ? "outline" : "default"}
+              size="lg"
+              onClick={action.onClick}
+              className={cn(
+                "rounded-full px-6 text-sm font-semibold shadow-lg",
+                action.variant === "outline"
+                  ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                  : "bg-white text-foreground hover:bg-white/90"
+              )}
+            >
+              {action.label}
+            </Button>
+          )
+        )}
+
+        {/* Default BU buttons when no explicit actions */}
+        {!actions && businessUnits && businessUnits.length > 0 && (
+          <>
+            {businessUnits.map((bu) => (
+              <Link
+                key={bu._id}
+                to={`/${bu.slug}`}
+                className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-foreground shadow-lg transition-all hover:bg-white/90 hover:shadow-xl"
+              >
+                {bu.logo ? (
+                  <img src={bu.logo} alt="" className="h-5 w-5 rounded object-cover" />
+                ) : (
+                  <div
+                    className="h-5 w-5 rounded"
+                    style={{ backgroundColor: bu.themeColor || "#000" }}
+                  />
+                )}
+                Order from {bu.name}
+              </Link>
+            ))}
+          </>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Banner Slide
+// ============================================================================
+
+function BannerSlide({ banner }: { banner: HeroBanner }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <div className="relative h-full w-full">
+      {/* Background Image */}
+      {banner.backgroundImage && !imageError ? (
+        <>
+          {!imageLoaded && <div className="absolute inset-0 animate-pulse bg-secondary" />}
+          <img
+            src={banner.backgroundImage}
+            alt={banner.title}
+            className={cn(
+              "h-full w-full object-cover transition-opacity duration-700",
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
+        </>
+      ) : (
+        <div className="h-full w-full bg-gradient-to-br from-primary/80 via-primary to-primary/60" />
+      )}
+
+      {/* Overlay */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: banner.overlayColor
+            ? `${banner.overlayColor}`
+            : "linear-gradient(135deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.3) 100%)",
+        }}
+      />
+
+      {/* Content */}
+      <div className="relative z-10 flex h-full items-center">
+        <div className="mx-auto max-w-4xl px-4 text-center w-full">
+          {banner.badge && (
+            <Badge
+              variant="secondary"
+              className="mb-4 gap-1.5 bg-white/10 text-white/90 backdrop-blur-sm border-white/10 px-3 py-1 text-xs"
+            >
+              {banner.badge}
+            </Badge>
+          )}
+
+          <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl drop-shadow-lg">
+            {banner.title}
+          </h2>
+
+          {banner.subtitle && (
+            <p className="mt-3 text-base text-white/80 sm:text-lg drop-shadow-sm">
+              {banner.subtitle}
+            </p>
+          )}
+
+          {banner.description && (
+            <p className="mx-auto mt-2 max-w-xl text-sm text-white/60">
+              {banner.description}
+            </p>
+          )}
+
+          {banner.actions && banner.actions.length > 0 && (
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              {banner.actions.map((action) =>
+                action.href ? (
+                  <Link key={action.label} to={action.href}>
+                    <Button
+                      variant={action.variant === "outline" ? "outline" : "default"}
+                      size="lg"
+                      className={cn(
+                        "rounded-full px-6 text-sm font-semibold shadow-lg",
+                        action.variant === "outline"
+                          ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                          : "bg-white text-foreground hover:bg-white/90"
+                      )}
+                    >
+                      {action.label}
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button
+                    key={action.label}
+                    variant={action.variant === "outline" ? "outline" : "default"}
+                    size="lg"
+                    onClick={action.onClick}
+                    className={cn(
+                      "rounded-full px-6 text-sm font-semibold shadow-lg",
+                      action.variant === "outline"
+                        ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                        : "bg-white text-foreground hover:bg-white/90"
+                    )}
+                  >
+                    {action.label}
+                  </Button>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// HeroSection — Main Component
+// ============================================================================
+
+export const HeroSection = memo(function HeroSection({
   title,
   subtitle,
   description,
   backgroundImage,
-  overlayColor = "oklch(0.11 0 0)",
-  overlayOpacity = 0.5,
-  actions = [],
+  overlayColor,
+  actions,
   badge,
   alignment = "center",
   size = "default",
-  className,
-  themeColor,
+  businessUnits,
+  banners,
 }: HeroSectionProps) {
-  const alignmentClasses = {
-    left: "items-start text-left",
-    center: "items-center text-center",
-    right: "items-end text-right",
-  };
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
 
-  const sizeClasses = {
-    sm: "min-h-[300px] py-16",
-    default: "min-h-[450px] py-20 md:py-28",
-    lg: "min-h-[600px] py-24 md:py-36",
-  };
+  const hasBanners = banners && banners.length > 0;
 
-  const contentMaxWidth = alignment === "center" ? "max-w-2xl" : "max-w-xl";
+  // Auto-rotate banners
+  useEffect(() => {
+    if (!hasBanners || isPaused) return;
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % banners.length);
+    }, ROTATION_INTERVAL);
+    return () => clearInterval(timer);
+  }, [hasBanners, isPaused, banners?.length]);
+
+  const goToSlide = useCallback((index: number) => {
+    setCurrentSlide(index);
+  }, []);
+
+  const prevSlide = useCallback(() => {
+    if (!banners) return;
+    setCurrentSlide((prev) => (prev - 1 + banners.length) % banners.length);
+  }, [banners]);
+
+  const nextSlide = useCallback(() => {
+    if (!banners) return;
+    setCurrentSlide((prev) => (prev + 1) % banners.length);
+  }, [banners]);
+
+  const heightClass = size === "lg" ? "min-h-[300px] sm:min-h-[380px] md:min-h-[480px] lg:min-h-[520px]" : size === "sm" ? "min-h-[280px] sm:min-h-[320px]" : "min-h-[350px] sm:min-h-[400px]";
 
   return (
     <section
       className={cn(
-        "relative flex w-full overflow-hidden",
-        sizeClasses[size],
-        className
+        "relative w-full overflow-hidden",
+        heightClass,
+        !hasBanners && "bg-gradient-to-br from-primary/90 via-primary to-primary/70"
       )}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
     >
-      {/* Background */}
-      {backgroundImage ? (
+      {/* Rotating Banners Mode */}
+      {hasBanners ? (
         <>
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${backgroundImage})` }}
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, ${overlayColor}, ${overlayColor}dd)`,
-              opacity: overlayOpacity,
-            }}
-          />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSlide}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="absolute inset-0"
+            >
+              <BannerSlide banner={banners[currentSlide]} />
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Navigation Arrows */}
+          {banners.length > 1 && (
+            <>
+              <button
+                onClick={prevSlide}
+                className="absolute left-3 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-all hover:bg-black/50"
+                aria-label="Previous banner"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={nextSlide}
+                className="absolute right-3 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-all hover:bg-black/50"
+                aria-label="Next banner"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </>
+          )}
+
+          {/* Dots */}
+          {banners.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+              {banners.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => goToSlide(i)}
+                  className={cn(
+                    "h-2 rounded-full transition-all duration-300",
+                    i === currentSlide
+                      ? "w-6 bg-white"
+                      : "w-2 bg-white/40 hover:bg-white/60"
+                  )}
+                  aria-label={`Go to slide ${i + 1}`}
+                />
+              ))}
+            </div>
+          )}
         </>
       ) : (
-        <div
-          className="absolute inset-0"
-          style={{
-            background: themeColor
-              ? `linear-gradient(135deg, ${themeColor}15, ${themeColor}08)`
-              : "linear-gradient(135deg, oklch(0.95 0.003 70), oklch(0.95 0.003 50))",
-          }}
-        />
+        /* Default Hero — decorative background */
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/90 via-primary to-primary/70" />
+          {/* Decorative circles */}
+          <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/5" />
+          <div className="absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-white/5" />
+          <div className="absolute right-1/4 top-1/3 h-40 w-40 rounded-full bg-white/3" />
+        </div>
       )}
 
-      {/* Decorative Elements */}
-      {!backgroundImage && themeColor && (
-        <div
-          className="absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-10"
-          style={{ backgroundColor: themeColor }}
+      {/* Default Content (when no banners) */}
+      {!hasBanners && (
+        <DefaultHeroContent
+          title={title}
+          subtitle={subtitle}
+          description={description}
+          actions={actions}
+          badge={badge}
+          alignment={alignment}
+          businessUnits={businessUnits}
         />
       )}
-      {!backgroundImage && themeColor && (
-        <div
-          className="absolute -bottom-10 -left-10 h-48 w-48 rounded-full opacity-10"
-          style={{ backgroundColor: themeColor }}
-        />
-      )}
-
-      {/* Content */}
-      <div
-        className={cn(
-          "relative z-10 mx-auto flex w-full flex-col px-4 sm:px-6 lg:px-8",
-          alignmentClasses[alignment],
-          contentMaxWidth
-        )}
-      >
-        {/* Badge */}
-        {badge && (
-          <motion.span
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium",
-              "border-accent/20 bg-accent/8 text-accent"
-            )}
-          >
-            {badge}
-            <ChevronRight className="h-3 w-3" />
-          </motion.span>
-        )}
-
-        {/* Subtitle */}
-        {subtitle && (
-          <motion.p
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.15 }}
-            className={cn(
-              "mt-6 text-sm font-semibold uppercase tracking-widest",
-              backgroundImage
-                ? "text-white/80"
-                : "text-accent/80"
-            )}
-          >
-            {subtitle}
-          </motion.p>
-        )}
-
-        {/* Title */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className={cn(
-            "mt-3 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl",
-            "leading-[1.1]",
-            backgroundImage && "text-white"
-          )}
-        >
-          {title}
-        </motion.h1>
-
-        {/* Description */}
-        {description && (
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className={cn(
-              "mt-4 text-base leading-relaxed sm:text-lg",
-              backgroundImage
-                ? "text-white/80"
-                : "text-muted-foreground"
-            )}
-          >
-            {description}
-          </motion.p>
-        )}
-
-        {/* Actions */}
-        {actions.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className={cn(
-              "mt-8 flex flex-wrap gap-3",
-              alignment === "center" && "justify-center"
-            )}
-          >
-            {actions.map((action, index) => (
-              <Button
-                key={index}
-                variant={action.variant || (index === 0 ? "default" : "outline")}
-                size="lg"
-                onClick={action.onClick}
-                className={cn(
-                  "gap-2 rounded-full px-6",
-                  index === 0 &&
-                    backgroundImage &&
-                    "bg-white text-black hover:bg-white/90",
-                  index > 0 &&
-                    backgroundImage &&
-                    "border-white/30 text-white hover:bg-white/10"
-                )}
-              >
-                {action.label}
-                {index === 0 && <ArrowRight className="h-4 w-4" />}
-              </Button>
-            ))}
-          </motion.div>
-        )}
-      </div>
     </section>
   );
-}
+});
 
-/**
- * HeroSectionSkeleton — loading placeholder
- */
+// ============================================================================
+// HeroSectionSkeleton
+// ============================================================================
+
 export function HeroSectionSkeleton() {
   return (
-    <div className="min-h-[450px] w-full bg-secondary/50 animate-pulse flex items-center">
-      <div className="mx-auto max-w-2xl w-full px-4 space-y-6">
+    <div className="flex min-h-[420px] w-full animate-pulse items-center bg-secondary/50">
+      <div className="mx-auto w-full max-w-2xl space-y-6 px-4">
         <div className="mx-auto h-6 w-32 rounded-full bg-secondary" />
         <div className="mx-auto h-12 w-3/4 rounded-lg bg-secondary" />
         <div className="mx-auto h-4 w-1/2 rounded bg-secondary" />

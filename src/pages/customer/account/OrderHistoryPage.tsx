@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "convex/react";
-import { Package, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { Package, ChevronDown, ChevronUp, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import type { Order } from "@/types";
 
@@ -108,7 +109,13 @@ export default function OrderHistoryPage() {
           <Separator />
 
           {/* Orders List */}
-          {filteredOrders.length === 0 ? (
+          {orders === undefined ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : filteredOrders.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
               {orders?.length === 0
                 ? "You haven't placed any orders yet."
@@ -126,7 +133,16 @@ export default function OrderHistoryPage() {
                     {/* Order Header */}
                     <div
                       className="flex items-center justify-between p-3 cursor-pointer hover:bg-secondary/30"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
                       onClick={() => toggleExpand(order._id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleExpand(order._id);
+                        }
+                      }}
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">

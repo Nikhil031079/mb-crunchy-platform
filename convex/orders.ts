@@ -154,20 +154,28 @@ export const create = mutation({
     deliveryNotes: v.optional(v.string()),
     offerId: v.optional(v.id("offers")),
     offerCode: v.optional(v.string()),
-    razorpayPaymentId: v.optional(v.string()),
+    paymentMethod: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const prefix = "MB";
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
     const orderNumber = `${prefix}-${timestamp}-${random}`;
     const now = Date.now();
 
+    const paymentStatus = args.paymentMethod === "upi_qr" ? "pending_verification" as const : "pending" as const;
+
+    const { paymentMethod: _pm, ...restArgs } = args;
+
     const orderId = await ctx.db.insert("orders", {
-      ...args,
+      ...restArgs,
       orderNumber,
       status: "pending",
-      paymentStatus: "pending",
+      paymentStatus,
+      paymentMethod: args.paymentMethod,
       createdAt: now,
       updatedAt: now,
     });
@@ -189,7 +197,7 @@ export const create = mutation({
       }
     }
 
-    return orderId;
+    return { orderId, orderNumber };
   },
 });
 
@@ -209,9 +217,11 @@ export const updateStatus = mutation({
     paymentStatus: v.optional(
       v.union(
         v.literal("pending"),
+        v.literal("pending_verification"),
         v.literal("paid"),
         v.literal("failed"),
-        v.literal("refunded")
+        v.literal("refunded"),
+        v.literal("rejected")
       )
     ),
   },

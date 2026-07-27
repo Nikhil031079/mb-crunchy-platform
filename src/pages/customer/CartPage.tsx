@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
+import { useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingCart,
@@ -8,8 +9,14 @@ import {
   ArrowRight,
   ShoppingBag,
   ImageOff,
+  Truck,
+  Sparkles,
+  Tag,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 
+import { api } from "@convex/_generated/api";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/utils";
@@ -19,6 +26,7 @@ import { useCart } from "@/stores/cart";
 
 // Customer components
 import { QuantitySelector } from "@/components/customer";
+import { ProductCard, ProductCardSkeleton } from "@/components/customer";
 
 // Shared components
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -26,9 +34,12 @@ import { EmptyState } from "@/components/shared/EmptyState";
 // UI components
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
+
+import type { DeliveryZone, BusinessUnitSettings } from "@/types";
 
 // ============================================================================
-// CartPage — Cart items, quantity editing, totals, checkout CTA
+// CartPage — Enhanced with free delivery progress, savings, recommendations
 // ============================================================================
 
 export default function CartPage() {
@@ -39,6 +50,61 @@ export default function CartPage() {
   useEffect(() => {
     document.title = `Cart${itemCount > 0 ? ` (${itemCount})` : ""} | ${SITE_NAME}`;
   }, [itemCount]);
+
+  // Fetch BU settings for free delivery threshold
+  const buSettings = useQuery(
+    api.settings.getBusinessUnitSettings,
+    cart.businessUnitId
+      ? { businessUnitId: cart.businessUnitId as any }
+      : "skip",
+  ) as BusinessUnitSettings | null | undefined;
+
+  const deliveryZones = useQuery(
+    api.deliveryZones.getActive,
+    cart.businessUnitId
+      ? { businessUnitId: cart.businessUnitId as any }
+      : "skip",
+  ) as DeliveryZone[] | undefined;
+
+  // Fetch recommended products for the current BU, excluding items already in cart
+  const cartItemIds = useMemo(
+    () => cart.items.map((item) => item.catalogItemId),
+    [cart.items],
+  );
+  const recommendedItems = useQuery(
+    api.catalogItems.getRecommended,
+    cart.businessUnitId
+      ? { businessUnitId: cart.businessUnitId as any, excludeIds: cartItemIds as any, limit: 6 }
+      : "skip",
+  );
+
+  // Free delivery threshold — check zone first, fall back to BU settings
+  const freeDeliveryThreshold = useMemo(() => {
+    const zoneThreshold = deliveryZones?.[0]?.freeDeliveryThreshold;
+    const buThreshold = buSettings?.freeDeliveryThreshold;
+    return zoneThreshold ?? buThreshold ?? null;
+  }, [deliveryZones, buSettings]);
+
+  const freeDeliveryProgress = useMemo(() => {
+    if (!freeDeliveryThreshold) return null;
+    const progress = Math.min(100, (cart.subtotal / freeDeliveryThreshold) * 100);
+    const remaining = Math.max(0, freeDeliveryThreshold - cart.subtotal);
+    return { progress, remaining, reached: remaining <= 0 };
+  }, [freeDeliveryThreshold, cart.subtotal]);
+
+  // Calculate total savings from compare-at-price
+  const savingsInfo = useMemo(() => {
+    let totalSaved = 0;
+    for (const item of cart.items) {
+      if (item.unitPrice > 0 && "compareAtPrice" in item) {
+        const cmp = (item as any).compareAtPrice as number | undefined;
+        if (cmp && cmp > item.unitPrice) {
+          totalSaved += (cmp - item.unitPrice) * item.quantity;
+        }
+      }
+    }
+    return totalSaved;
+  }, [cart.items]);
 
   // ==========================================================================
   // Empty Cart
@@ -72,13 +138,13 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mb-8 flex items-center justify-between"
+          className="mb-6 flex items-center justify-between"
         >
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Shopping Cart</h1>
@@ -97,7 +163,66 @@ export default function CartPage() {
           </Button>
         </motion.div>
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+        {/* ================================================================ */}
+        {/* FREE DELIVERY PROGRESS BAR                                      */}
+        {/* ================================================================ */}
+        {freeDeliveryProgress && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.05 }}
+            className={cn(
+              "mb-6 rounded-xl border p-4",
+              freeDeliveryProgress.reached
+                ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
+                : "border-border/60 bg-card"
+            )}
+          >
+            <div className="flex items-center gap-3 mb-2.5">
+              <div
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg",
+                  freeDeliveryProgress.reached
+                    ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40"
+                    : "bg-primary/10 text-primary"
+                )}
+              >
+                {freeDeliveryProgress.reached ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <Truck className="h-4 w-4" />
+                )}
+              </div>
+              <div className="flex-1">
+                {freeDeliveryProgress.reached ? (
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                    You&apos;ve unlocked free delivery!
+                  </p>
+                ) : (
+                  <p className="text-sm font-medium">
+                    Add{" "}
+                    <span className="text-primary font-semibold">
+                      {formatCurrency(freeDeliveryProgress.remaining)}
+                    </span>{" "}
+                    more for free delivery
+                  </p>
+                )}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {formatCurrency(freeDeliveryThreshold!)}
+              </span>
+            </div>
+            <Progress
+              value={freeDeliveryProgress.progress}
+              className={cn(
+                "h-2",
+                freeDeliveryProgress.reached && "[&>div]:bg-emerald-500"
+              )}
+            />
+          </motion.div>
+        )}
+
+        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
           {/* ================================================================ */}
           {/* CART ITEMS                                                      */}
           {/* ================================================================ */}
@@ -128,6 +253,10 @@ export default function CartPage() {
                           <ImageOff className="h-5 w-5 text-muted-foreground/30" />
                         </div>
                       )}
+                      {/* Qty badge on image */}
+                      <span className="absolute -bottom-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                        {item.quantity}
+                      </span>
                     </div>
 
                     {/* Details */}
@@ -139,9 +268,14 @@ export default function CartPage() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {item.variantName}
                         </p>
-                        <p className="text-sm font-semibold mt-2">
-                          {formatCurrency(item.unitPrice)}
-                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <p className="text-sm font-semibold">
+                            {formatCurrency(item.unitPrice)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            &times; {item.quantity}
+                          </p>
+                        </div>
                       </div>
 
                       {/* Quantity + Remove */}
@@ -193,14 +327,14 @@ export default function CartPage() {
               <Separator />
 
               {/* Line items summary */}
-              <div className="space-y-2">
+              <div className="max-h-40 space-y-2 overflow-y-auto">
                 {cart.items.map((item) => (
                   <div
                     key={`${item.catalogItemId}-${item.variantName}`}
                     className="flex items-center justify-between text-sm"
                   >
                     <span className="truncate text-muted-foreground mr-2">
-                      {item.name} ({item.variantName}) x{item.quantity}
+                      {item.name} ({item.variantName}) &times;{item.quantity}
                     </span>
                     <span className="shrink-0 font-medium">
                       {formatCurrency(item.totalPrice)}
@@ -210,6 +344,16 @@ export default function CartPage() {
               </div>
 
               <Separator />
+
+              {/* Savings Banner */}
+              {savingsInfo > 0 && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 dark:bg-emerald-950/30">
+                  <Tag className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    You&apos;re saving {formatCurrency(savingsInfo)} on this order!
+                  </p>
+                </div>
+              )}
 
               {/* Totals */}
               <div className="space-y-2 text-sm">
@@ -229,6 +373,21 @@ export default function CartPage() {
                     <span className="font-medium">{formatCurrency(cart.deliveryFee)}</span>
                   </div>
                 )}
+                {freeDeliveryProgress?.reached && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span className="flex items-center gap-1">
+                      <Truck className="h-3 w-3" />
+                      Free Delivery
+                    </span>
+                    <span className="font-medium line-through text-muted-foreground">
+                      {formatCurrency(buSettings?.deliveryFee ?? 0)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  <span>Estimated delivery: 30-45 minutes</span>
+                </div>
                 {cart.tax > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Tax</span>
@@ -241,7 +400,7 @@ export default function CartPage() {
 
               <div className="flex justify-between text-base font-bold">
                 <span>Total</span>
-                <span>{formatCurrency(cart.subtotal)}</span>
+                <span>{formatCurrency(cart.total)}</span>
               </div>
 
               {/* Checkout CTA */}
@@ -260,6 +419,50 @@ export default function CartPage() {
             </div>
           </div>
         </div>
+
+        {/* ================================================================ */}
+        {/* RECOMMENDED PRODUCTS                                            */}
+        {/* ================================================================ */}
+        {recommendedItems === undefined && cart.businessUnitId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+            className="mt-12"
+          >
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-muted-foreground/40" />
+              <div className="h-5 w-40 animate-pulse rounded bg-secondary" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <ProductCardSkeleton key={i} compact />
+              ))}
+            </div>
+          </motion.div>
+        )}
+        {recommendedItems && recommendedItems.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            className="mt-12"
+          >
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h2 className="text-lg font-semibold">You might also like</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              {recommendedItems.slice(0, 6).map((item) => (
+                <ProductCard
+                  key={item._id}
+                  product={item}
+                  compact
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );

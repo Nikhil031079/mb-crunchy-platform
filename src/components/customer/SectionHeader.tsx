@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
@@ -17,7 +18,7 @@ interface SectionHeaderProps {
   className?: string;
 }
 
-export function SectionHeader({
+export const SectionHeader = memo(function SectionHeader({
   title,
   subtitle,
   action,
@@ -79,7 +80,7 @@ export function SectionHeader({
       )}
     </motion.div>
   );
-}
+});
 
 /**
  * SectionHeaderSkeleton — loading placeholder

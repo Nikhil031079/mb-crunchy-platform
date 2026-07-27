@@ -57,6 +57,7 @@ export function EmptyState({
         }
       >
         <IconComponent
+          aria-hidden="true"
           className={classNames?.iconSvg ?? "h-7 w-7 text-muted-foreground"}
         />
       </div>

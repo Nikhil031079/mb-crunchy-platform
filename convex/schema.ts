@@ -352,8 +352,9 @@ const orders = defineTable({
     v.literal("cancelled"), v.literal("refunded")
   ),
   paymentStatus: v.union(
-    v.literal("pending"), v.literal("paid"), v.literal("failed"), v.literal("refunded")
+    v.literal("pending"), v.literal("pending_verification"), v.literal("paid"), v.literal("failed"), v.literal("refunded"), v.literal("rejected")
   ),
+  paymentMethod: v.optional(v.string()),
   offerId: v.optional(v.id("offers")),
   offerCode: v.optional(v.string()),
   createdAt: v.number(),
@@ -672,6 +673,14 @@ const settings = defineTable({
       twitter: v.optional(v.string()),
     })
   ),
+  paymentConfig: v.optional(
+    v.object({
+      mode: v.union(v.literal("upi_qr"), v.literal("razorpay")),
+      upiId: v.optional(v.string()),
+      merchantName: v.optional(v.string()),
+      whatsappNumber: v.optional(v.string()),
+    })
+  ),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -694,6 +703,88 @@ const globalSettings = defineTable({
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
 });
+
+// ============================================================================
+// ADMIN SESSIONS
+// ============================================================================
+
+const adminSessions = defineTable({
+  adminId: v.id("admins"),
+  token: v.string(),
+  expiresAt: v.number(),
+  createdAt: v.number(),
+})
+  .index("by_token", ["token"])
+  .index("by_admin", ["adminId"]);
+
+// ============================================================================
+// ADMINS
+// ============================================================================
+
+// ============================================================================
+// REVIEWS
+// ============================================================================
+
+const reviews = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  catalogItemId: v.id("catalogItems"),
+  customerId: v.id("customers"),
+  orderId: v.optional(v.id("orders")),
+  rating: v.number(),
+  title: v.optional(v.string()),
+  body: v.optional(v.string()),
+  images: v.array(v.string()),
+  verifiedPurchase: v.boolean(),
+  helpfulCount: v.number(),
+  status: v.union(v.literal("active"), v.literal("hidden"), v.literal("flagged")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_catalog_item", ["catalogItemId", "createdAt"])
+  .index("by_customer", ["customerId"])
+  .index("by_business_unit", ["businessUnitId", "createdAt"])
+  .index("by_order", ["orderId"]);
+
+// ============================================================================
+// IN-APP NOTIFICATIONS
+// ============================================================================
+
+const inAppNotifications = defineTable({
+  userId: v.string(),
+  title: v.string(),
+  body: v.string(),
+  type: v.union(
+    v.literal("order_update"),
+    v.literal("promotion"),
+    v.literal("system"),
+    v.literal("low_stock"),
+  ),
+  link: v.optional(v.string()),
+  read: v.boolean(),
+  metadata: v.optional(v.any()),
+  createdAt: v.number(),
+})
+  .index("by_user", ["userId", "createdAt"])
+  .index("by_user_read", ["userId", "read"]);
+
+// ============================================================================
+// ADMINS
+// ============================================================================
+
+const admins = defineTable({
+  username: v.string(),
+  passwordHash: v.string(),
+  passwordSalt: v.string(),
+  role: v.union(v.literal("superadmin"), v.literal("admin")),
+  active: v.boolean(),
+  recoveryKeyHash: v.optional(v.string()),
+  recoveryKeySalt: v.optional(v.string()),
+  lastLoginAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_username", ["username"]);
 
 // ============================================================================
 // Export Schema (auth tables + business tables merged)
@@ -725,6 +816,10 @@ export default defineSchema({
   analyticsEvents,
   settings,
   globalSettings,
+  admins,
+  adminSessions,
+  reviews,
+  inAppNotifications,
 }, {
   schemaValidation: false,
 });

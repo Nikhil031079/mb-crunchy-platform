@@ -10,11 +10,14 @@ import {
   ArrowUpDown,
   ChevronRight,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
 import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/stores/cart";
+import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 
 // Customer components
 import {
@@ -40,7 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Product, CatalogItem } from "@/types";
+import type { BusinessUnit, Category, Product, CatalogItem, BusinessUnitSettings } from "@/types";
 
 // ============================================================================
 // Sort Options
@@ -113,6 +116,20 @@ export default function CategoryPage() {
       : "skip"
   ) as Category[] | undefined;
 
+  // BU settings for store open status
+  const buSettings = useQuery(
+    api.settings.getBusinessUnitSettings,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  ) as BusinessUnitSettings | null | undefined;
+
+  const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
+  const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
+
+  // Cart
+  const { addItem } = useCart();
+
   const isDataLoading =
     products === undefined || allCategories === undefined;
 
@@ -176,6 +193,35 @@ export default function CategoryPage() {
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
   }, []);
+
+  const handleAddToCart = useCallback(
+    (product: any) => {
+      if (!businessUnit) return;
+      if (!storeIsOpen) {
+        toast.error("Store is currently closed", {
+          description: nextOpenTime
+            ? `Orders resume ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
+            : "Please try again during business hours.",
+        });
+        return;
+      }
+      const defaultVariant = product.variants?.[0];
+      addItem({
+        catalogItemId: product._id,
+        itemType: "product",
+        businessUnitId: businessUnit._id,
+        name: product.name,
+        variantName: defaultVariant?.name ?? "Default",
+        quantity: 1,
+        unitPrice: product.price ?? defaultVariant?.price ?? 0,
+        image: product.coverImage || product.thumbnail,
+      });
+      toast.success("Added to cart", {
+        description: `${product.name}`,
+      });
+    },
+    [addItem, businessUnit, storeIsOpen, nextOpenTime]
+  );
 
   // ==========================================================================
   // Page Title
@@ -482,6 +528,7 @@ export default function CategoryPage() {
                     index={index}
                     compact={viewMode === "grid"}
                     showDescription={viewMode === "list"}
+                    onAddToCart={handleAddToCart}
                   />
                 );
               })}

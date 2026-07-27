@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
 import { ArrowRight, Store } from "lucide-react";
@@ -13,7 +14,7 @@ interface BusinessUnitCardProps {
   index?: number;
 }
 
-export function BusinessUnitCard({ businessUnit, index = 0 }: BusinessUnitCardProps) {
+export const BusinessUnitCard = memo(function BusinessUnitCard({ businessUnit, index = 0 }: BusinessUnitCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -82,7 +83,7 @@ export function BusinessUnitCard({ businessUnit, index = 0 }: BusinessUnitCardPr
       </Link>
     </motion.div>
   );
-}
+});
 
 interface BusinessUnitCardSkeletonProps {
   compact?: boolean;

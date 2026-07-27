@@ -1,7 +1,8 @@
-import { Bell, ChevronDown, Menu, UserRound } from "lucide-react";
+import { ChevronDown, Menu, UserRound } from "lucide-react";
 import { Link } from "react-router";
 
 import { AdminBreadcrumbs } from "./AdminBreadcrumbs";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,9 +41,7 @@ export function AdminTopbar({ title, group, onOpenMobileNavigation }: AdminTopba
       </div>
 
       <div className="flex items-center gap-1.5">
-        <Button type="button" variant="ghost" size="icon" aria-label="Notifications">
-          <Bell className="size-4" />
-        </Button>
+        <NotificationBell userId="admin" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="ghost" className="h-9 gap-2 px-1.5" aria-label="Open user menu">

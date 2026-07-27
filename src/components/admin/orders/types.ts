@@ -30,9 +30,11 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   pending: "Pending",
+  pending_verification: "Pending Verification",
   paid: "Paid",
   failed: "Failed",
   refunded: "Refunded",
+  rejected: "Rejected",
 };
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -15,6 +15,8 @@ import {
   Utensils,
   Package,
   Clock,
+  ChevronRight,
+  Percent,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,13 +43,13 @@ import {
 } from "@/components/customer";
 
 // Shared components
-import { BusinessUnitCard, BusinessUnitCardSkeleton } from "@/components/shared/BusinessUnitCard";
+import { CategoryCard } from "@/components/shared/CategoryCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 
-import type { BusinessUnit, Combo, Offer, PartyPack } from "@/types";
+import type { BusinessUnit, Category, Combo, Offer, PartyPack, Content } from "@/types";
 
 // ============================================================================
-// Why Choose MB Crunchy — Static brand values (always shown)
+// Why Choose MB Crunchy — Static brand values
 // ============================================================================
 
 interface WhyChooseItem {
@@ -62,42 +64,42 @@ const WHY_CHOOSE_ITEMS: WhyChooseItem[] = [
     icon: Leaf,
     title: "Fresh Food",
     description: "Farm-fresh ingredients sourced daily for our Kitchen and Mart selections.",
-    color: "text-emerald-600 bg-emerald-100",
+    color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50",
   },
   {
     icon: ShoppingBag,
     title: "Daily Grocery",
     description: "All your everyday essentials available under one roof, anytime.",
-    color: "text-blue-600 bg-blue-100",
+    color: "text-blue-600 bg-blue-50 dark:bg-blue-950/50",
   },
   {
     icon: ShoppingCart,
     title: "One Cart",
     description: "Mix items from Kitchen and Mart in a single order. One checkout, one delivery.",
-    color: "text-accent bg-accent/10",
+    color: "text-accent bg-accent/5",
   },
   {
     icon: Truck,
     title: "Fast Delivery",
     description: "Swift and reliable delivery right to your doorstep, when you need it.",
-    color: "text-amber-600 bg-amber-100",
+    color: "text-amber-600 bg-amber-50 dark:bg-amber-950/50",
   },
   {
     icon: ShieldCheck,
     title: "Trusted Quality",
     description: "Every product meets our strict quality standards before reaching you.",
-    color: "text-green-600 bg-green-100",
+    color: "text-green-600 bg-green-50 dark:bg-green-950/50",
   },
   {
     icon: Zap,
     title: "Fast Service",
     description: "Quick order processing and responsive support to serve you better.",
-    color: "text-purple-600 bg-purple-100",
+    color: "text-purple-600 bg-purple-50 dark:bg-purple-950/50",
   },
 ];
 
 // ============================================================================
-// Placeholder Reviews (until admin CRUD is built)
+// Placeholder Reviews
 // ============================================================================
 
 const PLACEHOLDER_REVIEWS = [
@@ -139,6 +141,66 @@ const PLACEHOLDER_REVIEWS = [
 ];
 
 // ============================================================================
+// CategoriesSection — Premium category grid from BU data
+// ============================================================================
+
+function CategoriesSection({
+  businessUnits,
+  isLoading,
+}: {
+  businessUnits: BusinessUnit[];
+  isLoading: boolean;
+}) {
+  // Fetch categories for each BU
+  const cats0 = useQuery(
+    api.categories.getByBusinessUnit,
+    businessUnits[0]?._id
+      ? { businessUnitId: businessUnits[0]._id as any }
+      : "skip",
+  ) as Category[] | undefined;
+
+  const cats1 = useQuery(
+    api.categories.getByBusinessUnit,
+    businessUnits[1]?._id
+      ? { businessUnitId: businessUnits[1]._id as any }
+      : "skip",
+  ) as Category[] | undefined;
+
+  const allCategories = useMemo(() => {
+    const cats = [...(cats0 ?? []), ...(cats1 ?? [])];
+    return cats.filter((c) => c.status === "active");
+  }, [cats0, cats1]);
+
+  if (isLoading || allCategories.length === 0) return null;
+
+  return (
+    <section className="py-12 sm:py-16">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-bold sm:text-2xl">Browse by Category</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Find exactly what you need</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {allCategories.slice(0, 6).map((cat, index) => {
+            const buSlug = businessUnits.find((b) => b._id === cat.businessUnitId)?.slug ?? "";
+            return (
+              <CategoryCard
+                key={cat._id}
+                category={cat}
+                businessUnitSlug={buSlug}
+                index={index}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================================
 // BusinessUnitSection — Per-BU child component with its own hooks
 // ============================================================================
 
@@ -149,8 +211,6 @@ function BusinessUnitSection({
   bu: BusinessUnit;
   buIndex: number;
 }) {
-  // Each child component calls hooks unconditionally at the top level
-  // This ensures React always sees the same number of hooks per component
   const featuredProducts = useQuery(api.catalogItems.getFeatured, {
     businessUnitId: bu._id,
   });
@@ -214,41 +274,46 @@ function BusinessUnitSection({
   const buSlug = bu.slug;
 
   return (
-    <motion.section
+    <section
       key={bu._id}
-      initial={{ opacity: 0 }}
-      whileInView={{ opacity: 1 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.5 }}
-      className={cn("py-16", buIndex % 2 === 1 && "bg-secondary/20")}
+      className={cn("py-12 sm:py-16", buIndex % 2 === 1 && "bg-secondary/20")}
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* BU Header */}
-        <div className="mb-8 flex items-center gap-3">
-          {bu.logo ? (
-            <img
-              src={bu.logo}
-              alt=""
-              className="h-10 w-10 rounded-lg object-cover"
-            />
-          ) : (
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-lg"
-              style={{ backgroundColor: bu.themeColor || "#000" }}
-            >
-              {buIndex === 0 ? (
-                <Utensils className="h-5 w-5 text-white" />
-              ) : (
-                <Package className="h-5 w-5 text-white" />
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {bu.logo ? (
+              <img
+                src={bu.logo}
+                alt=""
+                className="h-10 w-10 rounded-xl object-cover shadow-sm"
+              />
+            ) : (
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-xl shadow-sm"
+                style={{ backgroundColor: bu.themeColor || "#000" }}
+              >
+                {buIndex === 0 ? (
+                  <Utensils className="h-5 w-5 text-white" />
+                ) : (
+                  <Package className="h-5 w-5 text-white" />
+                )}
+              </div>
+            )}
+            <div>
+              <h2 className="text-xl font-bold sm:text-2xl">{bu.name}</h2>
+              {bu.description && (
+                <p className="text-sm text-muted-foreground">{bu.description}</p>
               )}
             </div>
-          )}
-          <div>
-            <h2 className="text-xl font-bold sm:text-2xl">{bu.name}</h2>
-            {bu.description && (
-              <p className="text-sm text-muted-foreground">{bu.description}</p>
-            )}
           </div>
+          <Link
+            to={`/${buSlug}`}
+            className="hidden items-center gap-1 text-sm font-medium text-accent transition-colors hover:underline sm:flex"
+          >
+            View All
+            <ChevronRight className="h-4 w-4" />
+          </Link>
         </div>
 
         {/* Featured Products */}
@@ -263,7 +328,7 @@ function BusinessUnitSection({
               }}
               size="sm"
             />
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {featuredProducts!.slice(0, 10).map((item: any, index: number) => (
                 <ProductCard
                   key={item._id}
@@ -290,7 +355,7 @@ function BusinessUnitSection({
               }}
               size="sm"
             />
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {bestSellers!.slice(0, 10).map((item: any, index: number) => (
                 <ProductCard
                   key={item._id}
@@ -305,7 +370,7 @@ function BusinessUnitSection({
           </div>
         )}
 
-        {/* Combos (if enabled) */}
+        {/* Combos */}
         {hasCombos && (
           <div className="mb-10">
             <SectionHeader
@@ -317,7 +382,7 @@ function BusinessUnitSection({
               }}
               size="sm"
             />
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
               {combos!.slice(0, 4).map((combo, index) => (
                 <ComboCard key={combo._id} combo={combo} index={index} />
               ))}
@@ -325,7 +390,7 @@ function BusinessUnitSection({
           </div>
         )}
 
-        {/* Party Packs (if enabled) */}
+        {/* Party Packs */}
         {hasPartyPacks && (
           <div>
             <SectionHeader
@@ -337,7 +402,7 @@ function BusinessUnitSection({
               }}
               size="sm"
             />
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
               {partyPacks!.slice(0, 4).map((pack, index) => (
                 <PartyPackCard key={pack._id} partyPack={pack} index={index} />
               ))}
@@ -345,46 +410,37 @@ function BusinessUnitSection({
           </div>
         )}
       </div>
-    </motion.section>
+    </section>
   );
 }
 
 // ============================================================================
-// BusinessUnitSectionSkeleton — Loading placeholder
+// BusinessUnitSectionSkeleton
 // ============================================================================
 
 function BusinessUnitSectionSkeleton({ buIndex }: { buIndex: number }) {
   return (
-    <section className={cn("py-16", buIndex % 2 === 0 && "bg-secondary/20")}>
+    <section className={cn("py-12 sm:py-16", buIndex % 2 === 0 && "bg-secondary/20")}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center gap-3">
-          <div className="h-10 w-10 animate-pulse rounded-lg bg-secondary" />
+          <div className="h-10 w-10 animate-pulse rounded-xl bg-secondary" />
           <div className="space-y-2">
             <div className="h-6 w-32 animate-pulse rounded bg-secondary" />
             <div className="h-4 w-48 animate-pulse rounded bg-secondary" />
           </div>
         </div>
-        <div className="mb-6">
+        <div className="mb-5">
           <div className="mb-2 h-1 w-8 animate-pulse rounded-full bg-secondary" />
           <div className="h-6 w-36 animate-pulse rounded bg-secondary" />
         </div>
         <CardGridSkeleton count={5} columns={4} type="product" />
-        <div className="mt-10 mb-6">
-          <div className="mb-2 h-1 w-8 animate-pulse rounded-full bg-secondary" />
-          <div className="h-6 w-32 animate-pulse rounded bg-secondary" />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {[1, 2].map((i) => (
-            <ComboCardSkeleton key={i} />
-          ))}
-        </div>
       </div>
     </section>
   );
 }
 
 // ============================================================================
-// RecentlyViewedSection — Per-BU child component with its own hooks
+// RecentlyViewedSection
 // ============================================================================
 
 function RecentlyViewedSection() {
@@ -434,14 +490,14 @@ function RecentlyViewedSection() {
   if (!customer?._id || !recentItems || recentItems.length === 0) return null;
 
   return (
-    <section className="bg-secondary/20 py-16">
+    <section className="bg-secondary/20 py-12 sm:py-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           title="Recently Viewed"
           subtitle="Items you've browsed recently"
           size="sm"
         />
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {recentItems.slice(0, 10).map((item: any, index: number) => (
             <ProductCard
               key={item._id}
@@ -458,7 +514,7 @@ function RecentlyViewedSection() {
 }
 
 // ============================================================================
-// RecommendedSection — Personalized recommendations based on browsing history
+// RecommendedSection
 // ============================================================================
 
 function RecommendedSection() {
@@ -472,7 +528,6 @@ function RecommendedSection() {
       : "skip",
   );
 
-  // Get the business unit IDs from recently viewed items
   const viewedBuIds = useMemo(() => {
     if (!recentCollections || recentCollections.length === 0) return [];
     const ids = new Set<string>();
@@ -483,13 +538,11 @@ function RecommendedSection() {
     return Array.from(ids).slice(0, 3);
   }, [recentCollections]);
 
-  // Exclude already-viewed item IDs
   const excludeIds = useMemo(() => {
     if (!recentCollections) return [];
     return recentCollections.map((c) => c.itemId as any);
   }, [recentCollections]);
 
-  // Fetch recommended items from each viewed business unit
   const rec0 = useQuery(
     api.catalogItems.getRecommended,
     viewedBuIds[0] ? { businessUnitId: viewedBuIds[0] as any, excludeIds, limit: 4 } : "skip",
@@ -523,10 +576,8 @@ function RecommendedSection() {
     [addItem],
   );
 
-  // Merge all recommended items
   const recommendedItems = useMemo(() => {
     const all = [...(rec0 ?? []), ...(rec1 ?? []), ...(rec2 ?? [])];
-    // Deduplicate by _id
     const seen = new Set<string>();
     return all.filter((item: any) => {
       if (seen.has(item._id)) return false;
@@ -538,14 +589,14 @@ function RecommendedSection() {
   if (!customer?._id || recommendedItems.length === 0) return null;
 
   return (
-    <section className="py-16">
+    <section className="py-12 sm:py-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           title="Recommended for You"
           subtitle="Based on your browsing history"
           size="sm"
         />
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {recommendedItems.map((item: any, index: number) => (
             <ProductCard
               key={item._id}
@@ -566,18 +617,12 @@ function RecommendedSection() {
 // ============================================================================
 
 export default function HomePage() {
-  // ==========================================================================
-  // Data Fetching — fully dynamic from Convex
-  // Hooks called unconditionally at the top level (no hooks inside callbacks)
-  // ==========================================================================
-
   const businessUnits = useQuery(api.businessUnits.getActive) as BusinessUnit[] | undefined;
   const allOffers = useQuery(api.offers.getAll) as Offer[] | undefined;
+  const heroContent = useQuery(api.content.getByType, { contentType: "hero" }) as Content[] | undefined;
 
-  // Loading state
   const isLoading = businessUnits === undefined;
 
-  // Active business units
   const activeBusinessUnits = useMemo(
     () =>
       (businessUnits ?? []).filter(
@@ -586,35 +631,58 @@ export default function HomePage() {
     [businessUnits]
   );
 
-  // Active offers across all BUs for "Today's Deals"
   const activeOffers = useMemo(
     () => (allOffers ?? []).filter((o) => o.status === "active"),
     [allOffers]
   );
 
-  // ==========================================================================
-  // Render Helpers
-  // ==========================================================================
-
-  const scrollToSection = (elementId: string) => {
+  const scrollToSection = useCallback((elementId: string) => {
     const el = document.getElementById(elementId);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  };
+  }, []);
 
-  // ==========================================================================
-  // Render
-  // ==========================================================================
+  // Build hero banners from content + active offers
+  const heroBanners = useMemo(() => {
+    const contentBanners = (heroContent ?? []).map((c) => ({
+      _id: c._id,
+      title: c.title,
+      subtitle: c.body ?? c.subtitle,
+      backgroundImage: c.coverImage ?? c.images?.[0],
+      badge: c.buttonText,
+      actions: c.buttonLink
+        ? [{ label: c.buttonText ?? "Learn More", href: c.buttonLink, variant: "default" as const }]
+        : undefined,
+    }));
+
+    const offerBanners = activeOffers.slice(0, 5).map((offer) => ({
+      _id: offer._id,
+      title: offer.title,
+      subtitle: offer.description,
+      backgroundImage: offer.banner,
+      badge: offer.discountType === "percentage"
+        ? `${offer.discountValue}% OFF`
+        : offer.discountType === "fixed"
+        ? `₹${offer.discountValue} OFF`
+        : "Special Offer",
+      actions: [
+        { label: "Shop Now", href: `/${activeBusinessUnits[0]?.slug ?? ""}`, variant: "default" as const },
+      ],
+    }));
+
+    const merged = [...contentBanners, ...offerBanners];
+    return merged.length > 0 ? merged.slice(0, 5) : undefined;
+  }, [heroContent, activeOffers, activeBusinessUnits]);
 
   return (
     <div className="min-h-screen bg-background">
       {/* ================================================================ */}
-      {/* 1. HERO SECTION                                                 */}
+      {/* 1. HERO SECTION — Full-width rotating banner                     */}
       {/* ================================================================ */}
 
       {isLoading ? (
-        <div className="flex min-h-[450px] w-full animate-pulse items-center bg-secondary/50">
+        <div className="flex min-h-[420px] sm:min-h-[480px] w-full animate-pulse items-center bg-secondary/50">
           <div className="mx-auto w-full max-w-2xl space-y-6 px-4">
             <div className="mx-auto h-6 w-32 rounded-full bg-secondary" />
             <div className="mx-auto h-12 w-3/4 rounded-lg bg-secondary" />
@@ -627,75 +695,62 @@ export default function HomePage() {
         </div>
       ) : (
         <HeroSection
-          title={`Welcome to ${SITE_NAME}`}
-          subtitle="Discover a World of Quality"
+          title={`Order Delicious Food & Essentials`}
+          subtitle={`Fresh from the kitchen, straight to your door`}
           description={SITE_DESCRIPTION}
-          badge="Explore Our Services"
+          badge="Your Favourite Stores, One Cart"
           size="lg"
-          actions={[
-            {
-              label: "Browse Services",
-              onClick: () => scrollToSection("business-units"),
-              variant: "default",
-            },
-            {
-              label: "Today's Deals",
-              onClick: () => scrollToSection("todays-deals"),
-              variant: "outline",
-            },
-          ]}
+          banners={heroBanners}
+          businessUnits={activeBusinessUnits}
+          actions={
+            !heroBanners
+              ? [
+                  {
+                    label: `Order from ${activeBusinessUnits[0]?.name ?? "Kitchen"}`,
+                    href: `/${activeBusinessUnits[0]?.slug ?? "mb-kitchen"}`,
+                    variant: "default",
+                  },
+                  ...(activeBusinessUnits.length > 1
+                    ? [
+                        {
+                          label: `Order from ${activeBusinessUnits[1].name}`,
+                          href: `/${activeBusinessUnits[1].slug}`,
+                          variant: "outline" as const,
+                        },
+                      ]
+                    : []),
+                ]
+              : undefined
+          }
         />
       )}
 
       {/* ================================================================ */}
-      {/* 2. BUSINESS UNIT CARDS                                          */}
+      {/* 2. BROWSE BY CATEGORY — Premium category grid                    */}
       {/* ================================================================ */}
 
-      <section id="business-units" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <SectionHeader
-          title="Our Business Units"
-          subtitle="Explore everything we offer across our dynamic range of services"
-          alignment="center"
-          size="lg"
-        />
-
-        {isLoading ? (
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <BusinessUnitCardSkeleton key={i} />
-            ))}
-          </div>
-        ) : activeBusinessUnits.length > 0 ? (
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {activeBusinessUnits.map((bu, index) => (
-              <BusinessUnitCard key={bu._id} businessUnit={bu} index={index} />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-10">
-            <EmptyState
-              title="No business units yet"
-              description="Business units will appear here once they're created."
-              icon={Package}
-            />
-          </div>
-        )}
-      </section>
+      {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
       {/* 3. TODAY'S DEALS                                                 */}
       {/* ================================================================ */}
 
       {!isLoading && activeOffers.length > 0 && (
-        <section id="todays-deals" className="bg-secondary/20 py-16">
+        <section id="todays-deals" className="py-12 sm:py-16 bg-gradient-to-b from-secondary/30 to-background">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <SectionHeader
-              title="Today's Deals"
-              subtitle="Limited-time offers you don't want to miss"
-              action={{ label: "View All Offers", onClick: () => {} }}
-              alignment="center"
-            />
-            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex items-end justify-between mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Percent className="h-4 w-4 text-accent" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-accent">
+                    Deals
+                  </span>
+                </div>
+                <h2 className="text-xl font-bold sm:text-2xl">Today's Best Deals</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Limited-time offers you don't want to miss</p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {activeOffers.slice(0, 6).map((offer, index) => (
                 <OfferBanner key={offer._id} banner={offer} index={index} variant="card" />
               ))}
@@ -705,7 +760,7 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 4. PER-BUSINESS UNIT SECTIONS (Fully Dynamic)                   */}
+      {/* 4. PER-BUSINESS UNIT SECTIONS                                    */}
       {/* ================================================================ */}
 
       {!isLoading && activeBusinessUnits.length === 0 && (
@@ -720,12 +775,10 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Each BusinessUnitSection is a child component with its own hooks */}
       {activeBusinessUnits.map((bu, buIndex) => (
         <BusinessUnitSection key={bu._id} bu={bu} buIndex={buIndex} />
       ))}
 
-      {/* Loading: Per-BU skeleton sections while data loads */}
       {isLoading && (
         <>
           {[1, 2].map((sectionIdx) => (
@@ -747,40 +800,42 @@ export default function HomePage() {
       {!isLoading && <RecommendedSection />}
 
       {/* ================================================================ */}
-      {/* WHY CHOOSE MB CRUNCHY                                            */}
+      {/* 7. WHY CHOOSE MB CRUNCHY                                        */}
       {/* ================================================================ */}
 
-      <section className="bg-accent/[0.02] py-20">
+      <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionHeader
-            title={`Why Choose ${SITE_NAME}`}
-            subtitle="We're committed to delivering the best experience across every service"
-            alignment="center"
-            size="lg"
-          />
-          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="text-center mb-10">
+            <h2 className="text-xl font-bold sm:text-2xl">
+              Why Choose {SITE_NAME}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground max-w-lg mx-auto">
+              We're committed to delivering the best experience across every service
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {WHY_CHOOSE_ITEMS.map((item, index) => {
               const Icon = item.icon;
               return (
                 <motion.div
                   key={item.title}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 16 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-40px" }}
-                  transition={{ duration: 0.4, delay: index * 0.08 }}
+                  transition={{ duration: 0.35, delay: index * 0.06 }}
                   className="group"
                 >
-                  <div className="rounded-xl border border-border/60 bg-card p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 hover:border-accent/20">
+                  <div className="rounded-2xl border border-border/40 bg-card p-5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 hover:border-accent/20">
                     <div
                       className={cn(
-                        "mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl transition-colors group-hover:scale-110",
+                        "mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110",
                         item.color
                       )}
                     >
-                      <Icon className="h-6 w-6" />
+                      <Icon className="h-5 w-5" />
                     </div>
-                    <h3 className="mb-2 font-semibold">{item.title}</h3>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
+                    <h3 className="font-semibold text-sm">{item.title}</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                       {item.description}
                     </p>
                   </div>
@@ -792,18 +847,23 @@ export default function HomePage() {
       </section>
 
       {/* ================================================================ */}
-      {/* CUSTOMER REVIEWS                                                 */}
+      {/* 8. CUSTOMER REVIEWS                                              */}
       {/* ================================================================ */}
 
-      <section className="py-20">
+      <section className="py-16 sm:py-20 bg-secondary/20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionHeader
-            title="What Our Customers Say"
-            subtitle="Real reviews from real customers who love the MB Crunchy experience"
-            alignment="center"
-            size="lg"
-          />
-          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="text-center mb-10">
+            <div className="flex items-center justify-center gap-1 mb-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+              ))}
+            </div>
+            <h2 className="text-xl font-bold sm:text-2xl">What Our Customers Say</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Real reviews from real customers
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {PLACEHOLDER_REVIEWS.map((review, index) => (
               <CustomerReviewCard
                 key={index}
@@ -820,11 +880,15 @@ export default function HomePage() {
       </section>
 
       {/* ================================================================ */}
-      {/* FINAL CTA                                                        */}
+      {/* 9. FINAL CTA                                                     */}
       {/* ================================================================ */}
 
-      <section className="border-t border-border/40 bg-primary py-16 text-primary-foreground">
-        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-primary py-16 text-primary-foreground sm:py-20">
+        <div className="absolute inset-0">
+          <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/5" />
+          <div className="absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-white/5" />
+        </div>
+        <div className="relative mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -837,8 +901,7 @@ export default function HomePage() {
               Ready to Experience {SITE_NAME}?
             </h2>
             <p className="mt-3 text-base text-primary-foreground/70">
-              Browse our business units, explore our products, and enjoy
-              seamless delivery right to your doorstep.
+              Browse our stores, explore our products, and enjoy seamless delivery right to your doorstep.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               {activeBusinessUnits.map((bu) => (
@@ -847,6 +910,14 @@ export default function HomePage() {
                   to={`/${bu.slug}`}
                   className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-medium backdrop-blur-sm transition-all hover:bg-white/20"
                 >
+                  {bu.logo ? (
+                    <img src={bu.logo} alt="" className="h-5 w-5 rounded object-cover" />
+                  ) : (
+                    <div
+                      className="h-5 w-5 rounded"
+                      style={{ backgroundColor: bu.themeColor || "#fff" }}
+                    />
+                  )}
                   {bu.name}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
@@ -855,101 +926,6 @@ export default function HomePage() {
           </motion.div>
         </div>
       </section>
-
-      {/* ================================================================ */}
-      {/* FOOTER                                                           */}
-      {/* ================================================================ */}
-
-      <footer className="border-t border-border/40 bg-secondary/30">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Brand */}
-            <div className="space-y-4 lg:col-span-1">
-              <Link
-                to="/"
-                className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <span className="text-lg font-bold">{SITE_NAME}</span>
-              </Link>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {SITE_DESCRIPTION}
-              </p>
-            </div>
-
-            {/* Quick Links */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold tracking-tight">Quick Links</h4>
-              <ul className="space-y-3">
-                <li>
-                  <Link to="/" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    Home
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/cart" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    Cart
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/checkout" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    Checkout
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Business Units */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold tracking-tight">Our Services</h4>
-              {activeBusinessUnits.length > 0 ? (
-                <ul className="space-y-3">
-                  {activeBusinessUnits.map((bu) => (
-                    <li key={bu._id}>
-                      <Link
-                        to={`/${bu.slug}`}
-                        className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        {bu.logo ? (
-                          <img src={bu.logo} alt="" className="h-4 w-4 rounded object-cover" />
-                        ) : (
-                          <div
-                            className="h-4 w-4 rounded"
-                            style={{ backgroundColor: bu.themeColor || "#000" }}
-                          />
-                        )}
-                        {bu.name}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <ul className="space-y-3">
-                  <li><span className="text-sm text-muted-foreground">Services coming soon</span></li>
-                </ul>
-              )}
-            </div>
-
-            {/* Contact */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold tracking-tight">Support</h4>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Need help? Contact our support team for assistance with orders, deliveries, or any inquiries.
-              </p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Star className="h-4 w-4 text-accent" />
-                <span>Available 24/7</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-12 border-t border-border/40 pt-6 text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

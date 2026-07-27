@@ -1,15 +1,20 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { useQuery, useMutation } from "convex/react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   ShoppingCart,
   ChevronRight,
+  ChevronLeft,
   Tag,
   Star,
   ImageOff,
   Clock,
+  X,
+  ZoomIn,
+  Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,7 +31,8 @@ import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
 
 // Customer components
-import { QuantitySelector } from "@/components/customer";
+import { QuantitySelector, ProductCard, SectionHeader } from "@/components/customer";
+import { ReviewSection } from "@/components/customer/ReviewSection";
 
 // Shared components
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -37,7 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-import type { BusinessUnit, Category, Product, BusinessUnitSettings, InventoryItem } from "@/types";
+import type { BusinessUnit, Category, Product, BusinessUnitSettings, InventoryItem, CatalogItem } from "@/types";
 import { StockBadge, getStockStatus } from "@/components/customer/StockBadge";
 import type { StockInfo } from "@/components/customer/StockBadge";
 
@@ -58,8 +64,17 @@ export default function ProductPage() {
 
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
+
+  // Gallery state
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 });
+  const [showZoom, setShowZoom] = useState(false);
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+  const mainImageRef = useRef<HTMLDivElement>(null);
 
   // Cart
   const { addItem, cart } = useCart();
@@ -106,6 +121,24 @@ export default function ProductPage() {
     product?._id ? { catalogItemId: product._id as any } : "skip"
   ) as InventoryItem[] | undefined;
 
+  const relatedItems = useQuery(
+    api.catalogItems.getRelatedByTags,
+    product?._id
+      ? {
+          catalogItemId: product._id as any,
+          tags: product.tags ?? [],
+          limit: 4,
+        }
+      : "skip"
+  ) as CatalogItem[] | undefined;
+
+  const trendingItems = useQuery(
+    api.catalogItems.getTrending,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any, limit: 4 }
+      : "skip"
+  ) as CatalogItem[] | undefined;
+
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
 
@@ -142,9 +175,93 @@ export default function ProductPage() {
     (item) => item.catalogItemId === product?._id && item.variantName === selectedVariant?.name
   );
 
+  // Gallery derived state
+  const galleryImages = useMemo(() => {
+    if (!product) return [];
+    const imgs = [product.coverImage, ...(product.images ?? [])].filter(
+      (img): img is string => !!img && img.length > 0
+    );
+    // Deduplicate
+    return [...new Set(imgs)];
+  }, [product]);
+
+  const selectedImage = galleryImages[selectedImageIndex] ?? galleryImages[0] ?? null;
+
   // ==========================================================================
   // Handlers
   // ==========================================================================
+
+  // Gallery handlers
+  const handlePrevImage = useCallback(() => {
+    setSelectedImageIndex((prev) =>
+      prev === 0 ? galleryImages.length - 1 : prev - 1
+    );
+    setImageLoaded(false);
+    setImageError(false);
+  }, [galleryImages.length]);
+
+  const handleNextImage = useCallback(() => {
+    setSelectedImageIndex((prev) =>
+      prev === galleryImages.length - 1 ? 0 : prev + 1
+    );
+    setImageLoaded(false);
+    setImageError(false);
+  }, [galleryImages.length]);
+
+  const handleThumbnailClick = useCallback((index: number) => {
+    setSelectedImageIndex(index);
+    setImageLoaded(false);
+    setImageError(false);
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!mainImageRef.current) return;
+      const rect = mainImageRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      setZoomPosition({ x, y });
+    },
+    []
+  );
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    const diff = touchStartX.current - touchEndX.current;
+    const minSwipe = 50;
+    if (Math.abs(diff) > minSwipe) {
+      if (diff > 0) {
+        handleNextImage();
+      } else {
+        handlePrevImage();
+      }
+    }
+  }, [handleNextImage, handlePrevImage]);
+
+  // Preload adjacent images
+  useEffect(() => {
+    if (galleryImages.length <= 1) return;
+    const preloadIndices = [
+      (selectedImageIndex + 1) % galleryImages.length,
+      (selectedImageIndex - 1 + galleryImages.length) % galleryImages.length,
+    ];
+    preloadIndices.forEach((idx) => {
+      const img = new Image();
+      img.src = galleryImages[idx];
+    });
+  }, [selectedImageIndex, galleryImages]);
+
+  // Reset gallery when product changes
+  useEffect(() => {
+    setSelectedImageIndex(0);
+  }, [productSlug]);
 
   const handleAddToCart = useCallback(() => {
     if (!product || !selectedVariant || !businessUnit) return;
@@ -183,8 +300,6 @@ export default function ProductPage() {
   useEffect(() => {
     setSelectedVariantIndex(0);
     setQuantity(1);
-    setImageLoaded(false);
-    setImageError(false);
   }, [productSlug]);
 
   // Record recently viewed
@@ -320,53 +435,273 @@ export default function ProductPage() {
           className="grid gap-10 lg:grid-cols-[1fr_1fr]"
         >
           {/* ================================================================ */}
-          {/* PRODUCT IMAGE                                                   */}
+          {/* PRODUCT IMAGE GALLERY                                           */}
           {/* ================================================================ */}
 
-          <div className="relative aspect-square overflow-hidden rounded-2xl bg-secondary">
-            {coverSrc && !imageError ? (
-              <>
-                {!imageLoaded && (
-                  <div className="absolute inset-0 animate-pulse bg-secondary" />
-                )}
-                <img
-                  src={coverSrc}
-                  alt={prod.name}
-                  className={cn(
-                    "h-full w-full object-cover transition-opacity duration-500",
-                    imageLoaded ? "opacity-100" : "opacity-0"
-                  )}
-                  onLoad={() => setImageLoaded(true)}
-                  onError={() => setImageError(true)}
-                />
-              </>
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <ImageOff className="h-16 w-16 text-muted-foreground/30" />
+          <div className="flex flex-col-reverse gap-3 lg:flex-row lg:gap-4">
+            {/* Thumbnail strip — horizontal on mobile, vertical on desktop */}
+            {galleryImages.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-auto lg:overflow-y-auto lg:pb-0 lg:min-w-[72px]">
+                {galleryImages.map((img, i) => (
+                  <button
+                    key={`${img}-${i}`}
+                    type="button"
+                    onClick={() => handleThumbnailClick(i)}
+                    className={cn(
+                      "relative shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                      "h-16 w-16 lg:h-[72px] lg:w-[72px]",
+                      selectedImageIndex === i
+                        ? "border-primary ring-1 ring-primary"
+                        : "border-transparent opacity-60 hover:opacity-100"
+                    )}
+                  >
+                    <img
+                      src={img}
+                      alt={`${prod.name} thumbnail ${i + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
               </div>
             )}
 
-            {/* Discount Badge */}
-            {discount > 0 && (
-              <Badge
-                variant="default"
-                className="absolute left-4 top-4 bg-accent text-accent-foreground text-xs font-bold px-2 py-1"
+            {/* Main image */}
+            <div className="relative flex-1">
+              <div
+                ref={mainImageRef}
+                className={cn(
+                  "relative aspect-square overflow-hidden rounded-2xl bg-secondary cursor-crosshair",
+                  galleryImages.length <= 1 && "cursor-default"
+                )}
+                onClick={() => setFullscreenOpen(true)}
+                onMouseEnter={() => galleryImages.length > 0 && setShowZoom(true)}
+                onMouseLeave={() => setShowZoom(false)}
+                onMouseMove={handleMouseMove}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                role="button"
+                tabIndex={0}
+                aria-label="View fullscreen"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFullscreenOpen(true);
+                  }
+                }}
               >
-                -{discount}%
-              </Badge>
-            )}
+                {selectedImage && !imageError ? (
+                  <>
+                    {!imageLoaded && (
+                      <div className="absolute inset-0 animate-pulse bg-secondary" />
+                    )}
+                    <AnimatePresence mode="wait">
+                      <motion.img
+                        key={selectedImage}
+                        src={selectedImage}
+                        alt={prod.name}
+                        className="h-full w-full object-cover"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: imageLoaded ? 1 : 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        onLoad={() => setImageLoaded(true)}
+                        onError={() => setImageError(true)}
+                        draggable={false}
+                      />
+                    </AnimatePresence>
 
-            {/* Featured Badge */}
-            {prod.featured && (
-              <Badge
-                variant="secondary"
-                className="absolute right-4 top-4 gap-1 bg-background/80 backdrop-blur-sm text-xs"
-              >
-                <Star className="h-3 w-3 fill-accent text-accent" />
-                Featured
-              </Badge>
-            )}
+                    {/* Desktop zoom lens overlay */}
+                    {showZoom && imageLoaded && (
+                      <div
+                        className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
+                        style={{
+                          backgroundImage: `url(${selectedImage})`,
+                          backgroundSize: "250%",
+                          backgroundPosition: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                          opacity: 0.9,
+                        }}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <ImageOff className="h-16 w-16 text-muted-foreground/30" />
+                  </div>
+                )}
+
+                {/* Discount Badge */}
+                {discount > 0 && (
+                  <Badge
+                    variant="default"
+                    className="absolute left-4 top-4 bg-accent text-accent-foreground text-xs font-bold px-2 py-1 pointer-events-none"
+                  >
+                    -{discount}%
+                  </Badge>
+                )}
+
+                {/* Featured Badge */}
+                {prod.featured && (
+                  <Badge
+                    variant="secondary"
+                    className="absolute right-4 top-4 gap-1 bg-background/80 backdrop-blur-sm text-xs pointer-events-none"
+                  >
+                    <Star className="h-3 w-3 fill-accent text-accent" />
+                    Featured
+                  </Badge>
+                )}
+
+                {/* Zoom hint icon */}
+                {showZoom && imageLoaded && !imageError && (
+                  <div className="absolute bottom-3 right-3 rounded-full bg-background/70 p-1.5 backdrop-blur-sm pointer-events-none">
+                    <ZoomIn className="h-4 w-4 text-foreground/70" />
+                  </div>
+                )}
+              </div>
+
+              {/* Navigation arrows (when multiple images) */}
+              {galleryImages.length > 1 && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrevImage();
+                    }}
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNextImage();
+                    }}
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+
+              {/* Image counter */}
+              {galleryImages.length > 1 && (
+                <div className="absolute bottom-3 left-3 rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm">
+                  {selectedImageIndex + 1} / {galleryImages.length}
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* ================================================================ */}
+          {/* FULLSCREEN VIEWER                                                */}
+          {/* ================================================================ */}
+
+          <AnimatePresence>
+            {fullscreenOpen && selectedImage && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
+                onClick={() => setFullscreenOpen(false)}
+              >
+                {/* Close button */}
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="absolute right-4 top-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                  onClick={() => setFullscreenOpen(false)}
+                  aria-label="Close fullscreen"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+
+                {/* Counter */}
+                {galleryImages.length > 1 && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                    {selectedImageIndex + 1} / {galleryImages.length}
+                  </div>
+                )}
+
+                {/* Previous */}
+                {galleryImages.length > 1 && (
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute left-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrevImage();
+                    }}
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                )}
+
+                {/* Fullscreen image */}
+                <motion.img
+                  key={`fs-${selectedImage}`}
+                  src={selectedImage}
+                  alt={prod.name}
+                  className="max-h-[85vh] max-w-[90vw] object-contain select-none"
+                  initial={{ scale: 0.92, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.92, opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  onClick={(e) => e.stopPropagation()}
+                  draggable={false}
+                />
+
+                {/* Next */}
+                {galleryImages.length > 1 && (
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute right-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNextImage();
+                    }}
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                )}
+
+                {/* Thumbnail strip in fullscreen */}
+                {galleryImages.length > 1 && (
+                  <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 rounded-full bg-white/10 p-2 backdrop-blur-sm">
+                    {galleryImages.map((img, i) => (
+                      <button
+                        key={`fs-thumb-${i}`}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleThumbnailClick(i);
+                        }}
+                        className={cn(
+                          "h-10 w-10 shrink-0 overflow-hidden rounded-md border-2 transition-all",
+                          selectedImageIndex === i
+                            ? "border-white"
+                            : "border-transparent opacity-60 hover:opacity-100"
+                        )}
+                      >
+                        <img src={img} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* ================================================================ */}
           {/* PRODUCT DETAILS                                                 */}
@@ -476,6 +811,17 @@ export default function ProductPage() {
                 <StockBadge stockInfo={stockInfo} />
               )}
 
+              {stockInfo?.status === "low_stock" && stockInfo.quantity !== undefined && (
+                <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                  Only {stockInfo.quantity} left — order soon!
+                </p>
+              )}
+              {stockInfo?.status === "in_stock" && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                  ✓ In Stock
+                </p>
+              )}
+
               <div className="flex items-center gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Quantity</label>
@@ -565,6 +911,66 @@ export default function ProductPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* ================================================================== */}
+      {/* REVIEWS SECTION                                                    */}
+      {/* ================================================================== */}
+
+      <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+        <ReviewSection
+          catalogItemId={prod._id}
+          businessUnitId={bu._id}
+        />
+      </div>
+
+      {/* ================================================================== */}
+      {/* RECOMMENDATIONS                                                    */}
+      {/* ================================================================== */}
+
+      {((relatedItems && relatedItems.length > 0) ||
+        (trendingItems && trendingItems.length > 0)) && (
+        <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+          <div className="space-y-10">
+            {relatedItems && relatedItems.length > 0 && (
+              <section>
+                <SectionHeader
+                  title="Related Products"
+                  subtitle="You might also like these"
+                />
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 sm:gap-4">
+                  {relatedItems.map((item) => (
+                    <ProductCard
+                      key={item._id}
+                      product={item}
+                      index={0}
+                      compact
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {trendingItems && trendingItems.length > 0 && (
+              <section>
+                <SectionHeader
+                  title="Trending Now"
+                  subtitle="Popular in your area this week"
+                />
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 sm:gap-4">
+                  {trendingItems.map((item) => (
+                    <ProductCard
+                      key={item._id}
+                      product={item}
+                      index={0}
+                      compact
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

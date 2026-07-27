@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { Heart, Bookmark, Clock, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import type {
   CollectionType,
   CustomerCollection,
   CatalogItemType,
+  CatalogItem,
 } from "@/types";
 
 // ============================================================================
@@ -99,20 +100,66 @@ export default function FavouritesPage() {
     [favItems, wishItems, savedItems],
   );
 
+  // Resolve catalog item IDs to full catalog item data
   const currentItems = getItems(activeTab) ?? [];
+  const catalogItemIds = useMemo(
+    () => currentItems.map((item) => item.itemId as Id<"catalogItems">),
+    [currentItems],
+  );
+  const catalogItems = useQuery(
+    api.catalogItems.getByIds,
+    catalogItemIds.length > 0 ? { ids: catalogItemIds } : "skip",
+  ) as CatalogItem[] | undefined;
+
+  // Build a map of itemId → catalog item for quick lookup
+  const catalogItemMap = useMemo(() => {
+    if (!catalogItems) return new Map<string, CatalogItem>();
+    return new Map(catalogItems.map((ci) => [ci._id, ci]));
+  }, [catalogItems]);
+
+  // Enrich collection items with catalog item data
+  const enrichedItems: CustomerCollection[] = useMemo(() => {
+    return currentItems.map((item) => {
+      const catalogItem = catalogItemMap.get(item.itemId);
+      if (!catalogItem) return item;
+      return {
+        ...item,
+        name: catalogItem.name,
+        price: catalogItem.price,
+        image: catalogItem.coverImage || catalogItem.thumbnail,
+        slug: catalogItem.slug,
+        businessUnitSlug: undefined, // Will be resolved from businessUnitId if needed
+      } as CustomerCollection & { name: string; price: number; image?: string; slug?: string; businessUnitSlug?: string };
+    });
+  }, [currentItems, catalogItemMap]);
   const currentTab = TABS.find((t) => t.id === activeTab)!;
 
   // Handle add to cart from collection
   const handleAddToCart = useCallback(
     (item: CustomerCollection) => {
-      // The collection item references a catalogItemId but we don't have
-      // the full catalog item data here. We use the stored metadata.
-      // For MVP, we show a toast indicating the item needs to be viewed.
-      toast.info("Open the product page to add to cart", {
-        description: `View this ${item.itemType} to add it to your cart.`,
+      const catalogItem = catalogItemMap.get(item.itemId);
+      if (!catalogItem) {
+        toast.info("Open the product page to add to cart", {
+          description: `View this ${item.itemType} to add it to your cart.`,
+        });
+        return;
+      }
+      const enriched = item as any;
+      addItem({
+        catalogItemId: catalogItem._id,
+        itemType: item.itemType,
+        businessUnitId: catalogItem.businessUnitId,
+        name: enriched.name ?? catalogItem.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: enriched.price ?? catalogItem.price,
+        image: enriched.image ?? catalogItem.coverImage ?? catalogItem.thumbnail,
+      });
+      toast.success("Added to cart", {
+        description: enriched.name ?? catalogItem.name,
       });
     },
-    [],
+    [addItem, catalogItemMap],
   );
 
   // Handle remove from collection
@@ -183,7 +230,7 @@ export default function FavouritesPage() {
 
           {/* Collection Grid */}
           <CollectionGrid
-            items={currentItems}
+            items={enrichedItems}
             onAddToCart={handleAddToCart}
             onRemove={handleRemove}
             emptyMessage={currentTab.emptyMessage}

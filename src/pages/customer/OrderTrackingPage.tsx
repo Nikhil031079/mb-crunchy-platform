@@ -13,6 +13,7 @@ import {
   MapPin,
   Phone,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // ============================================================================
 // Order Tracking Page — phone lookup → order list → status timeline
@@ -229,10 +231,11 @@ export default function OrderTrackingPage() {
             transition={{ duration: 0.3, delay: 0.15 }}
           >
             {orders === undefined ? (
-              <div className="rounded-xl border border-border/60 bg-card p-12 text-center">
-                <div className="animate-pulse text-muted-foreground">
+              <div className="rounded-xl border border-border/60 bg-card p-8 text-center">
+                <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+                <p className="mt-3 text-sm text-muted-foreground">
                   Searching orders...
-                </div>
+                </p>
               </div>
             ) : orders.length === 0 ? (
               <div className="rounded-xl border border-border/60 bg-card p-12 text-center space-y-3">

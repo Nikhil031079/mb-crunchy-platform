@@ -60,7 +60,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem } from "@/types";
+import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product } from "@/types";
 
 // ============================================================================
 // Sort Options
@@ -167,6 +167,14 @@ export default function BusinessUnitPage() {
     businessUnit?._id ? { businessUnitId: businessUnit._id as any } : "skip"
   ) as InventoryItem[] | undefined;
 
+  // Load all products for this BU to build a sourceId → categoryId map for filtering
+  const allProducts = useQuery(
+    api.products.getAllByBusinessUnit,
+    businessUnit?._id
+      ? { businessUnitId: businessUnit._id as any }
+      : "skip",
+  ) as Product[] | undefined;
+
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
 
@@ -180,7 +188,8 @@ export default function BusinessUnitPage() {
     featuredItems === undefined ||
     offers === undefined ||
     combos === undefined ||
-    partyPacks === undefined;
+    partyPacks === undefined ||
+    allProducts === undefined;
 
   const buSlug = businessUnit?.slug ?? businessUnitSlug ?? "";
 
@@ -216,13 +225,16 @@ export default function BusinessUnitPage() {
   const filteredItems = useMemo(() => {
     let items = [...(catalogItems ?? [])];
 
-    // Filter by category
-    if (activeCategoryId) {
-      items = items.filter((item) => {
-        // CatalogItems don't have categoryId, so we filter by searching
-        // through products for matching category — for MVP filter by tags or name
-        return item.tags?.includes(activeCategoryId) || item.name.includes(activeCategoryId);
-      });
+    // Filter by category — map products' categoryId to catalog items via sourceId
+    if (activeCategoryId && allProducts) {
+      const productIdsInCategory = new Set(
+        allProducts
+          .filter((p) => p.categoryId === activeCategoryId)
+          .map((p) => p._id)
+      );
+      items = items.filter(
+        (item) => item.itemType === "product" && productIdsInCategory.has(item.sourceId)
+      );
     }
 
     // Filter by search query
@@ -253,7 +265,7 @@ export default function BusinessUnitPage() {
     }
 
     return items;
-  }, [catalogItems, activeCategoryId, searchQuery, sortBy]);
+  }, [catalogItems, activeCategoryId, searchQuery, sortBy, allProducts]);
 
   // ==========================================================================
   // Handlers
@@ -367,7 +379,7 @@ export default function BusinessUnitPage() {
   const enableOffers = offers && offers.length > 0;
   const hasFeatured = featuredItems && featuredItems.length > 0;
 
-  const BU_ICON = bu.slug === "mb-kitney" || bu.slug === "kitchen"
+  const BU_ICON = bu.slug === "mb-kitchen" || bu.slug === "kitchen"
     ? Utensils
     : bu.slug === "mb-mart" || bu.slug === "mart"
     ? ShoppingBag

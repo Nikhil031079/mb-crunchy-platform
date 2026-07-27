@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Outlet, useLocation } from "react-router";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 
 import { AdminSidebar, AdminTopbar } from "@/components/admin";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { getAdminRouteContext } from "@/constants";
+import { getAdminRouteContext, ROUTES } from "@/constants";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { cn } from "@/lib/utils";
 
 export function AdminLayout() {
@@ -11,6 +12,19 @@ export function AdminLayout() {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const location = useLocation();
   const routeContext = getAdminRouteContext(location.pathname);
+  const { isAuthenticated, isLoading, admin, logout } = useAdminAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to={ROUTES.ADMIN.LOGIN} replace />;
+  }
 
   return (
     <div className="min-h-screen bg-muted/30 text-foreground">

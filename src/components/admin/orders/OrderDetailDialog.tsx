@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { STATUS_COLORS } from "@/constants";
 import { cn } from "@/lib/utils";
+import { Printer } from "lucide-react";
 
 import type { OrderRecord, OrderStatus } from "./types";
 import { PAYMENT_STATUS_LABELS, STATUS_LABELS } from "./types";
@@ -77,6 +79,47 @@ function ItemTypeBadge({ type }: { type: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Print Invoice
+// ---------------------------------------------------------------------------
+
+function printInvoice(order: OrderRecord) {
+  const html = `<!DOCTYPE html><html><head><title>Invoice ${order.orderNumber}</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;margin:40px;color:#1a1a1a;font-size:14px}
+  h1{font-size:18px;margin:0 0 4px}
+  h2{font-size:14px;margin:0 0 16px;color:#666}
+  table{width:100%;border-collapse:collapse;margin:16px 0}
+  th,td{padding:8px;text-align:left;border-bottom:1px solid #eee}
+  th{font-size:12px;color:#666;text-transform:uppercase}
+  .total{font-weight:bold;font-size:16px}
+  .muted{color:#666}
+  .right{text-align:right}
+  .footer{margin-top:24px;font-size:12px;color:#999;text-align:center}
+</style></head><body>
+<h1>MB Crunchy</h1>
+<h2>Invoice</h2>
+<p><strong>Order:</strong> ${order.orderNumber}<br>
+<strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString()}<br>
+<strong>Type:</strong> ${order.orderType}<br>
+<strong>Customer:</strong> ${order.customerName} | ${order.customerPhone}${order.customerEmail ? ` | ${order.customerEmail}` : ""}<br>
+${order.deliveryAddress ? `<strong>Delivery:</strong> ${order.deliveryAddress}<br>` : ""}</p>
+<table><thead><tr><th>Item</th><th>Variant</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr></thead><tbody>
+${order.items.map((i) => `<tr><td>${i.name}</td><td>${i.variantName}</td><td class="right">${i.quantity}</td><td class="right">₹${i.unitPrice.toLocaleString()}</td><td class="right">₹${i.totalPrice.toLocaleString()}</td></tr>`).join("")}
+</tbody></table>
+<div style="text-align:right">
+<p>Subtotal: ₹${order.subtotal.toLocaleString()}</p>
+${order.discount > 0 ? `<p class="muted">Discount: -₹${order.discount.toLocaleString()}</p>` : ""}
+${order.deliveryFee > 0 ? `<p class="muted">Delivery: ₹${order.deliveryFee.toLocaleString()}</p>` : ""}
+<p>Tax: ₹${order.tax.toLocaleString()}</p>
+<p class="total">Total: ₹${order.total.toLocaleString()}</p>
+</div>
+<div class="footer">Thank you for your order!</div>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); w.print(); }
+}
+
+// ---------------------------------------------------------------------------
 // Main dialog
 // ---------------------------------------------------------------------------
 
@@ -99,6 +142,9 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
           <div className="flex items-center justify-between">
             <DialogTitle className="font-mono">{order.orderNumber}</DialogTitle>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => printInvoice(order)} className="gap-1.5">
+                <Printer className="size-3.5" /> Print
+              </Button>
               <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[order.status])}>
                 {STATUS_LABELS[order.status]}
               </Badge>

@@ -10,11 +10,7 @@ import { api } from "./_generated/api";
 // Helpers
 // ============================================================================
 
-// TEMPORARY: Bypass auth for local development. Set to false before production.
-const DEV_AUTH_BYPASS = true;
-
 async function requireAuth(ctx: any) {
-  if (DEV_AUTH_BYPASS) return;
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthenticated");
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { motion } from "framer-motion";
 import { ShoppingCart, Heart, ImageOff, Users, Check } from "lucide-react";
 
@@ -19,7 +19,7 @@ interface PartyPackCardProps {
   className?: string;
 }
 
-export function PartyPackCard({
+export const PartyPackCard = memo(function PartyPackCard({
   partyPack,
   index = 0,
   onAddToCart,
@@ -190,7 +190,7 @@ export function PartyPackCard({
       </Card>
     </motion.div>
   );
-}
+});
 
 /**
  * PartyPackCardSkeleton — loading placeholder

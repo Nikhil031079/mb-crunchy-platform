@@ -21,8 +21,12 @@ const defaultCartState: CartState = {
   note: undefined,
 };
 
-function recalculateTotals(items: CartItem[]): CartState["subtotal"] {
+function calculateSubtotal(items: CartItem[]): number {
   return items.reduce((sum, item) => sum + item.totalPrice, 0);
+}
+
+function computeTotal(subtotal: number, discount: number, deliveryFee: number, tax: number): number {
+  return Math.max(0, subtotal - discount + deliveryFee + tax);
 }
 
 function persistCart(state: CartState): void {
@@ -69,11 +73,13 @@ export function useCart() {
         // If adding from a different business unit, clear cart first
         if (prev.businessUnitId && prev.businessUnitId !== item.businessUnitId) {
           const newItems = [{ ...item, totalPrice: item.unitPrice * item.quantity }];
+          const subtotal = calculateSubtotal(newItems);
           return {
             ...defaultCartState,
             items: newItems,
             businessUnitId: item.businessUnitId,
-            subtotal: recalculateTotals(newItems),
+            subtotal,
+            total: subtotal,
           };
         }
 
@@ -101,13 +107,14 @@ export function useCart() {
           ];
         }
 
-        const subtotal = recalculateTotals(newItems);
+        const subtotal = calculateSubtotal(newItems);
 
         return {
           ...prev,
           items: newItems,
           businessUnitId: item.businessUnitId,
           subtotal,
+          total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax),
         };
       });
     },
@@ -131,9 +138,9 @@ export function useCart() {
           };
         });
 
-        const subtotal = recalculateTotals(newItems);
+        const subtotal = calculateSubtotal(newItems);
 
-        return { ...prev, items: newItems, subtotal };
+        return { ...prev, items: newItems, subtotal, total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax) };
       });
     },
     []
@@ -181,7 +188,7 @@ function removeItemInternal(
     return defaultCartState;
   }
 
-  const subtotal = recalculateTotals(newItems);
+  const subtotal = calculateSubtotal(newItems);
 
-  return { ...prev, items: newItems, subtotal };
+  return { ...prev, items: newItems, subtotal, total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax) };
 }

@@ -30,6 +30,9 @@ export const ROUTES = {
     CUSTOMERS: "/admin/customers",
     SETTINGS: "/admin/settings",
     BANNERS: "/admin/banners",
+    LOGIN: "/admin/login",
+    SETUP: "/admin/setup",
+    FORGOT_PASSWORD: "/admin/forgot-password",
   },
   ACCOUNT: {
     ROOT: "/account",

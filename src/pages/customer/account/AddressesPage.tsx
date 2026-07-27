@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import { MapPin, Plus, Pencil, Trash2, Star } from "lucide-react";
+import { MapPin, Plus, Pencil, Trash2, Star, Loader2 } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
 
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { AddressFormDialog } from "@/components/customer/account/AddressFormDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -78,7 +79,13 @@ export default function AddressesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {!addresses || addresses.length === 0 ? (
+          {addresses === undefined ? (
+            <div className="space-y-3">
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : addresses.length === 0 ? (
             <EmptyState
               title="No saved addresses"
               description="Add a delivery address for faster checkout."

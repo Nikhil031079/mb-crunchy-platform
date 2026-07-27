@@ -5,19 +5,11 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { api } from "./_generated/api";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-// TEMPORARY: Bypass auth for local development. Set to false before production.
-const DEV_AUTH_BYPASS = true;
-
-async function requireAuth(ctx: any) {
-  if (DEV_AUTH_BYPASS) return;
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-}
 
 async function slugExists(
   ctx: any,
@@ -102,19 +94,21 @@ export const create = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     // Enforce unique slug
     if (await slugExists(ctx, args.businessUnitId, args.slug)) {
       throw new Error(`Slug "${args.slug}" is already in use`);
     }
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     const comboId = await ctx.db.insert("combos", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -171,11 +165,12 @@ export const update = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { id, sessionToken: _, ...fields } = args;
 
     // Enforce unique slug on update
     if (fields.slug) {
@@ -215,9 +210,9 @@ export const update = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("combos") },
+  args: { id: v.id("combos"), sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -246,9 +241,9 @@ export const getAll = query({
  * Restore — clears deletedAt and reactivates the combo.
  */
 export const restore = mutation({
-  args: { id: v.id("combos") },
+  args: { id: v.id("combos"), sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

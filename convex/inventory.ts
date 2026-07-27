@@ -230,6 +230,9 @@ export const upsert = mutation({
     location: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const now = Date.now();
 
     const existing = await ctx.db
@@ -268,6 +271,9 @@ export const updateStock = mutation({
     stockQuantity: v.number(),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const now = Date.now();
     const doc = await ctx.db.get(args.id);
     if (!doc) throw new Error("Inventory item not found");
@@ -290,6 +296,9 @@ export const adjustStock = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const now = Date.now();
     const doc = await ctx.db.get(args.id);
     if (!doc) throw new Error("Inventory item not found");
@@ -435,6 +444,9 @@ export const bulkUpdateStock = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const now = Date.now();
 
     for (const update of args.updates) {

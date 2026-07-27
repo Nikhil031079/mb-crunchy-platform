@@ -53,7 +53,15 @@ export const create = mutation({
     longitude: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const now = Date.now();
+
+    // Verify customer ownership
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer) throw new Error("Customer not found");
+    if (customer.authUserId !== identity.subject) throw new Error("Unauthorized");
 
     // If this is the default address, unset other defaults
     if (args.isDefault) {
@@ -94,8 +102,18 @@ export const update = mutation({
     longitude: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const now = Date.now();
     const { id, ...fields } = args;
+
+    // Verify ownership
+    const address = await ctx.db.get(id);
+    if (address) {
+      const customer = await ctx.db.get(address.customerId);
+      if (customer && customer.authUserId !== identity.subject) throw new Error("Unauthorized");
+    }
 
     // If setting as default, unset other defaults
     if (fields.isDefault) {

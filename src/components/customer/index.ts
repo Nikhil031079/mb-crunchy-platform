@@ -7,6 +7,7 @@ export { Header } from "./Header";
 export { Footer } from "./Footer";
 export { DesktopNav, DesktopNavSkeleton } from "./DesktopNav";
 export { MobileNav } from "./MobileNav";
+export { MobileBottomBar } from "./MobileBottomBar";
 export { BusinessUnitSwitcher, BusinessUnitSwitcherSkeleton } from "./BusinessUnitSwitcher";
 
 // Sections

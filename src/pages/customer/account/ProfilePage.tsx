@@ -20,9 +20,9 @@ export default function ProfilePage() {
   const customer = useQuery(api.customers.getByAuthUser, {});
   const updateProfile = useMutation(api.customers.updateProfile);
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [name, setName] = useState(customer?.name ?? "");
+  const [email, setEmail] = useState(customer?.email ?? "");
+  const [phone, setPhone] = useState(customer?.phone ?? "");
   const [errors, setErrors] = useState<{ name?: string; phone?: string; email?: string }>({});
   const [isSaving, setIsSaving] = useState(false);
 
@@ -148,7 +148,7 @@ export default function ProfilePage() {
             <div>
               <p className="text-sm text-muted-foreground">Total Spent</p>
               <p className="text-sm font-medium">
-                {customer?.totalSpent ? `$${customer.totalSpent.toFixed(2)}` : "$0.00"}
+                {customer?.totalSpent ? `₹${customer.totalSpent.toFixed(2)}` : "₹0.00"}
               </p>
             </div>
           </div>

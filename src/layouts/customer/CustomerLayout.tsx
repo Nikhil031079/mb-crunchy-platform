@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 import { CustomerNavbar } from "./CustomerNavbar";
 import { CustomerFooter } from "./CustomerFooter";
+import { MobileBottomBar } from "@/components/customer/MobileBottomBar";
 
 import type { BusinessUnit, BusinessUnitSettings } from "@/types";
 
@@ -54,10 +55,13 @@ export function CustomerLayout() {
         user={user}
         onSignOut={() => signOut()}
       />
-      <main className="flex-1">
+      <main className="flex-1 pb-16 lg:pb-0">
         <Outlet />
       </main>
-      <CustomerFooter />
+      <div className="pb-14 lg:pb-0">
+        <CustomerFooter />
+      </div>
+      <MobileBottomBar />
     </div>
   );
 }

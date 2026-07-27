@@ -6,7 +6,7 @@ import type { Id as ConvexId } from "@convex/_generated/dataModel";
 
 export type EntityStatus = "active" | "inactive" | "archived";
 
-export type Currency = "USD" | "EUR" | "GBP" | "NGN";
+export type Currency = "USD" | "EUR" | "GBP" | "INR" | "NGN";
 
 export interface Timestamps {
   createdAt: number;
@@ -377,7 +377,7 @@ export type OrderStatus =
   | "pending" | "confirmed" | "preparing" | "ready"
   | "out_for_delivery" | "delivered" | "cancelled" | "refunded";
 
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+export type PaymentStatus = "pending" | "pending_verification" | "paid" | "failed" | "refunded" | "rejected";
 
 export type OrderType = "delivery" | "pickup";
 
@@ -620,6 +620,12 @@ export interface BusinessUnitSettings extends Timestamps {
     facebook?: string;
     twitter?: string;
   };
+  paymentConfig?: {
+    mode: "upi_qr" | "razorpay";
+    upiId?: string;
+    merchantName?: string;
+    whatsappNumber?: string;
+  };
   deletedAt?: number;
 }
 
@@ -775,4 +781,49 @@ export interface CustomerCollection extends Timestamps {
   itemType: CatalogItemType;
   itemId: string;
   deletedAt?: number;
+}
+
+// ============================================================================
+// Reviews
+// ============================================================================
+
+export interface Review extends Timestamps {
+  _id: string;
+  _creationTime: number;
+  businessUnitId: string;
+  catalogItemId: string;
+  customerId: string;
+  orderId?: string;
+  rating: number;
+  title?: string;
+  body?: string;
+  images: string[];
+  verifiedPurchase: boolean;
+  helpfulCount: number;
+  status: "active" | "hidden" | "flagged";
+  deletedAt?: number;
+}
+
+export interface ReviewStats {
+  average: number;
+  count: number;
+  distribution: number[];
+}
+
+// ============================================================================
+// In-App Notification
+// ============================================================================
+
+export type InAppNotificationType = "order_update" | "promotion" | "system" | "low_stock";
+
+export interface InAppNotification {
+  _id: string;
+  _creationTime: number;
+  userId: string;
+  title: string;
+  body: string;
+  type: InAppNotificationType;
+  link?: string;
+  read: boolean;
+  metadata?: Record<string, unknown>;
 }

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Star, StarHalf, Quote } from "lucide-react";
 
@@ -18,7 +19,7 @@ interface CustomerReviewCardProps {
   featured?: boolean;
 }
 
-export function CustomerReviewCard({
+export const CustomerReviewCard = memo(function CustomerReviewCard({
   rating,
   text,
   authorName,
@@ -119,7 +120,7 @@ export function CustomerReviewCard({
       </Card>
     </motion.div>
   );
-}
+});
 
 /**
  * CustomerReviewCardSkeleton — loading placeholder
