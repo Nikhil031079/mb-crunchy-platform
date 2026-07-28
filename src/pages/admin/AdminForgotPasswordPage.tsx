@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { hashPassword } from "@/utils/crypto";
 import { ROUTES } from "@/constants";
 
 type Step = "username" | "recovery" | "newPassword" | "success";
@@ -86,15 +85,10 @@ export default function AdminForgotPasswordPage() {
 
     setIsLoading(true);
     try {
-      const { hash: rkHash, salt: rkSalt } = await hashPassword(recoveryKey);
-      const { hash: pwHash, salt: pwSalt } = await hashPassword(newPassword);
-
       await resetPasswordMutation({
         username: username.trim(),
-        recoveryKeyHash: rkHash,
-        recoveryKeySalt: rkSalt,
-        newPasswordHash: pwHash,
-        newPasswordSalt: pwSalt,
+        recoveryKey: recoveryKey.trim().toUpperCase(),
+        newPassword: newPassword,
       });
 
       setStep("success");

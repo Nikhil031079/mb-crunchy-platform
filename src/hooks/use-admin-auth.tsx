@@ -1,7 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { hashPassword } from "@/utils/crypto";
 
 const ADMIN_SESSION_KEY = "mb-crunchy-admin-session";
 
@@ -62,11 +61,9 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(
     async (username: string, password: string) => {
       try {
-        const { hash, salt } = await hashPassword(password);
         const result = await serverLogin({
           username,
-          passwordHash: hash,
-          passwordSalt: salt,
+          password,
         });
 
         if (result.success) {

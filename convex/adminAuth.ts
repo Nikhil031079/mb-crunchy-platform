@@ -181,8 +181,7 @@ function clearAttempts(username: string) {
 export const login = mutation({
   args: {
     username: v.string(),
-    passwordHash: v.string(),
-    passwordSalt: v.string(),
+    password: v.string(),
   },
   handler: async (ctx, args) => {
     const admin = await ctx.db
@@ -204,7 +203,7 @@ export const login = mutation({
     }
 
     const valid = await verifyPassword(
-      args.passwordHash,
+      args.password,
       admin.passwordHash,
       admin.passwordSalt,
     );
@@ -289,8 +288,7 @@ export const changeUsername = mutation({
   args: {
     sessionToken: v.string(),
     newUsername: v.string(),
-    currentPasswordHash: v.string(),
-    currentPasswordSalt: v.string(),
+    currentPassword: v.string(),
   },
   handler: async (ctx, args) => {
     const result = await verifyAdminSession(ctx, args.sessionToken);
@@ -298,7 +296,7 @@ export const changeUsername = mutation({
 
     // Verify current password
     const valid = await verifyPassword(
-      args.currentPasswordHash,
+      args.currentPassword,
       result.admin.passwordHash,
       result.admin.passwordSalt,
     );
@@ -342,25 +340,24 @@ export const changeUsername = mutation({
 export const changePassword = mutation({
   args: {
     sessionToken: v.string(),
-    currentPasswordHash: v.string(),
-    currentPasswordSalt: v.string(),
-    newPasswordHash: v.string(),
-    newPasswordSalt: v.string(),
+    currentPassword: v.string(),
+    newPassword: v.string(),
   },
   handler: async (ctx, args) => {
     const result = await verifyAdminSession(ctx, args.sessionToken);
     if (!result) throw new Error("Unauthorized");
 
     const valid = await verifyPassword(
-      args.currentPasswordHash,
+      args.currentPassword,
       result.admin.passwordHash,
       result.admin.passwordSalt,
     );
     if (!valid) throw new Error("Invalid current password");
 
+    const { hash: newHash, salt: newSalt } = await hashPassword(args.newPassword);
     await ctx.db.patch(result.admin._id, {
-      passwordHash: args.newPasswordHash,
-      passwordSalt: args.newPasswordSalt,
+      passwordHash: newHash,
+      passwordSalt: newSalt,
       updatedAt: Date.now(),
     });
 
@@ -375,10 +372,8 @@ export const changePassword = mutation({
 export const resetPassword = mutation({
   args: {
     username: v.string(),
-    recoveryKeyHash: v.string(),
-    recoveryKeySalt: v.string(),
-    newPasswordHash: v.string(),
-    newPasswordSalt: v.string(),
+    recoveryKey: v.string(),
+    newPassword: v.string(),
   },
   handler: async (ctx, args) => {
     const admin = await ctx.db
@@ -392,17 +387,18 @@ export const resetPassword = mutation({
     }
 
     const valid = await verifyPassword(
-      args.recoveryKeyHash,
+      args.recoveryKey,
       admin.recoveryKeyHash,
       admin.recoveryKeySalt,
     );
     if (!valid) throw new Error("Invalid recovery key");
 
     const now = Date.now();
+    const { hash: pwHash, salt: pwSalt } = await hashPassword(args.newPassword);
 
     await ctx.db.patch(admin._id, {
-      passwordHash: args.newPasswordHash,
-      passwordSalt: args.newPasswordSalt,
+      passwordHash: pwHash,
+      passwordSalt: pwSalt,
       updatedAt: now,
     });
 
@@ -435,8 +431,7 @@ export const resetPassword = mutation({
 export const regenerateRecoveryKey = mutation({
   args: {
     sessionToken: v.string(),
-    currentPasswordHash: v.string(),
-    currentPasswordSalt: v.string(),
+    currentPassword: v.string(),
     newRecoveryKeyHash: v.string(),
     newRecoveryKeySalt: v.string(),
   },
@@ -445,7 +440,7 @@ export const regenerateRecoveryKey = mutation({
     if (!result) throw new Error("Unauthorized");
 
     const valid = await verifyPassword(
-      args.currentPasswordHash,
+      args.currentPassword,
       result.admin.passwordHash,
       result.admin.passwordSalt,
     );

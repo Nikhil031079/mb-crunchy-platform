@@ -15,7 +15,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
-import { hashPassword } from "@/utils/crypto";
 import { useNavigate } from "react-router";
 import { ROUTES } from "@/constants";
 
@@ -599,12 +598,10 @@ function AuthSecuritySection() {
     if (!token) return;
     setIsChangingUsername(true);
     try {
-      const { hash: pwHash, salt: pwSalt } = await hashPassword(currentPasswordForUsername);
       const result = await changeUsernameMutation({
         sessionToken: token,
         newUsername: newUsername.trim(),
-        currentPasswordHash: pwHash,
-        currentPasswordSalt: pwSalt,
+        currentPassword: currentPasswordForUsername,
       });
       // Update stored session token
       localStorage.setItem("mb-crunchy-admin-session", result.token);
@@ -626,14 +623,10 @@ function AuthSecuritySection() {
     }
     setIsChangingPassword(true);
     try {
-      const { hash: curHash, salt: curSalt } = await hashPassword(currentPassword);
-      const { hash: newHash, salt: newSalt } = await hashPassword(newPassword);
       await changePasswordMutation({
         sessionToken: token,
-        currentPasswordHash: curHash,
-        currentPasswordSalt: curSalt,
-        newPasswordHash: newHash,
-        newPasswordSalt: newSalt,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
       });
       toast.success("Password changed successfully");
       setCurrentPassword("");
