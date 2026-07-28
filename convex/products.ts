@@ -130,6 +130,7 @@ export const create = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -139,13 +140,14 @@ export const create = mutation({
       throw new Error(`Slug "${args.slug}" is already in use`);
     }
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
-    const defaultPrice = args.variants[0]?.price ?? 0;
-    const defaultCompare = args.variants[0]?.compareAtPrice;
+    const defaultPrice = insertArgs.variants[0]?.price ?? 0;
+    const defaultCompare = insertArgs.variants[0]?.compareAtPrice;
 
     // Insert product
     const productId = await ctx.db.insert("products", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -226,7 +228,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { id, sessionToken: _, ...fields } = args;
 
     // Enforce unique slug on update
     if (fields.slug) {

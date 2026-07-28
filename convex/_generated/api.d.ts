@@ -34,6 +34,7 @@ import type * as products from "../products.js";
 import type * as reviews from "../reviews.js";
 import type * as settings from "../settings.js";
 import type * as users from "../users.js";
+import type * as utils_adminAuth from "../utils/adminAuth.js";
 import type * as utils_crypto from "../utils/crypto.js";
 
 import type {
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   reviews: typeof reviews;
   settings: typeof settings;
   users: typeof users;
+  "utils/adminAuth": typeof utils_adminAuth;
   "utils/crypto": typeof utils_crypto;
 }>;
 

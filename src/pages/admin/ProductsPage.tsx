@@ -14,6 +14,7 @@ import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/p
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES } from "@/constants";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 8;
 
@@ -99,6 +100,7 @@ function toUpdateArgs(id: string, values: ProductFormValues) {
 // ---------------------------------------------------------------------------
 
 export default function ProductsPage() {
+  const { getSessionToken } = useAdminAuth();
   const allDocs = useQuery(api.products.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const allCats = useQuery(api.categories.getAll);
@@ -162,10 +164,11 @@ export default function ProductsPage() {
 
   const saveProduct = async (values: ProductFormValues) => {
     try {
+      const token = getSessionToken();
       if (editingProduct) {
-        await updateProd(toUpdateArgs(editingProduct.id, values));
+        await updateProd({ ...toUpdateArgs(editingProduct.id, values), sessionToken: token! });
       } else {
-        await createProd(toCreateArgs(values));
+        await createProd({ ...toCreateArgs(values), sessionToken: token! });
       }
       setFormOpen(false);
     } catch (err) {
@@ -176,7 +179,7 @@ export default function ProductsPage() {
   const archiveProduct = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteProd({ id: deleteTarget.id as any });
+      await softDeleteProd({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to archive product");
@@ -186,7 +189,7 @@ export default function ProductsPage() {
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await restoreProd({ id: restoreTarget.id as any });
+      await restoreProd({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to restore product");

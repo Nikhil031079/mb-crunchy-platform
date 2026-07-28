@@ -101,6 +101,7 @@ function SettingsNav() {
 // ============================================================================
 
 function GlobalSettingsSection() {
+  const { getSessionToken } = useAdminAuth();
   const globalSettings = useQuery(api.settings.getGlobalSettings);
   const upsertGlobal = useMutation(api.settings.upsertGlobalSettings);
 
@@ -139,6 +140,7 @@ function GlobalSettingsSection() {
     setIsSaving(true);
     try {
       await upsertGlobal({
+        sessionToken: getSessionToken()!,
         siteName: form.siteName.trim(),
         siteDescription: form.siteDescription.trim() || undefined,
         logo: form.logo.trim() || undefined,
@@ -249,6 +251,7 @@ function GlobalSettingsSection() {
 // ============================================================================
 
 function BusinessUnitSettingsSection() {
+  const { getSessionToken } = useAdminAuth();
   const allBUs = useQuery(api.businessUnits.getAll);
   const [selectedBuId, setSelectedBuId] = useState<string | null>(null);
   const buSettings = useQuery(
@@ -310,6 +313,7 @@ function BusinessUnitSettingsSection() {
     setIsSaving(true);
     try {
       await upsertBU({
+        sessionToken: getSessionToken()!,
         businessUnitId: selectedBuId as Id<"businessUnits">,
         currency: form.currency,
         taxRate: form.taxRate,
@@ -604,7 +608,7 @@ function AuthSecuritySection() {
       });
       // Update stored session token
       localStorage.setItem("mb-crunchy-admin-session", result.token);
-      window.location.reload();
+      navigate(0);
     } catch (err) {
       toast.error("Failed to change username", { description: err instanceof Error ? err.message : "Unknown error" });
     } finally {

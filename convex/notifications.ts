@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -69,6 +70,7 @@ export const getEnabledChannels = query({
 
 export const upsertChannel = mutation({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     channel: v.union(
       v.literal("whatsapp"),
@@ -80,9 +82,9 @@ export const upsertChannel = mutation({
     config: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     // Check if config already exists for this channel
@@ -108,7 +110,7 @@ export const upsertChannel = mutation({
     }
 
     return await ctx.db.insert("notifications", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -116,10 +118,9 @@ export const upsertChannel = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("notifications") },
+  args: { sessionToken: v.string(), id: v.id("notifications") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

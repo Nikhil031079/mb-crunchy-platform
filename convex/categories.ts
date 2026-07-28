@@ -106,6 +106,7 @@ export const create = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -115,10 +116,11 @@ export const create = mutation({
       throw new Error(`Slug "${args.slug}" is already in use in this business unit`);
     }
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     return await ctx.db.insert("categories", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -140,11 +142,12 @@ export const update = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { id, sessionToken: _, ...fields } = args;
 
     // Enforce unique slug on update
     if (fields.slug) {
@@ -159,7 +162,7 @@ export const update = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("categories") },
+  args: { id: v.id("categories"), sessionToken: v.string() },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
 
@@ -176,7 +179,7 @@ export const softDelete = mutation({
  * Restore — clears deletedAt and reactivates the category.
  */
 export const restore = mutation({
-  args: { id: v.id("categories") },
+  args: { id: v.id("categories"), sessionToken: v.string() },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
 

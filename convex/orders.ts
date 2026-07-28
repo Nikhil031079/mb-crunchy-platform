@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { api } from "./_generated/api";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -203,6 +204,7 @@ export const create = mutation({
 
 export const updateStatus = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("orders"),
     status: v.union(
       v.literal("pending"),
@@ -226,9 +228,9 @@ export const updateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
+    const { sessionToken: _, ...patchArgs } = args;
     const order = await ctx.db.get(args.id);
     if (!order) throw new Error("Order not found");
 
@@ -283,15 +285,14 @@ export const updateStatus = mutation({
       });
     }
 
-    await ctx.db.patch(args.id, { ...args, updatedAt: now });
+    await ctx.db.patch(args.id, { ...patchArgs, updatedAt: now });
   },
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("orders") },
+  args: { sessionToken: v.string(), id: v.id("orders") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const order = await ctx.db.get(args.id);
     if (!order) throw new Error("Order not found");

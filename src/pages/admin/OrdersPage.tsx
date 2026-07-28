@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { AlertCircle, RefreshCw, ShoppingCart, LayoutGrid, Table2, Printer, Clock } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -17,6 +18,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES, STATUS_COLORS } from "@/constants";
 import { cn } from "@/lib/utils";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 20;
 
@@ -78,6 +80,8 @@ function SummaryCard({ title, value, icon: Icon, className }: { title: string; v
 // ---------------------------------------------------------------------------
 
 export default function OrdersPage() {
+  const navigate = useNavigate();
+  const { getSessionToken } = useAdminAuth();
   const allOrders = useQuery(api.orders.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const updateStatus = useMutation(api.orders.updateStatus);
@@ -215,6 +219,7 @@ export default function OrdersPage() {
         id: statusTarget.id as any,
         status: statusGoal,
         paymentStatus: statusGoal === "confirmed" ? "paid" : undefined,
+        sessionToken: getSessionToken()!,
       });
       setStatusTarget(null);
       setStatusGoal(null);
@@ -231,6 +236,7 @@ export default function OrdersPage() {
         id: order.id as any,
         status: order.status,
         paymentStatus,
+        sessionToken: getSessionToken()!,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update payment status");
@@ -250,7 +256,7 @@ export default function OrdersPage() {
             {viewMode === "kitchen" ? <Table2 className="size-3.5" /> : <LayoutGrid className="size-3.5" />}
             {viewMode === "kitchen" ? "Table View" : "Kitchen View"}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+          <Button size="sm" variant="outline" onClick={() => navigate(0)}>
             <RefreshCw className="mr-1.5 size-4" />Refresh
           </Button>
         </div>

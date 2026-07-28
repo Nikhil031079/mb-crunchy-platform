@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AlertCircle, Package, Plus, RefreshCw } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 import { PartyPackDialogs } from "@/components/admin/party-packs/PartyPackDialogs";
 import { PartyPackFormDialog } from "@/components/admin/party-packs/PartyPackFormDialog";
@@ -109,6 +110,7 @@ function toUpdateArgs(id: string, values: PartyPackFormValues) {
 // ---------------------------------------------------------------------------
 
 export default function PartyPacksPage() {
+  const { getSessionToken } = useAdminAuth();
   const allDocs = useQuery(api.partyPacks.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const allCatalogItems = useQuery(api.catalogItems.getAll);
@@ -221,9 +223,9 @@ export default function PartyPacksPage() {
   const savePartyPack = async (values: PartyPackFormValues) => {
     try {
       if (editingPartyPack) {
-        await updatePartyPack(toUpdateArgs(editingPartyPack.id, values));
+        await updatePartyPack({ ...toUpdateArgs(editingPartyPack.id, values), sessionToken: getSessionToken()! });
       } else {
-        await createPartyPack(toCreateArgs(values));
+        await createPartyPack({ ...toCreateArgs(values), sessionToken: getSessionToken()! });
       }
       setFormOpen(false);
     } catch (err) {
@@ -236,7 +238,7 @@ export default function PartyPacksPage() {
   const archivePartyPack = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeletePartyPack({ id: deleteTarget.id as any });
+      await softDeletePartyPack({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
       setError(
@@ -248,7 +250,7 @@ export default function PartyPacksPage() {
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await restorePartyPack({ id: restoreTarget.id as any });
+      await restorePartyPack({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
       setError(

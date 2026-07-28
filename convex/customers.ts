@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -72,6 +73,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    sessionToken: v.optional(v.string()),
     id: v.id("customers"),
     name: v.optional(v.string()),
     email: v.optional(v.string()),
@@ -82,10 +84,19 @@ export const update = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    const { sessionToken: _, id, ...fields } = args;
 
-    const { id, ...fields } = args;
+    if (args.sessionToken) {
+      await requireAdminSession(ctx, args.sessionToken);
+    } else {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) throw new Error("Authentication required");
+
+      const customer = await ctx.db.get(id);
+      if (!customer) throw new Error("Customer not found");
+      if (customer.authUserId !== identity.subject) throw new Error("Unauthorized");
+    }
+
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
   },
 });
@@ -133,10 +144,9 @@ export const updateProfile = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("customers") },
+  args: { sessionToken: v.string(), id: v.id("customers") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

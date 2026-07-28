@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, useEffect } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
@@ -232,6 +232,7 @@ function BusinessUnitSection({
     limit: 8,
   });
 
+  const navigate = useNavigate();
   const { addItem } = useCart();
 
   const handleAddToCart = useCallback(
@@ -324,7 +325,7 @@ function BusinessUnitSection({
               subtitle="Our most-loved selections"
               action={{
                 label: `Browse ${bu.name}`,
-                onClick: () => (window.location.href = `/${buSlug}`),
+                onClick: () => (navigate(`/${buSlug}`)),
               }}
               size="sm"
             />
@@ -351,7 +352,7 @@ function BusinessUnitSection({
               subtitle="Top picks from our customers"
               action={{
                 label: `Browse ${bu.name}`,
-                onClick: () => (window.location.href = `/${buSlug}`),
+                onClick: () => (navigate(`/${buSlug}`)),
               }}
               size="sm"
             />
@@ -378,7 +379,7 @@ function BusinessUnitSection({
               subtitle="Curated bundles at great value"
               action={{
                 label: "View All Combos",
-                onClick: () => (window.location.href = `/${buSlug}`),
+                onClick: () => (navigate(`/${buSlug}`)),
               }}
               size="sm"
             />
@@ -398,7 +399,7 @@ function BusinessUnitSection({
               subtitle="Perfect for gatherings and events"
               action={{
                 label: "View All Packs",
-                onClick: () => (window.location.href = `/${buSlug}`),
+                onClick: () => (navigate(`/${buSlug}`)),
               }}
               size="sm"
             />

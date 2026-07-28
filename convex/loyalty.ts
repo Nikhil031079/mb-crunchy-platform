@@ -237,6 +237,12 @@ export const redeemPoints = mutation({
     points: v.number(),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     if (args.points <= 0) throw new Error("Points must be positive");
 
     const settings = await ctx.db.query("loyaltySettings").first();

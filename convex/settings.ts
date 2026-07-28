@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -35,6 +36,7 @@ export const getGlobalSettings = query({
 
 export const upsertBusinessUnitSettings = mutation({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     currency: v.string(),
     taxRate: v.number(),
@@ -63,9 +65,9 @@ export const upsertBusinessUnitSettings = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     const existing = await ctx.db
@@ -74,12 +76,12 @@ export const upsertBusinessUnitSettings = mutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, { ...args, updatedAt: now });
+      await ctx.db.patch(existing._id, { ...insertArgs, updatedAt: now });
       return existing._id;
     }
 
     return await ctx.db.insert("settings", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -88,6 +90,7 @@ export const upsertBusinessUnitSettings = mutation({
 
 export const upsertGlobalSettings = mutation({
   args: {
+    sessionToken: v.string(),
     siteName: v.string(),
     siteDescription: v.optional(v.string()),
     logo: v.optional(v.string()),
@@ -97,19 +100,19 @@ export const upsertGlobalSettings = mutation({
     supportPhone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
     const existing = await ctx.db.query("globalSettings").first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, { ...args, updatedAt: now });
+      await ctx.db.patch(existing._id, { ...insertArgs, updatedAt: now });
       return existing._id;
     }
 
     return await ctx.db.insert("globalSettings", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });

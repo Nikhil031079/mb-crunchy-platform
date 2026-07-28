@@ -85,8 +85,13 @@ export const create = mutation({
 export const markRead = mutation({
   args: { notificationId: v.id("inAppNotifications") },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const doc = await ctx.db.get(args.notificationId);
     if (!doc) throw new Error("Notification not found");
+    if (doc.userId !== identity.subject) throw new Error("Unauthorized");
+
     await ctx.db.patch(args.notificationId, { read: true });
   },
 });
@@ -94,6 +99,10 @@ export const markRead = mutation({
 export const markAllRead = mutation({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+    if (args.userId !== identity.subject) throw new Error("Unauthorized");
+
     const unread = await ctx.db
       .query("inAppNotifications")
       .withIndex("by_user_read", (q) =>
@@ -110,6 +119,13 @@ export const markAllRead = mutation({
 export const remove = mutation({
   args: { notificationId: v.id("inAppNotifications") },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const doc = await ctx.db.get(args.notificationId);
+    if (!doc) throw new Error("Notification not found");
+    if (doc.userId !== identity.subject) throw new Error("Unauthorized");
+
     await ctx.db.delete(args.notificationId);
   },
 });
@@ -117,6 +133,10 @@ export const remove = mutation({
 export const clearAll = mutation({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+    if (args.userId !== identity.subject) throw new Error("Unauthorized");
+
     const all = await ctx.db
       .query("inAppNotifications")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))

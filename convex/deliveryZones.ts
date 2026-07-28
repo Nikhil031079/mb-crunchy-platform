@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -46,6 +47,7 @@ export const getActive = query({
 
 export const create = mutation({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     name: v.string(),
     radius: v.number(),
@@ -56,13 +58,13 @@ export const create = mutation({
     status: v.union(v.literal("active"), v.literal("inactive")),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     return await ctx.db.insert("deliveryZones", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -71,6 +73,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("deliveryZones"),
     name: v.optional(v.string()),
     radius: v.optional(v.number()),
@@ -81,19 +84,17 @@ export const update = mutation({
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
   },
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("deliveryZones") },
+  args: { sessionToken: v.string(), id: v.id("deliveryZones") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

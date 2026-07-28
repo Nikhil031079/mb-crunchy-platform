@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // Default homepage layout sections
 const DEFAULT_SECTIONS = [
@@ -58,8 +59,10 @@ export const getVisible = query({
 // ============================================================================
 
 export const initializeDefaults = mutation({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
     const now = Date.now();
 
     // Check if sections already exist
@@ -89,6 +92,7 @@ export const initializeDefaults = mutation({
 
 export const update = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("homepageSections"),
     title: v.optional(v.string()),
     displayOrder: v.optional(v.number()),
@@ -96,16 +100,16 @@ export const update = mutation({
     settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
   },
 });
 
 export const reorder = mutation({
   args: {
+    sessionToken: v.string(),
     items: v.array(
       v.object({
         id: v.id("homepageSections"),
@@ -115,8 +119,7 @@ export const reorder = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     for (const item of args.items) {
@@ -130,10 +133,9 @@ export const reorder = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("homepageSections") },
+  args: { sessionToken: v.string(), id: v.id("homepageSections") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

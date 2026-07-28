@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -94,6 +95,7 @@ export const getAll = query({
 
 export const create = mutation({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.optional(v.id("businessUnits")),
     contentType: v.union(
       v.literal("hero"),
@@ -118,13 +120,13 @@ export const create = mutation({
     endDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     return await ctx.db.insert("content", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -133,6 +135,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("content"),
     title: v.optional(v.string()),
     subtitle: v.optional(v.string()),
@@ -150,19 +153,17 @@ export const update = mutation({
     endDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
   },
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("content") },
+  args: { sessionToken: v.string(), id: v.id("content") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

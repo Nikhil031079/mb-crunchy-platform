@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
@@ -76,6 +76,7 @@ export default function CategoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("default");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const navigate = useNavigate();
 
   // ==========================================================================
   // Data Fetching
@@ -280,7 +281,7 @@ export default function CategoryPage() {
         <ErrorState
           title="Category Not Found"
           message={`The category "${categorySlug}" doesn't exist in ${businessUnit?.name ?? "this business unit"}.`}
-          onRetry={() => window.location.href = `/${buSlug}`}
+          onRetry={() => navigate(`/${buSlug}`)}
         />
       </div>
     );

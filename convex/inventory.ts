@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
@@ -215,6 +216,7 @@ export const getStockMovements = query({
 
 export const upsert = mutation({
   args: {
+    sessionToken: v.optional(v.string()),
     catalogItemId: v.id("catalogItems"),
     businessUnitId: v.id("businessUnits"),
     variantName: v.string(),
@@ -230,9 +232,11 @@ export const upsert = mutation({
     location: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
+    if (args.sessionToken) {
+      await requireAdminSession(ctx, args.sessionToken);
+    }
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     const existing = await ctx.db
@@ -250,14 +254,14 @@ export const upsert = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        ...args,
+        ...insertArgs,
         updatedAt: now,
       });
       return existing._id;
     }
 
     return await ctx.db.insert("inventory", {
-      ...args,
+      ...insertArgs,
       reservedStock: 0,
       createdAt: now,
       updatedAt: now,
@@ -267,12 +271,12 @@ export const upsert = mutation({
 
 export const updateStock = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("inventory"),
     stockQuantity: v.number(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     const doc = await ctx.db.get(args.id);
@@ -291,13 +295,13 @@ export const updateStock = mutation({
 
 export const adjustStock = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("inventory"),
     adjustment: v.number(),
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     const doc = await ctx.db.get(args.id);
@@ -435,6 +439,7 @@ export const restoreStock = mutation({
 
 export const bulkUpdateStock = mutation({
   args: {
+    sessionToken: v.string(),
     updates: v.array(
       v.object({
         inventoryId: v.id("inventory"),
@@ -444,8 +449,7 @@ export const bulkUpdateStock = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
 
@@ -479,8 +483,9 @@ export const bulkUpdateStock = mutation({
 });
 
 export const markUnavailable = mutation({
-  args: { id: v.id("inventory") },
+  args: { sessionToken: v.string(), id: v.id("inventory") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const now = Date.now();
     await ctx.db.patch(args.id, {
       available: false,
@@ -492,8 +497,9 @@ export const markUnavailable = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("inventory") },
+  args: { sessionToken: v.string(), id: v.id("inventory") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const now = Date.now();
     await ctx.db.patch(args.id, {
       deletedAt: now,

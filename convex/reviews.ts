@@ -153,6 +153,12 @@ export const create = mutation({
     images: v.array(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     if (args.rating < 1 || args.rating > 5) {
       throw new Error("Rating must be between 1 and 5");
     }
@@ -208,6 +214,12 @@ export const update = mutation({
     images: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     const review = await ctx.db.get(args.reviewId);
     if (!review) throw new Error("Review not found");
     if (review.customerId !== args.customerId) throw new Error("Not authorized");
@@ -233,6 +245,12 @@ export const remove = mutation({
     customerId: v.id("customers"),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     const review = await ctx.db.get(args.reviewId);
     if (!review) throw new Error("Review not found");
     if (review.customerId !== args.customerId) throw new Error("Not authorized");
@@ -247,6 +265,9 @@ export const remove = mutation({
 export const markHelpful = mutation({
   args: { reviewId: v.id("reviews") },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const review = await ctx.db.get(args.reviewId);
     if (!review) throw new Error("Review not found");
 

@@ -127,6 +127,12 @@ export const toggle = mutation({
     itemId: v.id("catalogItems"),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     const now = Date.now();
 
     // Check if record exists (active or soft-deleted)
@@ -183,6 +189,12 @@ export const add = mutation({
     itemId: v.id("catalogItems"),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     const now = Date.now();
 
     // Check if record exists
@@ -236,6 +248,12 @@ export const remove = mutation({
     itemId: v.id("catalogItems"),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     const now = Date.now();
 
     const existing = await ctx.db
@@ -268,6 +286,12 @@ export const recordRecentlyViewed = mutation({
     itemId: v.id("catalogItems"),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     const now = Date.now();
 
     // Upsert: reactivate if soft-deleted, or update timestamp if active, or insert new

@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES } from "@/constants";
 import { AlertCircle } from "lucide-react";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 10;
 
@@ -76,6 +77,7 @@ function toUpdateArgs(id: string, values: BannerFormValues) {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export default function BannersPage() {
+  const { getSessionToken } = useAdminAuth();
   const allDocs = useQuery(api.content.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const createContent = useMutation(api.content.create);
@@ -132,9 +134,9 @@ export default function BannersPage() {
   const saveBanner = async (values: BannerFormValues) => {
     try {
       if (editingBanner) {
-        await updateContent(toUpdateArgs(editingBanner.id, values));
+        await updateContent({ ...toUpdateArgs(editingBanner.id, values), sessionToken: getSessionToken()! });
       } else {
-        await createContent(toCreateArgs(values));
+        await createContent({ ...toCreateArgs(values), sessionToken: getSessionToken()! });
       }
       setFormOpen(false);
     } catch (err) {
@@ -145,7 +147,7 @@ export default function BannersPage() {
   const archiveBanner = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteContent({ id: deleteTarget.id as any });
+      await softDeleteContent({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to archive banner");
@@ -155,7 +157,7 @@ export default function BannersPage() {
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await updateContent({ id: restoreTarget.id as any, status: "active" as any });
+      await updateContent({ id: restoreTarget.id as any, status: "active" as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to restore banner");

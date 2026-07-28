@@ -23,7 +23,7 @@ import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
-import { SITE_NAME } from "@/constants";
+import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
@@ -840,12 +840,12 @@ export default function BusinessUnitPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link to="/cart" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                  <Link to={ROUTES.CART} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                     Cart
                   </Link>
                 </li>
                 <li>
-                  <Link to="/checkout" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                  <Link to={ROUTES.CHECKOUT} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                     Checkout
                   </Link>
                 </li>

@@ -17,6 +17,7 @@ import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/p
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES } from "@/constants";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -87,6 +88,7 @@ function SummaryCard({ title, value, icon: Icon, className }: { title: string; v
 // ---------------------------------------------------------------------------
 
 export default function InventoryPage() {
+  const { getSessionToken } = useAdminAuth();
   const allInventory = useQuery(api.inventory.getAll);
   const allCatalogItems = useQuery(api.catalogItems.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
@@ -211,6 +213,7 @@ export default function InventoryPage() {
         costPrice: values.costPrice ? Number(values.costPrice) : undefined,
         supplier: values.supplier || undefined,
         location: values.location || undefined,
+        sessionToken: getSessionToken()!,
       });
       setFormOpen(false);
     } catch (err) {
@@ -220,7 +223,7 @@ export default function InventoryPage() {
 
   const handleAdjust = async (inventoryId: string, adjustment: number, reason: string) => {
     try {
-      await adjustStock({ id: inventoryId as any, adjustment, reason: reason || undefined });
+      await adjustStock({ id: inventoryId as any, adjustment, reason: reason || undefined, sessionToken: getSessionToken()! });
       setAdjustTarget(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to adjust stock");
@@ -232,6 +235,7 @@ export default function InventoryPage() {
       await bulkUpdateStock({
         updates: updates.map((u) => ({ inventoryId: u.inventoryId as any, stockQuantity: u.stockQuantity })),
         reason: reason || undefined,
+        sessionToken: getSessionToken()!,
       });
       setBulkOpen(false);
     } catch (err) {
@@ -242,7 +246,7 @@ export default function InventoryPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteInventory({ id: deleteTarget.id as any });
+      await softDeleteInventory({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete inventory item");

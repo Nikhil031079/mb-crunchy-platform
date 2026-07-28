@@ -99,7 +99,7 @@ export default function CheckoutPage() {
     orderNumber: string;
     orderId: string;
   } | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<"idle" | "creating_order">("idle");
+  const [paymentStatus, setPaymentStatus] = useState<"idle" | "processing_payment" | "creating_order">("idle");
   const [showPaymentQR, setShowPaymentQR] = useState(false);
   const [pendingOrder, setPendingOrder] = useState<{
     orderId: string;

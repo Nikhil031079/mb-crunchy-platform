@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AlertCircle, Package, Plus, RefreshCw } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 import { OfferDialogs } from "@/components/admin/offers/OfferDialogs";
 import { OfferFormDialog } from "@/components/admin/offers/OfferFormDialog";
@@ -102,6 +103,7 @@ function toUpdateArgs(id: string, values: OfferFormValues) {
 // ---------------------------------------------------------------------------
 
 export default function OffersPage() {
+  const { getSessionToken } = useAdminAuth();
   const allDocs = useQuery(api.offers.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const createOffer = useMutation(api.offers.create);
@@ -197,9 +199,9 @@ export default function OffersPage() {
   const saveOffer = async (values: OfferFormValues) => {
     try {
       if (editingOffer) {
-        await updateOffer(toUpdateArgs(editingOffer.id, values));
+        await updateOffer({ ...toUpdateArgs(editingOffer.id, values), sessionToken: getSessionToken()! });
       } else {
-        await createOffer(toCreateArgs(values));
+        await createOffer({ ...toCreateArgs(values), sessionToken: getSessionToken()! });
       }
       setFormOpen(false);
     } catch (err) {
@@ -212,7 +214,7 @@ export default function OffersPage() {
   const archiveOffer = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteOffer({ id: deleteTarget.id as any });
+      await softDeleteOffer({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
       setError(
@@ -224,7 +226,7 @@ export default function OffersPage() {
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await restoreOffer({ id: restoreTarget.id as any });
+      await restoreOffer({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
       setError(

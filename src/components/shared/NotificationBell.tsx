@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useNavigate } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { Bell, Check, CheckCheck, Package, Tag, Info, AlertTriangle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -38,6 +39,7 @@ function timeAgo(ts: number): string {
 }
 
 export function NotificationBell({ userId, className }: NotificationBellProps) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   const unreadCount = useQuery(
@@ -139,7 +141,13 @@ export function NotificationBell({ userId, className }: NotificationBellProps) {
                         key={n._id}
                         onClick={() => {
                           if (!n.read) handleMarkRead(n._id);
-                          if (n.link) window.location.href = n.link;
+                          if (n.link) {
+                            if (n.link.startsWith("/")) {
+                              navigate(n.link);
+                            } else {
+                              window.location.href = n.link;
+                            }
+                          }
                         }}
                         className={cn(
                           "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/50",

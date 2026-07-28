@@ -4,15 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-async function requireAuth(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-}
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -67,6 +59,7 @@ export const getByCode = query({
 
 export const create = mutation({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     title: v.string(),
     description: v.optional(v.string()),
@@ -85,12 +78,13 @@ export const create = mutation({
     banner: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     return await ctx.db.insert("offers", {
-      ...args,
+      ...insertArgs,
       usedCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -100,6 +94,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("offers"),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -120,9 +115,9 @@ export const update = mutation({
     banner: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
   },
 });
@@ -140,9 +135,9 @@ export const incrementUsage = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("offers") },
+  args: { sessionToken: v.string(), id: v.id("offers") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -241,9 +236,9 @@ export const validateCoupon = query({
  * Restore — clears deletedAt and reactivates the offer.
  */
 export const restore = mutation({
-  args: { id: v.id("offers") },
+  args: { sessionToken: v.string(), id: v.id("offers") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

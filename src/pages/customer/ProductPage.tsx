@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useNavigate } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -78,6 +78,7 @@ export default function ProductPage() {
 
   // Cart
   const { addItem, cart } = useCart();
+  const navigate = useNavigate();
 
   // Auth + Recently Viewed
   const { user } = useAuth();
@@ -377,7 +378,7 @@ export default function ProductPage() {
         <ErrorState
           title="Product Not Found"
           message={`The product "${productSlug}" doesn't exist in ${businessUnit?.name ?? "this business unit"}.`}
-          onRetry={() => window.location.href = `/${buSlug}${catSlug ? `/${catSlug}` : ""}`}
+          onRetry={() => navigate(`/${buSlug}${catSlug ? `/${catSlug}` : ""}`)}
         />
       </div>
     );

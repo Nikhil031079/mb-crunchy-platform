@@ -4,15 +4,11 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-async function requireAuth(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-}
 
 async function slugExists(ctx: any, slug: string, excludeId?: string): Promise<boolean> {
   const existing = await ctx.db
@@ -66,6 +62,7 @@ export const getAll = query({
 
 export const create = mutation({
   args: {
+    sessionToken: v.string(),
     name: v.string(),
     slug: v.string(),
     logo: v.optional(v.string()),
@@ -87,17 +84,18 @@ export const create = mutation({
     enablePickup: v.boolean(),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     // Enforce unique slug
     if (await slugExists(ctx, args.slug)) {
       throw new Error(`Slug "${args.slug}" is already in use`);
     }
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     return await ctx.db.insert("businessUnits", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -106,6 +104,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("businessUnits"),
     name: v.optional(v.string()),
     slug: v.optional(v.string()),
@@ -128,9 +127,9 @@ export const update = mutation({
     enablePickup: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { sessionToken: _, id, ...fields } = args;
 
     // Enforce unique slug on update
     if (fields.slug && (await slugExists(ctx, fields.slug, id))) {
@@ -149,9 +148,9 @@ export const update = mutation({
  * Never permanently removes records.
  */
 export const softDelete = mutation({
-  args: { id: v.id("businessUnits") },
+  args: { sessionToken: v.string(), id: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -166,9 +165,9 @@ export const softDelete = mutation({
  * Restore — clears deletedAt and reactivates the business unit.
  */
 export const restore = mutation({
-  args: { id: v.id("businessUnits") },
+  args: { sessionToken: v.string(), id: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

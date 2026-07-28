@@ -14,6 +14,7 @@ import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/p
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES } from "@/constants";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 8;
 
@@ -73,6 +74,7 @@ function toUpdateArgs(id: string, values: BusinessUnitFormValues) {
 // ---------------------------------------------------------------------------
 
 export default function BusinessUnitsPage() {
+  const { getSessionToken } = useAdminAuth();
   const allDocs = useQuery(api.businessUnits.getAll);
   const createBU = useMutation(api.businessUnits.create);
   const updateBU = useMutation(api.businessUnits.update);
@@ -115,9 +117,9 @@ export default function BusinessUnitsPage() {
   const saveBusinessUnit = async (values: BusinessUnitFormValues) => {
     try {
       if (editingBusinessUnit) {
-        await updateBU(toUpdateArgs(editingBusinessUnit.id, values));
+        await updateBU({ ...toUpdateArgs(editingBusinessUnit.id, values), sessionToken: getSessionToken()! });
       } else {
-        await createBU(toCreateArgs(values));
+        await createBU({ ...toCreateArgs(values), sessionToken: getSessionToken()! });
       }
       setFormOpen(false);
     } catch (err) {
@@ -128,7 +130,7 @@ export default function BusinessUnitsPage() {
   const archiveBusinessUnit = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteBU({ id: deleteTarget.id as any });
+      await softDeleteBU({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to archive business unit");
@@ -138,7 +140,7 @@ export default function BusinessUnitsPage() {
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await restoreBU({ id: restoreTarget.id as any });
+      await restoreBU({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to restore business unit");

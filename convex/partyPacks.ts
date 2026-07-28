@@ -5,15 +5,11 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { api } from "./_generated/api";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-async function requireAuth(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-}
 
 async function slugExists(
   ctx: any,
@@ -78,6 +74,7 @@ export const getFeatured = query({
 
 export const create = mutation({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     name: v.string(),
     slug: v.string(),
@@ -101,17 +98,18 @@ export const create = mutation({
     canonicalUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     // Enforce unique slug
     if (await slugExists(ctx, args.businessUnitId, args.slug)) {
       throw new Error(`Slug "${args.slug}" is already in use`);
     }
 
+    const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     const packId = await ctx.db.insert("partyPacks", {
-      ...args,
+      ...insertArgs,
       createdAt: now,
       updatedAt: now,
     });
@@ -144,6 +142,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    sessionToken: v.string(),
     id: v.id("partyPacks"),
     name: v.optional(v.string()),
     slug: v.optional(v.string()),
@@ -171,9 +170,9 @@ export const update = mutation({
     canonicalUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
-    const { id, ...fields } = args;
+    const { sessionToken: _, id, ...fields } = args;
 
     // Enforce unique slug on update
     if (fields.slug) {
@@ -213,9 +212,9 @@ export const update = mutation({
 });
 
 export const softDelete = mutation({
-  args: { id: v.id("partyPacks") },
+  args: { sessionToken: v.string(), id: v.id("partyPacks") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -244,9 +243,9 @@ export const getAll = query({
  * Restore — clears deletedAt and reactivates the party pack.
  */
 export const restore = mutation({
-  args: { id: v.id("partyPacks") },
+  args: { sessionToken: v.string(), id: v.id("partyPacks") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdminSession(ctx, args.sessionToken);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

@@ -140,9 +140,15 @@ export const update = mutation({
 export const setDefault = mutation({
   args: { id: v.id("addresses") },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
     const now = Date.now();
     const address = await ctx.db.get(args.id);
     if (!address) throw new Error("Address not found");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== address.customerId) throw new Error("Unauthorized");
 
     // Unset current default
     const existing = await ctx.db
@@ -164,6 +170,15 @@ export const setDefault = mutation({
 export const softDelete = mutation({
   args: { id: v.id("addresses") },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const address = await ctx.db.get(args.id);
+    if (!address) throw new Error("Address not found");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== address.customerId) throw new Error("Unauthorized");
+
     const now = Date.now();
     await ctx.db.patch(args.id, {
       deletedAt: now,

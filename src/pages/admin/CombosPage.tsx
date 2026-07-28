@@ -25,6 +25,7 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES } from "@/constants";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 8;
 
@@ -111,6 +112,7 @@ function toUpdateArgs(id: string, values: ComboFormValues) {
 // ---------------------------------------------------------------------------
 
 export default function CombosPage() {
+  const { getSessionToken } = useAdminAuth();
   const allDocs = useQuery(api.combos.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const allCatalogItems = useQuery(api.catalogItems.getAll);
@@ -219,10 +221,11 @@ export default function CombosPage() {
 
   const saveCombo = async (values: ComboFormValues) => {
     try {
+      const token = getSessionToken();
       if (editingCombo) {
-        await updateCombo(toUpdateArgs(editingCombo.id, values));
+        await updateCombo({ ...toUpdateArgs(editingCombo.id, values), sessionToken: token! });
       } else {
-        await createCombo(toCreateArgs(values));
+        await createCombo({ ...toCreateArgs(values), sessionToken: token! });
       }
       setFormOpen(false);
     } catch (err) {
@@ -235,7 +238,7 @@ export default function CombosPage() {
   const archiveCombo = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteCombo({ id: deleteTarget.id as any });
+      await softDeleteCombo({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
       setError(
@@ -247,7 +250,7 @@ export default function CombosPage() {
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await restoreCombo({ id: restoreTarget.id as any });
+      await restoreCombo({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
       setError(

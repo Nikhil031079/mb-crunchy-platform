@@ -14,6 +14,7 @@ import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/p
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES } from "@/constants";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 8;
 
@@ -65,6 +66,7 @@ function toUpdateArgs(id: string, values: CategoryFormValues) {
 // ---------------------------------------------------------------------------
 
 export default function CategoriesPage() {
+  const { getSessionToken } = useAdminAuth();
   const allDocs = useQuery(api.categories.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const createCat = useMutation(api.categories.create);
@@ -119,10 +121,11 @@ export default function CategoriesPage() {
 
   const saveCategory = async (values: CategoryFormValues) => {
     try {
+      const token = getSessionToken();
       if (editingCategory) {
-        await updateCat(toUpdateArgs(editingCategory.id, values));
+        await updateCat({ ...toUpdateArgs(editingCategory.id, values), sessionToken: token! });
       } else {
-        await createCat(toCreateArgs(values));
+        await createCat({ ...toCreateArgs(values), sessionToken: token! });
       }
       setFormOpen(false);
     } catch (err) {
@@ -133,7 +136,7 @@ export default function CategoriesPage() {
   const archiveCategory = async () => {
     if (!deleteTarget) return;
     try {
-      await softDeleteCat({ id: deleteTarget.id as any });
+      await softDeleteCat({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to archive category");
@@ -143,7 +146,7 @@ export default function CategoriesPage() {
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await restoreCat({ id: restoreTarget.id as any });
+      await restoreCat({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to restore category");
