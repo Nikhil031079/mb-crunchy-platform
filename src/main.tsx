@@ -5,6 +5,7 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { AdminAuthProvider } from "@/hooks/use-admin-auth";
+import { BrandingProvider } from "@/hooks/use-branding";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
@@ -231,11 +232,13 @@ createRoot(document.getElementById("root")!).render(
         <VlyToolbar />
       </ToolbarErrorBoundary>
       <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <AppRoutes />
-        </BrowserRouter>
-        <Toaster />
+        <BrandingProvider>
+          <BrowserRouter>
+            <RouteSyncer />
+            <AppRoutes />
+          </BrowserRouter>
+          <Toaster />
+        </BrandingProvider>
       </ConvexAuthProvider>
     </RootErrorBoundary>
   </StrictMode>,

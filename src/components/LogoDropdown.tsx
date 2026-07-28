@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import logo from "@/assets/logo.svg";
+import { useBranding } from "@/hooks/use-branding";
 import { useAuth } from "@/hooks/use-auth";
 import { Home, LogOut } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -16,6 +16,7 @@ import { useNavigate } from "react-router";
 export function LogoDropdown() {
   const { isAuthenticated, signOut } = useAuth();
   const navigate = useNavigate();
+  const { siteName, logo } = useBranding();
 
   const handleSignOut = async () => {
     try {
@@ -35,8 +36,8 @@ export function LogoDropdown() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-10 w-10">
           <img
-            src={logo}
-            alt="Logo"
+            src={logo || "/logo.svg"}
+            alt={siteName}
             width={32}
             height={32}
             className="rounded-lg"

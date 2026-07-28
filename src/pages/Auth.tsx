@@ -16,7 +16,7 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import { SITE_NAME } from "@/constants";
-import logo from "@/assets/logo.svg";
+import { useBranding } from "@/hooks/use-branding";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
@@ -28,6 +28,7 @@ interface AuthProps {
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
   const navigate = useNavigate();
+  const { siteName, logo } = useBranding();
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -106,8 +107,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               <CardHeader className="text-center">
               <div className="flex justify-center">
                     <img
-                      src={logo}
-                      alt="Lock Icon"
+                      src={logo || "/logo.svg"}
+                      alt={siteName}
                       width={64}
                       height={64}
                       className="rounded-lg mb-4 mt-4 cursor-pointer"

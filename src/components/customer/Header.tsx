@@ -5,7 +5,8 @@ import { ShoppingCart, User, Menu, X, ChefHat } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SITE_NAME, ROUTES } from "@/constants";
+import { ROUTES } from "@/constants";
+import { useBranding } from "@/hooks/use-branding";
 import { cn } from "@/lib/utils";
 
 import { DesktopNav } from "./DesktopNav";
@@ -33,6 +34,7 @@ export function Header({
 }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { siteName, logo } = useBranding();
 
   const activeBusinessUnits = businessUnits.filter(
     (bu) => bu.status === "active" && bu.homepageVisible
@@ -59,13 +61,17 @@ export function Header({
           <Link
             to={ROUTES.HOME}
             className="flex shrink-0 items-center gap-2.5 transition-opacity hover:opacity-80"
-            aria-label={`${SITE_NAME} Home`}
+            aria-label={`${siteName} Home`}
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-              <ChefHat className="h-5 w-5" />
-            </div>
+            {logo ? (
+              <img src={logo} alt={siteName} className="h-9 w-9 rounded-lg object-contain" />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                <ChefHat className="h-5 w-5" />
+              </div>
+            )}
             <span className="hidden text-lg font-bold tracking-tight sm:inline">
-              {SITE_NAME}
+              {siteName}
             </span>
           </Link>
 

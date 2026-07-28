@@ -1,10 +1,12 @@
 import { Link } from "react-router";
 import { ChefHat } from "lucide-react";
 
-import { SITE_NAME, SITE_DESCRIPTION, ROUTES } from "@/constants";
+import { ROUTES } from "@/constants";
+import { useBranding } from "@/hooks/use-branding";
 
 export function CustomerFooter() {
   const currentYear = new Date().getFullYear();
+  const { siteName, siteDescription, logo } = useBranding();
 
   return (
     <footer className="border-t border-border/60 bg-secondary/40">
@@ -16,13 +18,17 @@ export function CustomerFooter() {
               to={ROUTES.HOME}
               className="flex items-center gap-2.5"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <ChefHat className="h-4 w-4" />
-              </div>
-              <span className="text-base font-bold">{SITE_NAME}</span>
+              {logo ? (
+                <img src={logo} alt={siteName} className="h-8 w-8 rounded-lg object-contain" />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <ChefHat className="h-4 w-4" />
+                </div>
+              )}
+              <span className="text-base font-bold">{siteName}</span>
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-              {SITE_DESCRIPTION}
+              {siteDescription}
             </p>
           </div>
 
@@ -86,7 +92,7 @@ export function CustomerFooter() {
 
         <div className="mt-10 border-t border-border/60 pt-6">
           <p className="text-center text-xs text-muted-foreground">
-            &copy; {currentYear} {SITE_NAME}. All rights reserved.
+            &copy; {currentYear} {siteName}. All rights reserved.
           </p>
         </div>
       </div>

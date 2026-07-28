@@ -26,7 +26,8 @@ import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
-import { SITE_NAME, ROUTES } from "@/constants";
+import { ROUTES } from "@/constants";
+import { useBranding } from "@/hooks/use-branding";
 import { cn } from "@/lib/utils";
 
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
@@ -53,6 +54,7 @@ export function CustomerNavbar({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { siteName, logo } = useBranding();
 
   const activeBusinessUnits = businessUnits.filter(
     (bu) => bu.status === "active" && bu.homepageVisible,
@@ -76,11 +78,15 @@ export function CustomerNavbar({
             to={ROUTES.HOME}
             className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <ChefHat className="h-5 w-5" />
-            </div>
+            {logo ? (
+              <img src={logo} alt={siteName} className="h-9 w-9 rounded-lg object-contain" />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <ChefHat className="h-5 w-5" />
+              </div>
+            )}
             <span className="text-lg font-bold tracking-tight">
-              {SITE_NAME}
+              {siteName}
             </span>
           </Link>
 

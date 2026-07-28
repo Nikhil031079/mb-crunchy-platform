@@ -8,13 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { hashPassword } from "@/utils/crypto";
-import { ROUTES, SITE_NAME } from "@/constants";
+import { ROUTES } from "@/constants";
+import { useBranding } from "@/hooks/use-branding";
 
 type Step = "credentials" | "recovery";
 
 export default function AdminSetupPage() {
   const navigate = useNavigate();
   const setupMutation = useMutation(api.adminAuth.setup);
+  const { siteName } = useBranding();
 
   const [step, setStep] = useState<Step>("credentials");
   const [username, setUsername] = useState("");
@@ -85,7 +87,7 @@ export default function AdminSetupPage() {
 
   const handleDownloadKey = () => {
     const content = [
-      `${SITE_NAME} - Admin Recovery Key`,
+      `${siteName} - Admin Recovery Key`,
       "================================",
       "",
       `Username: ${username}`,
@@ -115,7 +117,7 @@ export default function AdminSetupPage() {
     printWindow.document.write(`
       <html><head><title>Recovery Key</title></head>
       <body style="font-family:monospace;padding:40px;">
-        <h2>${SITE_NAME} - Admin Recovery Key</h2>
+        <h2>${siteName} - Admin Recovery Key</h2>
         <p><strong>Username:</strong> ${username}</p>
         <p><strong>Recovery Key:</strong> ${recoveryKey}</p>
         <p style="color:red;margin-top:20px;"><strong>Store this key in a safe place. It will not be shown again.</strong></p>
@@ -193,7 +195,7 @@ export default function AdminSetupPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-foreground text-background mb-4">
             <ShieldCheck className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">{SITE_NAME} Setup</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{siteName} Setup</h1>
           <p className="text-muted-foreground mt-1">Create your first admin account</p>
         </div>
 

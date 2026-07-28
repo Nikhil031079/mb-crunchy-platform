@@ -1,7 +1,8 @@
 import { Link } from "react-router";
 import { ChefHat, Mail, Phone, MapPin, Heart } from "lucide-react";
 
-import { SITE_NAME, ROUTES } from "@/constants";
+import { ROUTES } from "@/constants";
+import { useBranding } from "@/hooks/use-branding";
 import { cn } from "@/lib/utils";
 
 import type { BusinessUnit } from "@/types";
@@ -28,6 +29,7 @@ export function Footer({
   className,
 }: FooterProps) {
   const currentYear = new Date().getFullYear();
+  const { siteName, logo } = useBranding();
   const activeBusinessUnits = businessUnits.filter(
     (bu) => bu.status === "active"
   );
@@ -43,10 +45,14 @@ export function Footer({
               to={ROUTES.HOME}
               className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                <ChefHat className="h-5 w-5" />
-              </div>
-              <span className="text-lg font-bold">{SITE_NAME}</span>
+              {logo ? (
+                <img src={logo} alt={siteName} className="h-9 w-9 rounded-lg object-contain" />
+              ) : (
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                  <ChefHat className="h-5 w-5" />
+                </div>
+              )}
+              <span className="text-lg font-bold">{siteName}</span>
             </Link>
             <p className="text-sm leading-relaxed text-muted-foreground">
               Your premium destination for quality products and exceptional service
@@ -227,10 +233,10 @@ export function Footer({
         {/* Bottom Bar */}
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/40 pt-6 sm:flex-row">
           <p className="text-xs text-muted-foreground">
-            &copy; {currentYear} {SITE_NAME}. All rights reserved.
+            &copy; {currentYear} {siteName}. All rights reserved.
           </p>
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
-            Made with <Heart className="h-3 w-3 text-accent" /> by the {SITE_NAME} team
+            Made with <Heart className="h-3 w-3 text-accent" /> by the {siteName} team
           </p>
         </div>
       </div>
