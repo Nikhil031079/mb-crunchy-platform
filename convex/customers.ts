@@ -12,14 +12,26 @@ import { requireAdminSession } from "./utils/adminAuth";
 
 export const getAll = query({
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
-
-    return await ctx.db
+    const docs = await ctx.db
       .query("customers")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("desc")
       .collect();
+
+    return docs.map((d) => ({
+      _id: d._id,
+      _creationTime: d._creationTime,
+      name: d.name ?? "",
+      email: d.email ?? "",
+      phone: d.phone ?? "",
+      authUserId: d.authUserId ?? "",
+      totalOrders: d.totalOrders ?? 0,
+      totalSpent: d.totalSpent ?? 0,
+      notes: d.notes ?? "",
+      status: d.status ?? "active",
+      createdAt: d.createdAt ?? 0,
+      updatedAt: d.updatedAt ?? 0,
+    }));
   },
 });
 
