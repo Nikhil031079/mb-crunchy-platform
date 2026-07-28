@@ -80,13 +80,24 @@ export type CreateCategoryInput = Omit<
 export type UpdateCategoryInput = Partial<CreateCategoryInput>;
 
 // ============================================================================
-// Product Variant (catalog-only — stock moved to inventory)
+// Product Variant (generic option-group model)
 // ============================================================================
 
 export interface ProductVariant {
-  name: string;
+  optionName: string;
+  optionValue: string;
   price: number;
   compareAtPrice?: number;
+  sku?: string;
+  barcode?: string;
+  stock?: number;
+  costPrice?: number;
+  taxPercentage?: number;
+  image?: string;
+  minOrderQty?: number;
+  isDefault: boolean;
+  sortOrder: number;
+  active: boolean;
 }
 
 // ============================================================================
@@ -106,13 +117,19 @@ export interface Product extends Timestamps {
   thumbnail?: string;
   variants: ProductVariant[];
   tags: string[];
-  status: EntityStatus;
-  featured: boolean;
-  displayOrder: number;
+  sku?: string;
+  stockQuantity?: number;
+  unit?: string;
+  vegNonVeg?: string;
+  taxPercentage?: number;
+  available: boolean;
   metaTitle?: string;
   metaDescription?: string;
   metaKeywords?: string;
   canonicalUrl?: string;
+  status: EntityStatus;
+  featured: boolean;
+  displayOrder: number;
   deletedAt?: number;
 }
 

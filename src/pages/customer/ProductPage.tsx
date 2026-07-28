@@ -41,14 +41,69 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Product, BusinessUnitSettings, InventoryItem, CatalogItem } from "@/types";
+import type { BusinessUnit, Category, Product, ProductVariant, BusinessUnitSettings, InventoryItem, CatalogItem } from "@/types";
 import { StockBadge, getStockStatus } from "@/components/customer/StockBadge";
 import type { StockInfo } from "@/components/customer/StockBadge";
 
 // ============================================================================
-// ProductPage — Slug-driven product detail page with variant selection + cart
+// Variant Helpers (client-side, mirrors convex/utils/variantHelper.ts)
+// ============================================================================
+
+function getActiveVariants(variants: ProductVariant[]): ProductVariant[] {
+  return variants
+    .filter((v) => v.active)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function getDefaultVariant(variants: ProductVariant[]): ProductVariant | undefined {
+  const active = getActiveVariants(variants);
+  return active.find((v) => v.isDefault) ?? active[0] ?? variants[0];
+}
+
+function getVariantGroups(variants: ProductVariant[]): { groupName: string; options: ProductVariant[] }[] {
+  const active = getActiveVariants(variants);
+  const groupMap = new Map<string, ProductVariant[]>();
+  for (const v of active) {
+    const key = v.optionName || "";
+    const list = groupMap.get(key) ?? [];
+    list.push(v);
+    groupMap.set(key, list);
+  }
+  return Array.from(groupMap.entries())
+    .map(([groupName, options]) => ({
+      groupName,
+      options: options.sort((a, b) => a.sortOrder - b.sortOrder),
+    }))
+    .filter((g) => g.groupName !== "" || g.options.length > 1);
+}
+
+function getDefaultSelections(variants: ProductVariant[]): Record<string, string> {
+  const groups = getVariantGroups(variants);
+  const selections: Record<string, string> = {};
+  for (const group of groups) {
+    const def = group.options.find((o) => o.isDefault) ?? group.options[0];
+    if (def) selections[group.groupName] = def.optionValue;
+  }
+  return selections;
+}
+
+function findMatchingVariant(
+  variants: ProductVariant[],
+  selections: Record<string, string>
+): ProductVariant | undefined {
+  const active = getActiveVariants(variants);
+  for (const v of active) {
+    const group = v.optionName;
+    const sel = selections[group];
+    if (sel !== undefined && sel === v.optionValue) return v;
+  }
+  return getDefaultVariant(variants);
+}
+
+// ============================================================================
+// ProductPage
 // ============================================================================
 
 export default function ProductPage() {
@@ -58,12 +113,8 @@ export default function ProductPage() {
     productSlug: string;
   }>();
 
-  // ==========================================================================
-  // State
-  // ==========================================================================
-
-  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [selections, setSelections] = useState<Record<string, string>>({});
 
   // Gallery state
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -76,11 +127,8 @@ export default function ProductPage() {
   const touchEndX = useRef(0);
   const mainImageRef = useRef<HTMLDivElement>(null);
 
-  // Cart
   const { addItem, cart } = useCart();
   const navigate = useNavigate();
-
-  // Auth + Recently Viewed
   const { user } = useAuth();
   const customer = useQuery(api.customers.getByAuthUser, {});
   const recordRecentlyViewed = useMutation(api.collections.recordRecentlyViewed);
@@ -125,11 +173,7 @@ export default function ProductPage() {
   const relatedItems = useQuery(
     api.catalogItems.getRelatedByTags,
     product?._id
-      ? {
-          catalogItemId: product._id as any,
-          tags: product.tags ?? [],
-          limit: 4,
-        }
+      ? { catalogItemId: product._id as any, tags: product.tags ?? [], limit: 4 }
       : "skip"
   ) as CatalogItem[] | undefined;
 
@@ -150,20 +194,44 @@ export default function ProductPage() {
   const buSlug = businessUnit?.slug ?? businessUnitSlug ?? "";
   const catSlug = category?.slug ?? categorySlug ?? "";
 
-  const selectedVariant = product?.variants?.[selectedVariantIndex];
-  const hasVariants = product?.variants && product.variants.length > 0;
+  const activeVariants = useMemo(
+    () => (product?.variants ? getActiveVariants(product.variants) : []),
+    [product?.variants]
+  );
+
+  const variantGroups = useMemo(
+    () => (product?.variants ? getVariantGroups(product.variants) : []),
+    [product?.variants]
+  );
+
+  const hasVariants = variantGroups.length > 0;
+
+  // Initialize selections from default variants
+  useEffect(() => {
+    if (product?.variants && Object.keys(selections).length === 0) {
+      setSelections(getDefaultSelections(product.variants));
+    }
+  }, [product?.variants]);
+
+  const selectedVariant = useMemo(
+    () =>
+      product?.variants
+        ? findMatchingVariant(product.variants, selections) ?? getDefaultVariant(product.variants)
+        : undefined,
+    [product?.variants, selections]
+  );
 
   // Stock status for selected variant
   const stockInfo: StockInfo | undefined = selectedVariant
-    ? getStockStatus(inventoryItems, selectedVariant.name)
+    ? getStockStatus(inventoryItems, selectedVariant.optionValue)
     : undefined;
   const isOutOfStock = stockInfo?.status === "out_of_stock";
 
-  const minPrice = hasVariants
-    ? Math.min(...product.variants!.map((v) => v.price))
+  const minPrice = activeVariants.length > 0
+    ? Math.min(...activeVariants.map((v) => v.price))
     : 0;
-  const maxPrice = hasVariants
-    ? Math.max(...product.variants!.map((v) => v.price))
+  const maxPrice = activeVariants.length > 0
+    ? Math.max(...activeVariants.map((v) => v.price))
     : minPrice;
 
   const compareAtPrice = selectedVariant?.compareAtPrice;
@@ -171,20 +239,26 @@ export default function ProductPage() {
     ? calculateDiscount(selectedVariant!.price, compareAtPrice)
     : 0;
 
-  const coverSrc = product?.coverImage || product?.images?.[0];
+  // Variant image selection
+  const variantImage = selectedVariant?.image;
+  const productCover = product?.coverImage || product?.images?.[0];
+  const coverSrc = variantImage || productCover;
+
   const isItemInCart = cart.items.some(
-    (item) => item.catalogItemId === product?._id && item.variantName === selectedVariant?.name
+    (item) => item.catalogItemId === product?._id && item.variantName === selectedVariant?.optionValue
   );
 
-  // Gallery derived state
+  // Gallery images: variant image first, then product images
   const galleryImages = useMemo(() => {
     if (!product) return [];
-    const imgs = [product.coverImage, ...(product.images ?? [])].filter(
-      (img): img is string => !!img && img.length > 0
+    const imgs: string[] = [];
+    if (variantImage) imgs.push(variantImage);
+    const productImgs = [product.coverImage, ...(product.images ?? [])].filter(
+      (img): img is string => !!img && img.length > 0 && img !== variantImage
     );
-    // Deduplicate
+    imgs.push(...productImgs);
     return [...new Set(imgs)];
-  }, [product]);
+  }, [product, variantImage]);
 
   const selectedImage = galleryImages[selectedImageIndex] ?? galleryImages[0] ?? null;
 
@@ -192,7 +266,13 @@ export default function ProductPage() {
   // Handlers
   // ==========================================================================
 
-  // Gallery handlers
+  const handleSelectionChange = useCallback((groupName: string, value: string) => {
+    setSelections((prev) => ({ ...prev, [groupName]: value }));
+    setSelectedImageIndex(0);
+    setImageLoaded(false);
+    setImageError(false);
+  }, []);
+
   const handlePrevImage = useCallback(() => {
     setSelectedImageIndex((prev) =>
       prev === 0 ? galleryImages.length - 1 : prev - 1
@@ -264,6 +344,14 @@ export default function ProductPage() {
     setSelectedImageIndex(0);
   }, [productSlug]);
 
+  // Reset selections when product changes
+  useEffect(() => {
+    if (product?.variants) {
+      setSelections(getDefaultSelections(product.variants));
+      setQuantity(1);
+    }
+  }, [productSlug, product?.variants]);
+
   const handleAddToCart = useCallback(() => {
     if (!product || !selectedVariant || !businessUnit) return;
     if (!storeIsOpen) {
@@ -276,7 +364,7 @@ export default function ProductPage() {
     }
     if (isOutOfStock) {
       toast.error("Item is out of stock", {
-        description: `${product.name} (${selectedVariant.name}) is currently unavailable.`,
+        description: `${product.name} (${selectedVariant.optionValue}) is currently unavailable.`,
       });
       return;
     }
@@ -286,22 +374,16 @@ export default function ProductPage() {
       itemType: "product",
       businessUnitId: businessUnit._id,
       name: product.name,
-      variantName: selectedVariant.name,
+      variantName: selectedVariant.optionValue,
       quantity,
       unitPrice: selectedVariant.price,
       image: coverSrc,
     });
 
     toast.success("Added to cart", {
-      description: `${product.name} (${selectedVariant.name}) x${quantity}`,
+      description: `${product.name} (${selectedVariant.optionValue}) x${quantity}`,
     });
   }, [product, selectedVariant, businessUnit, quantity, addItem, coverSrc, storeIsOpen, nextOpenTime, isOutOfStock]);
-
-  // Reset variant selection when product changes
-  useEffect(() => {
-    setSelectedVariantIndex(0);
-    setQuantity(1);
-  }, [productSlug]);
 
   // Record recently viewed
   useEffect(() => {
@@ -333,9 +415,7 @@ export default function ProductPage() {
       <div className="min-h-screen bg-background">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-2">
-            {/* Image skeleton */}
             <div className="aspect-square rounded-xl bg-secondary animate-pulse" />
-            {/* Details skeleton */}
             <div className="space-y-6">
               <div className="h-4 w-32 animate-pulse rounded bg-secondary" />
               <div className="h-8 w-64 animate-pulse rounded bg-secondary" />
@@ -440,7 +520,6 @@ export default function ProductPage() {
           {/* ================================================================ */}
 
           <div className="flex flex-col-reverse gap-3 lg:flex-row lg:gap-4">
-            {/* Thumbnail strip — horizontal on mobile, vertical on desktop */}
             {galleryImages.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-auto lg:overflow-y-auto lg:pb-0 lg:min-w-[72px]">
                 {galleryImages.map((img, i) => (
@@ -466,7 +545,6 @@ export default function ProductPage() {
               </div>
             )}
 
-            {/* Main image */}
             <div className="relative flex-1">
               <div
                 ref={mainImageRef}
@@ -512,7 +590,6 @@ export default function ProductPage() {
                       />
                     </AnimatePresence>
 
-                    {/* Desktop zoom lens overlay */}
                     {showZoom && imageLoaded && (
                       <div
                         className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
@@ -531,7 +608,6 @@ export default function ProductPage() {
                   </div>
                 )}
 
-                {/* Discount Badge */}
                 {discount > 0 && (
                   <Badge
                     variant="default"
@@ -541,7 +617,6 @@ export default function ProductPage() {
                   </Badge>
                 )}
 
-                {/* Featured Badge */}
                 {prod.featured && (
                   <Badge
                     variant="secondary"
@@ -552,7 +627,6 @@ export default function ProductPage() {
                   </Badge>
                 )}
 
-                {/* Zoom hint icon */}
                 {showZoom && imageLoaded && !imageError && (
                   <div className="absolute bottom-3 right-3 rounded-full bg-background/70 p-1.5 backdrop-blur-sm pointer-events-none">
                     <ZoomIn className="h-4 w-4 text-foreground/70" />
@@ -560,17 +634,13 @@ export default function ProductPage() {
                 )}
               </div>
 
-              {/* Navigation arrows (when multiple images) */}
               {galleryImages.length > 1 && (
                 <>
                   <Button
                     variant="secondary"
                     size="icon"
                     className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePrevImage();
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
                     aria-label="Previous image"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -579,10 +649,7 @@ export default function ProductPage() {
                     variant="secondary"
                     size="icon"
                     className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNextImage();
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
                     aria-label="Next image"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -590,7 +657,6 @@ export default function ProductPage() {
                 </>
               )}
 
-              {/* Image counter */}
               {galleryImages.length > 1 && (
                 <div className="absolute bottom-3 left-3 rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm">
                   {selectedImageIndex + 1} / {galleryImages.length}
@@ -613,7 +679,6 @@ export default function ProductPage() {
                 className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
                 onClick={() => setFullscreenOpen(false)}
               >
-                {/* Close button */}
                 <Button
                   variant="secondary"
                   size="icon"
@@ -624,30 +689,24 @@ export default function ProductPage() {
                   <X className="h-5 w-5" />
                 </Button>
 
-                {/* Counter */}
                 {galleryImages.length > 1 && (
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
                     {selectedImageIndex + 1} / {galleryImages.length}
                   </div>
                 )}
 
-                {/* Previous */}
                 {galleryImages.length > 1 && (
                   <Button
                     variant="secondary"
                     size="icon"
                     className="absolute left-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePrevImage();
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
                     aria-label="Previous image"
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </Button>
                 )}
 
-                {/* Fullscreen image */}
                 <motion.img
                   key={`fs-${selectedImage}`}
                   src={selectedImage}
@@ -661,33 +720,25 @@ export default function ProductPage() {
                   draggable={false}
                 />
 
-                {/* Next */}
                 {galleryImages.length > 1 && (
                   <Button
                     variant="secondary"
                     size="icon"
                     className="absolute right-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNextImage();
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
                     aria-label="Next image"
                   >
                     <ChevronRight className="h-5 w-5" />
                   </Button>
                 )}
 
-                {/* Thumbnail strip in fullscreen */}
                 {galleryImages.length > 1 && (
                   <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 rounded-full bg-white/10 p-2 backdrop-blur-sm">
                     {galleryImages.map((img, i) => (
                       <button
                         key={`fs-thumb-${i}`}
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleThumbnailClick(i);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); handleThumbnailClick(i); }}
                         className={cn(
                           "h-10 w-10 shrink-0 overflow-hidden rounded-md border-2 transition-all",
                           selectedImageIndex === i
@@ -709,7 +760,6 @@ export default function ProductPage() {
           {/* ================================================================ */}
 
           <div className="flex flex-col">
-            {/* Tags */}
             {prod.tags && prod.tags.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-1.5">
                 {prod.tags.map((tag) => (
@@ -724,12 +774,10 @@ export default function ProductPage() {
               </div>
             )}
 
-            {/* Name */}
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
               {prod.name}
             </h1>
 
-            {/* Description */}
             {prod.description && (
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 {prod.description}
@@ -755,59 +803,50 @@ export default function ProductPage() {
               )}
             </div>
 
-            {/* Variants */}
-            {hasVariants && prod.variants!.length > 1 && (
-              <div className="mt-6 space-y-3">
-                <h3 className="text-sm font-medium">Size / Variant</h3>
-                <RadioGroup
-                  value={String(selectedVariantIndex)}
-                  onValueChange={(val) => {
-                    setSelectedVariantIndex(Number(val));
-                    setQuantity(1);
-                  }}
-                  className="flex flex-wrap gap-2"
-                >
-                  {prod.variants!.map((variant, i) => (
-                    <label
-                      key={variant.name}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm transition-all",
-                        selectedVariantIndex === i
-                          ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
-                          : "border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-secondary/50"
-                      )}
-                    >
-                      <RadioGroupItem
-                        value={String(i)}
-                        className="sr-only"
-                      />
-                      <span className="font-medium">{variant.name}</span>
-                      <span className="text-xs">
-                        {formatCurrency(variant.price)}
-                      </span>
-                      {variant.compareAtPrice && variant.compareAtPrice > variant.price && (
-                        <span className="text-[10px] text-muted-foreground line-through">
-                          {formatCurrency(variant.compareAtPrice)}
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </RadioGroup>
-              </div>
-            )}
+            {/* ============================================================ */}
+            {/* VARIANT SELECTORS — renders one dropdown per option group     */}
+            {/* ============================================================ */}
 
-            {/* Single variant label */}
-            {hasVariants && prod.variants!.length === 1 && (
+            {hasVariants && variantGroups.map((group) => (
+              <div key={group.groupName} className="mt-6 space-y-2">
+                <label className="text-sm font-medium">{group.groupName}</label>
+                <Select
+                  value={selections[group.groupName] ?? group.options[0]?.optionValue}
+                  onValueChange={(val) => handleSelectionChange(group.groupName, val)}
+                >
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {group.options.map((opt) => (
+                      <SelectItem key={opt.optionValue} value={opt.optionValue}>
+                        <span className="flex items-center gap-2">
+                          <span>{opt.optionValue}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatCurrency(opt.price)}
+                          </span>
+                          {!opt.active && (
+                            <Badge variant="outline" className="text-[10px]">Unavailable</Badge>
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+
+            {/* Single variant label — backward compatible */}
+            {!hasVariants && activeVariants.length === 1 && (
               <div className="mt-6">
                 <p className="text-sm text-muted-foreground">
-                  {prod.variants![0].name}
+                  {activeVariants[0].optionValue === "Default" ? "" : activeVariants[0].optionValue}
                 </p>
               </div>
             )}
 
             {/* Quantity + Add to Cart */}
             <div className="mt-8 space-y-4">
-              {/* Stock Status */}
               {stockInfo && stockInfo.status !== "unknown" && (
                 <StockBadge stockInfo={stockInfo} />
               )}
@@ -829,7 +868,7 @@ export default function ProductPage() {
                   <QuantitySelector
                     value={quantity}
                     onChange={setQuantity}
-                    min={1}
+                    min={selectedVariant?.minOrderQty ?? 1}
                     max={99}
                   />
                 </div>

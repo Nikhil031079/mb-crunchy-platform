@@ -76,9 +76,20 @@ const categories = defineTable({
 // ============================================================================
 
 const productVariants = v.object({
-  name: v.string(),
+  optionName: v.string(),
+  optionValue: v.string(),
   price: v.number(),
   compareAtPrice: v.optional(v.number()),
+  sku: v.optional(v.string()),
+  barcode: v.optional(v.string()),
+  stock: v.optional(v.number()),
+  costPrice: v.optional(v.number()),
+  taxPercentage: v.optional(v.number()),
+  image: v.optional(v.string()),
+  minOrderQty: v.optional(v.number()),
+  isDefault: v.boolean(),
+  sortOrder: v.number(),
+  active: v.boolean(),
 });
 
 const products = defineTable({

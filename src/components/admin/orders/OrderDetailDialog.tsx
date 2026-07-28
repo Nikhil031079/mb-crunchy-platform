@@ -2,7 +2,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { STATUS_COLORS } from "@/constants";
+import { STATUS_COLORS, SITE_NAME } from "@/constants";
+import { formatCurrency } from "@/utils";
 import { cn } from "@/lib/utils";
 import { Printer } from "lucide-react";
 
@@ -96,7 +97,7 @@ function printInvoice(order: OrderRecord) {
   .right{text-align:right}
   .footer{margin-top:24px;font-size:12px;color:#999;text-align:center}
 </style></head><body>
-<h1>MB Crunchy</h1>
+<h1>${SITE_NAME}</h1>
 <h2>Invoice</h2>
 <p><strong>Order:</strong> ${order.orderNumber}<br>
 <strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString()}<br>
@@ -104,14 +105,14 @@ function printInvoice(order: OrderRecord) {
 <strong>Customer:</strong> ${order.customerName} | ${order.customerPhone}${order.customerEmail ? ` | ${order.customerEmail}` : ""}<br>
 ${order.deliveryAddress ? `<strong>Delivery:</strong> ${order.deliveryAddress}<br>` : ""}</p>
 <table><thead><tr><th>Item</th><th>Variant</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr></thead><tbody>
-${order.items.map((i) => `<tr><td>${i.name}</td><td>${i.variantName}</td><td class="right">${i.quantity}</td><td class="right">₹${i.unitPrice.toLocaleString()}</td><td class="right">₹${i.totalPrice.toLocaleString()}</td></tr>`).join("")}
+${order.items.map((i) => `<tr><td>${i.name}</td><td>${i.variantName}</td><td class="right">${i.quantity}</td><td class="right">${formatCurrency(i.unitPrice)}</td><td class="right">${formatCurrency(i.totalPrice)}</td></tr>`).join("")}
 </tbody></table>
 <div style="text-align:right">
-<p>Subtotal: ₹${order.subtotal.toLocaleString()}</p>
-${order.discount > 0 ? `<p class="muted">Discount: -₹${order.discount.toLocaleString()}</p>` : ""}
-${order.deliveryFee > 0 ? `<p class="muted">Delivery: ₹${order.deliveryFee.toLocaleString()}</p>` : ""}
-<p>Tax: ₹${order.tax.toLocaleString()}</p>
-<p class="total">Total: ₹${order.total.toLocaleString()}</p>
+<p>Subtotal: ${formatCurrency(order.subtotal)}</p>
+${order.discount > 0 ? `<p class="muted">Discount: -${formatCurrency(order.discount)}</p>` : ""}
+${order.deliveryFee > 0 ? `<p class="muted">Delivery: ${formatCurrency(order.deliveryFee)}</p>` : ""}
+<p>Tax: ${formatCurrency(order.tax)}</p>
+<p class="total">Total: ${formatCurrency(order.total)}</p>
 </div>
 <div class="footer">Thank you for your order!</div>
 </body></html>`;
@@ -194,9 +195,9 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
                     <p className="text-xs text-muted-foreground">{item.variantName}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium tabular-nums">₹{item.totalPrice.toLocaleString()}</p>
+                    <p className="text-sm font-medium tabular-nums">{formatCurrency(item.totalPrice)}</p>
                     <p className="text-xs text-muted-foreground">
-                      {item.quantity} × ₹{item.unitPrice.toLocaleString()}
+                      {item.quantity} × {formatCurrency(item.unitPrice)}
                     </p>
                   </div>
                 </div>
@@ -210,19 +211,19 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
           <section className="space-y-2">
             <h4 className="font-medium text-foreground">Pricing</h4>
             <div className="space-y-1 rounded-md bg-muted/50 p-3">
-              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="tabular-nums">₹{order.subtotal.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="tabular-nums">{formatCurrency(order.subtotal)}</span></div>
               {order.discount > 0 && (
                 <div className="flex justify-between text-emerald-600">
                   <span>Discount {order.offerCode && <span className="text-xs">({order.offerCode})</span>}</span>
-                  <span className="tabular-nums">-₹{order.discount.toLocaleString()}</span>
+                  <span className="tabular-nums">-{formatCurrency(order.discount)}</span>
                 </div>
               )}
               {order.deliveryFee > 0 && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Delivery fee</span><span className="tabular-nums">₹{order.deliveryFee.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Delivery fee</span><span className="tabular-nums">{formatCurrency(order.deliveryFee)}</span></div>
               )}
-              <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="tabular-nums">₹{order.tax.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="tabular-nums">{formatCurrency(order.tax)}</span></div>
               <Separator />
-              <div className="flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">₹{order.total.toLocaleString()}</span></div>
+              <div className="flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{formatCurrency(order.total)}</span></div>
             </div>
           </section>
 

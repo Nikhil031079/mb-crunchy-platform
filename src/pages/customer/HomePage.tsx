@@ -11,7 +11,6 @@ import {
   Zap,
   ArrowRight,
   Sparkles,
-  Star,
   Utensils,
   Package,
   Clock,
@@ -38,7 +37,6 @@ import {
   ComboCardSkeleton,
   PartyPackCard,
   PartyPackCardSkeleton,
-  CustomerReviewCard,
   CardGridSkeleton,
 } from "@/components/customer";
 
@@ -95,48 +93,6 @@ const WHY_CHOOSE_ITEMS: WhyChooseItem[] = [
     title: "Fast Service",
     description: "Quick order processing and responsive support to serve you better.",
     color: "text-purple-600 bg-purple-50 dark:bg-purple-950/50",
-  },
-];
-
-// ============================================================================
-// Placeholder Reviews
-// ============================================================================
-
-const PLACEHOLDER_REVIEWS = [
-  {
-    rating: 5,
-    text: "Absolutely love MB Crunchy! The food from Kitchen is incredible and Mart has everything I need. The convenience of one cart is a game-changer.",
-    authorName: "Sarah Johnson",
-    location: "Lagos",
-    featured: true,
-  },
-  {
-    rating: 5,
-    text: "The party packs made my daughter's birthday so special. Everything arrived fresh and on time. Highly recommended!",
-    authorName: "Michael Okafor",
-    location: "Abuja",
-    featured: false,
-  },
-  {
-    rating: 4,
-    text: "Great quality and fast delivery. The MB Mart grocery selection has improved so much. Only wish they had more organic options.",
-    authorName: "Chioma Eze",
-    location: "Port Harcourt",
-    featured: false,
-  },
-  {
-    rating: 5,
-    text: "I've been using MB Crunchy for months now. The combo deals save me so much money. Customer service is exceptional.",
-    authorName: "Emeka Nwosu",
-    location: "Enugu",
-    featured: true,
-  },
-  {
-    rating: 4,
-    text: "Being able to order from both Kitchen and Mart in one go is brilliant. The app experience is smooth and intuitive.",
-    authorName: "Funmi Adeyemi",
-    location: "Ibadan",
-    featured: false,
   },
 ];
 
@@ -848,40 +804,7 @@ export default function HomePage() {
       </section>
 
       {/* ================================================================ */}
-      {/* 8. CUSTOMER REVIEWS                                              */}
-      {/* ================================================================ */}
-
-      <section className="py-16 sm:py-20 bg-secondary/20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10">
-            <div className="flex items-center justify-center gap-1 mb-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
-              ))}
-            </div>
-            <h2 className="text-xl font-bold sm:text-2xl">What Our Customers Say</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Real reviews from real customers
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {PLACEHOLDER_REVIEWS.map((review, index) => (
-              <CustomerReviewCard
-                key={index}
-                rating={review.rating}
-                text={review.text}
-                authorName={review.authorName}
-                location={review.location}
-                index={index}
-                featured={review.featured}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================================ */}
-      {/* 9. FINAL CTA                                                     */}
+      {/* 8. FINAL CTA                                                     */}
       {/* ================================================================ */}
 
       <section className="relative overflow-hidden bg-primary py-16 text-primary-foreground sm:py-20">

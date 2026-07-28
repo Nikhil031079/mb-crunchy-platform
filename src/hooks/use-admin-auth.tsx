@@ -43,10 +43,13 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    if (serverHasAdmins !== undefined && serverVerifySession !== undefined) {
+    // When no session token exists, the verifySession query is skipped (stays
+    // undefined forever). Only wait for queries that actually run.
+    const sessionResolved = !sessionToken || serverVerifySession !== undefined;
+    if (serverHasAdmins !== undefined && sessionResolved) {
       setIsChecking(false);
     }
-  }, [serverHasAdmins, serverVerifySession]);
+  }, [serverHasAdmins, serverVerifySession, sessionToken]);
 
   // Auto-clear invalid session
   useEffect(() => {
@@ -100,7 +103,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       admin: serverVerifySession ?? null,
       isAuthenticated: Boolean(serverVerifySession),
-      isLoading: isChecking || serverHasAdmins === undefined || serverVerifySession === undefined,
+      isLoading: isChecking || serverHasAdmins === undefined || (sessionToken !== null && serverVerifySession === undefined),
       hasAdmins: serverHasAdmins,
       login,
       logout,

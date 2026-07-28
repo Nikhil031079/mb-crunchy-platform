@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
-import { ROUTES } from "@/constants";
+import { ROUTES, SITE_NAME } from "@/constants";
 
 export default function AdminLoginPage() {
   const { login, isLoading: authLoading } = useAdminAuth();
@@ -39,7 +39,7 @@ export default function AdminLoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-foreground text-background mb-4">
             <ShieldCheck className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">MB Crunchy</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{SITE_NAME}</h1>
           <p className="text-muted-foreground mt-1">Administration Panel</p>
         </div>
 

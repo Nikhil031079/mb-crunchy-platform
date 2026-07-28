@@ -26,6 +26,7 @@ import type * as http from "../http.js";
 import type * as inAppNotifications from "../inAppNotifications.js";
 import type * as inventory from "../inventory.js";
 import type * as loyalty from "../loyalty.js";
+import type * as migrations_convertVariants from "../migrations/convertVariants.js";
 import type * as notifications from "../notifications.js";
 import type * as offers from "../offers.js";
 import type * as orders from "../orders.js";
@@ -36,6 +37,7 @@ import type * as settings from "../settings.js";
 import type * as users from "../users.js";
 import type * as utils_adminAuth from "../utils/adminAuth.js";
 import type * as utils_crypto from "../utils/crypto.js";
+import type * as utils_variantHelper from "../utils/variantHelper.js";
 
 import type {
   ApiFromModules,
@@ -62,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   inAppNotifications: typeof inAppNotifications;
   inventory: typeof inventory;
   loyalty: typeof loyalty;
+  "migrations/convertVariants": typeof migrations_convertVariants;
   notifications: typeof notifications;
   offers: typeof offers;
   orders: typeof orders;
@@ -72,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   "utils/adminAuth": typeof utils_adminAuth;
   "utils/crypto": typeof utils_crypto;
+  "utils/variantHelper": typeof utils_variantHelper;
 }>;
 
 /**

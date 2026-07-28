@@ -36,6 +36,22 @@ function fromConvex(doc: any, buMap: Map<string, string>, catMap: Map<string, st
     imageUrl: doc.coverImage ?? doc.images?.[0] ?? undefined,
     price: doc.variants?.[0]?.price ?? 0,
     compareAtPrice: doc.variants?.[0]?.compareAtPrice,
+    variants: (doc.variants ?? []).map((v: any) => ({
+      optionName: v.optionName ?? "",
+      optionValue: v.optionValue ?? v.name ?? "Default",
+      price: v.price ?? 0,
+      compareAtPrice: v.compareAtPrice?.toString() ?? "",
+      sku: v.sku ?? "",
+      barcode: v.barcode ?? "",
+      stock: v.stock?.toString() ?? "",
+      costPrice: v.costPrice?.toString() ?? "",
+      taxPercentage: v.taxPercentage?.toString() ?? "",
+      image: v.image ?? "",
+      minOrderQty: v.minOrderQty?.toString() ?? "",
+      isDefault: v.isDefault ?? false,
+      sortOrder: v.sortOrder ?? 0,
+      active: v.active ?? true,
+    })),
     sku: doc.sku,
     stockQuantity: doc.stockQuantity,
     unit: doc.unit,
@@ -50,6 +66,35 @@ function fromConvex(doc: any, buMap: Map<string, string>, catMap: Map<string, st
 }
 
 function toCreateArgs(values: ProductFormValues) {
+  const variants = values.hasVariants
+    ? values.variants
+        .filter((v) => v.optionValue.trim() !== "")
+        .map((v, i) => ({
+          optionName: v.optionName.trim(),
+          optionValue: v.optionValue.trim(),
+          price: v.price,
+          compareAtPrice: v.compareAtPrice ? Number(v.compareAtPrice) : undefined,
+          sku: v.sku || undefined,
+          barcode: v.barcode || undefined,
+          stock: v.stock ? Number(v.stock) : undefined,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+          taxPercentage: v.taxPercentage ? Number(v.taxPercentage) : undefined,
+          image: v.image || undefined,
+          minOrderQty: v.minOrderQty ? Number(v.minOrderQty) : undefined,
+          isDefault: v.isDefault,
+          sortOrder: i,
+          active: v.active,
+        }))
+    : [{
+        optionName: "",
+        optionValue: "Default",
+        price: values.price,
+        compareAtPrice: values.compareAtPrice ? Number(values.compareAtPrice) : undefined,
+        isDefault: true,
+        sortOrder: 0,
+        active: true,
+      }];
+
   return {
     businessUnitId: values.businessUnitId as any,
     categoryId: values.categoryId as any,
@@ -58,7 +103,7 @@ function toCreateArgs(values: ProductFormValues) {
     description: values.description || undefined,
     images: values.imageUrl ? [values.imageUrl] : [],
     coverImage: values.imageUrl || undefined,
-    variants: [{ name: "Default", price: values.price, compareAtPrice: values.compareAtPrice ? Number(values.compareAtPrice) : undefined }],
+    variants,
     tags: values.tags ? values.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     sku: values.sku || undefined,
     stockQuantity: values.stockQuantity ? Number(values.stockQuantity) : undefined,
@@ -73,6 +118,35 @@ function toCreateArgs(values: ProductFormValues) {
 }
 
 function toUpdateArgs(id: string, values: ProductFormValues) {
+  const variants = values.hasVariants
+    ? values.variants
+        .filter((v) => v.optionValue.trim() !== "")
+        .map((v, i) => ({
+          optionName: v.optionName.trim(),
+          optionValue: v.optionValue.trim(),
+          price: v.price,
+          compareAtPrice: v.compareAtPrice ? Number(v.compareAtPrice) : undefined,
+          sku: v.sku || undefined,
+          barcode: v.barcode || undefined,
+          stock: v.stock ? Number(v.stock) : undefined,
+          costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+          taxPercentage: v.taxPercentage ? Number(v.taxPercentage) : undefined,
+          image: v.image || undefined,
+          minOrderQty: v.minOrderQty ? Number(v.minOrderQty) : undefined,
+          isDefault: v.isDefault,
+          sortOrder: i,
+          active: v.active,
+        }))
+    : [{
+        optionName: "",
+        optionValue: "Default",
+        price: values.price,
+        compareAtPrice: values.compareAtPrice ? Number(values.compareAtPrice) : undefined,
+        isDefault: true,
+        sortOrder: 0,
+        active: true,
+      }];
+
   return {
     id: id as any,
     name: values.name,
@@ -80,7 +154,7 @@ function toUpdateArgs(id: string, values: ProductFormValues) {
     description: values.description || undefined,
     images: values.imageUrl ? [values.imageUrl] : [],
     coverImage: values.imageUrl || undefined,
-    variants: [{ name: "Default", price: values.price, compareAtPrice: values.compareAtPrice ? Number(values.compareAtPrice) : undefined }],
+    variants,
     tags: values.tags ? values.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     sku: values.sku || undefined,
     stockQuantity: values.stockQuantity ? Number(values.stockQuantity) : undefined,

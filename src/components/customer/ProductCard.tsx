@@ -75,7 +75,7 @@ export const ProductCard = memo(function ProductCard({
   const isOutOfStock = stockInfo?.status === "out_of_stock";
 
   // Check if this product is in the cart and get its quantity
-  const defaultVariantName = hasVariants ? product.variants![0].name : "Default";
+  const defaultVariantName = hasVariants ? product.variants![0].optionValue : "Default";
   const cartItem = cart.items.find(
     (item) => item.catalogItemId === product._id && item.variantName === defaultVariantName
   );

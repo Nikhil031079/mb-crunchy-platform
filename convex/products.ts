@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { api } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
+import { firstActivePrice } from "./utils/variantHelper";
 
 // ============================================================================
 // Helpers
@@ -111,9 +112,20 @@ export const create = mutation({
     thumbnail: v.optional(v.string()),
     variants: v.array(
       v.object({
-        name: v.string(),
+        optionName: v.string(),
+        optionValue: v.string(),
         price: v.number(),
         compareAtPrice: v.optional(v.number()),
+        sku: v.optional(v.string()),
+        barcode: v.optional(v.string()),
+        stock: v.optional(v.number()),
+        costPrice: v.optional(v.number()),
+        taxPercentage: v.optional(v.number()),
+        image: v.optional(v.string()),
+        minOrderQty: v.optional(v.number()),
+        isDefault: v.boolean(),
+        sortOrder: v.number(),
+        active: v.boolean(),
       })
     ),
     tags: v.array(v.string()),
@@ -142,8 +154,8 @@ export const create = mutation({
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
-    const defaultPrice = insertArgs.variants[0]?.price ?? 0;
-    const defaultCompare = insertArgs.variants[0]?.compareAtPrice;
+    const { price: defaultPrice, compareAtPrice: defaultCompare } =
+      firstActivePrice(args.variants);
 
     // Insert product
     const productId = await ctx.db.insert("products", {
@@ -174,14 +186,15 @@ export const create = mutation({
       canonicalUrl: args.canonicalUrl,
     });
 
-    // Auto-create inventory records for each variant
-    for (const variant of args.variants) {
-      const stockQty = args.stockQuantity ?? 0;
+    // Auto-create inventory records for each active variant
+    const activeVariants = args.variants.filter((v) => v.active);
+    for (const variant of activeVariants) {
+      const stockQty = variant.stock ?? args.stockQuantity ?? 0;
       await ctx.runMutation(api.inventory.upsert, {
         catalogItemId: catalogItemId as any,
         businessUnitId: args.businessUnitId,
-        variantName: variant.name,
-        sku: args.sku,
+        variantName: variant.optionValue,
+        sku: variant.sku ?? args.sku,
         stockQuantity: stockQty,
         available: stockQty > 0 && args.available,
       });
@@ -203,9 +216,20 @@ export const update = mutation({
     variants: v.optional(
       v.array(
         v.object({
-          name: v.string(),
+          optionName: v.string(),
+          optionValue: v.string(),
           price: v.number(),
           compareAtPrice: v.optional(v.number()),
+          sku: v.optional(v.string()),
+          barcode: v.optional(v.string()),
+          stock: v.optional(v.number()),
+          costPrice: v.optional(v.number()),
+          taxPercentage: v.optional(v.number()),
+          image: v.optional(v.string()),
+          minOrderQty: v.optional(v.number()),
+          isDefault: v.boolean(),
+          sortOrder: v.number(),
+          active: v.boolean(),
         })
       )
     ),
@@ -243,8 +267,8 @@ export const update = mutation({
     // Sync to catalog
     const product = await ctx.db.get(id);
     if (product) {
-      const defaultPrice = product.variants[0]?.price ?? 0;
-      const defaultCompare = product.variants[0]?.compareAtPrice;
+      const { price: defaultPrice, compareAtPrice: defaultCompare } =
+        firstActivePrice(product.variants);
 
       await ctx.runMutation(api.catalogItems.sync, {
         sourceId: id,
@@ -276,13 +300,14 @@ export const update = mutation({
           .first();
 
         if (catalogItem) {
-          const stockQty = fields.stockQuantity ?? product.stockQuantity ?? 0;
-          for (const variant of product.variants) {
+          const activeVariants = product.variants.filter((v) => v.active);
+          for (const variant of activeVariants) {
+            const stockQty = variant.stock ?? fields.stockQuantity ?? product.stockQuantity ?? 0;
             await ctx.runMutation(api.inventory.upsert, {
               catalogItemId: catalogItem._id,
               businessUnitId: product.businessUnitId,
-              variantName: variant.name,
-              sku: fields.sku ?? product.sku,
+              variantName: variant.optionValue,
+              sku: variant.sku ?? fields.sku ?? product.sku,
               stockQuantity: stockQty,
               available: stockQty > 0 && (fields.available ?? product.available),
             });
@@ -340,8 +365,8 @@ export const restore = mutation({
     // Restore in catalog
     const product = await ctx.db.get(args.id);
     if (product) {
-      const defaultPrice = product.variants[0]?.price ?? 0;
-      const defaultCompare = product.variants[0]?.compareAtPrice;
+      const { price: defaultPrice, compareAtPrice: defaultCompare } =
+        firstActivePrice(product.variants);
 
       await ctx.runMutation(api.catalogItems.sync, {
         sourceId: args.id,
