@@ -12,7 +12,7 @@ export function AdminLayout() {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const location = useLocation();
   const routeContext = getAdminRouteContext(location.pathname);
-  const { isAuthenticated, isLoading, admin, logout } = useAdminAuth();
+  const { isAuthenticated, isLoading, hasAdmins, admin, logout } = useAdminAuth();
 
   if (isLoading) {
     return (
@@ -23,6 +23,9 @@ export function AdminLayout() {
   }
 
   if (!isAuthenticated) {
+    if (hasAdmins === false) {
+      return <Navigate to={ROUTES.ADMIN.SETUP} replace />;
+    }
     return <Navigate to={ROUTES.ADMIN.LOGIN} replace />;
   }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate } from "react-router";
 import { Loader2, Eye, EyeOff, ShieldCheck, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +9,17 @@ import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { ROUTES, SITE_NAME } from "@/constants";
 
 export default function AdminLoginPage() {
-  const { login, isLoading: authLoading } = useAdminAuth();
+  const { login, isLoading: authLoading, hasAdmins } = useAdminAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!authLoading && hasAdmins === false) {
+    return <Navigate to={ROUTES.ADMIN.SETUP} replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
