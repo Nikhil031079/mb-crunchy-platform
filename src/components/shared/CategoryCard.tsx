@@ -1,11 +1,95 @@
 import { useState, memo } from "react";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
-import { FolderOpen } from "lucide-react";
+import {
+  Apple,
+  Beef,
+  Coffee,
+  IceCreamBowl,
+  Milk,
+  Wheat,
+  Salad,
+  Cookie,
+  Soup,
+  Drumstick,
+  Fish,
+  Cherry,
+  LeafyGreen,
+  Bean,
+  Egg,
+  Utensils,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 import type { Category } from "@/types";
+
+const CATEGORY_GRADIENTS = [
+  "from-emerald-500 to-teal-600",
+  "from-orange-400 to-red-500",
+  "from-blue-400 to-indigo-500",
+  "from-purple-400 to-pink-500",
+  "from-amber-400 to-orange-500",
+  "from-cyan-400 to-blue-500",
+  "from-rose-400 to-red-500",
+  "from-lime-400 to-green-500",
+  "from-fuchsia-400 to-purple-500",
+  "from-sky-400 to-blue-500",
+];
+
+const CATEGORY_ICONS = [
+  Apple,
+  Beef,
+  Coffee,
+  IceCreamBowl,
+  Milk,
+  Wheat,
+  Salad,
+  Cookie,
+  Soup,
+  Drumstick,
+  Fish,
+  Cherry,
+  LeafyGreen,
+  Bean,
+  Egg,
+  Utensils,
+];
+
+function getCategoryGradient(name: string, index: number): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return CATEGORY_GRADIENTS[Math.abs(hash) % CATEGORY_GRADIENTS.length];
+}
+
+function getCategoryIcon(name: string, index: number) {
+  const lower = name.toLowerCase();
+  if (lower.includes("fruit") || lower.includes("apple") || lower.includes("banana") || lower.includes("berry")) return Apple;
+  if (lower.includes("meat") || lower.includes("beef") || lower.includes("chicken") || lower.includes("mutton")) return Beef;
+  if (lower.includes("beverage") || lower.includes("drink") || lower.includes("juice") || lower.includes("coffee") || lower.includes("tea")) return Coffee;
+  if (lower.includes("ice") || lower.includes("cream") || lower.includes("frozen") || lower.includes("dessert")) return IceCreamBowl;
+  if (lower.includes("milk") || lower.includes("dairy") || lower.includes("paneer") || lower.includes("cheese")) return Milk;
+  if (lower.includes("grain") || lower.includes("rice") || lower.includes("wheat") || lower.includes("atta") || lower.includes("dal")) return Wheat;
+  if (lower.includes("salad") || lower.includes("green") || lower.includes("leafy") || lower.includes("veggie")) return Salad;
+  if (lower.includes("snack") || lower.includes("cookie") || lower.includes("biscuit") || lower.includes("namkeen")) return Cookie;
+  if (lower.includes("soup") || lower.includes("ready") || lower.includes("instant")) return Soup;
+  if (lower.includes("poultry") || lower.includes("egg") || lower.includes("non-veg")) return Drumstick;
+  if (lower.includes("sea") || lower.includes("fish") || lower.includes("prawn")) return Fish;
+  if (lower.includes("sweet") || lower.includes("sugar") || lower.includes("candy")) return Cherry;
+  if (lower.includes("organic") || lower.includes("natural")) return LeafyGreen;
+  if (lower.includes("pulse") || lower.includes("spice") || lower.includes("masala")) return Bean;
+  return CATEGORY_ICONS[Math.abs(hashString(name)) % CATEGORY_ICONS.length];
+}
+
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return hash;
+}
 
 interface CategoryCardProps {
   category: Category;
@@ -24,6 +108,9 @@ export const CategoryCard = memo(function CategoryCard({
   const [imageLoaded, setImageLoaded] = useState(false);
   const hasImage = (category.coverImage || category.images?.[0]) && !imageError;
 
+  const gradient = getCategoryGradient(category.name, index);
+  const Icon = getCategoryIcon(category.name, index);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -37,7 +124,7 @@ export const CategoryCard = memo(function CategoryCard({
         <div
           className={cn(
             "relative aspect-[4/3] overflow-hidden rounded-2xl",
-            "border border-border/40 bg-secondary/30",
+            "border border-border/40",
             "transition-all duration-300",
             "group-hover:shadow-lg group-hover:-translate-y-0.5",
             "group-hover:border-accent/30"
@@ -47,7 +134,7 @@ export const CategoryCard = memo(function CategoryCard({
           {hasImage ? (
             <>
               {!imageLoaded && (
-                <div className="absolute inset-0 animate-pulse bg-secondary" />
+                <div className={cn("absolute inset-0 animate-pulse bg-gradient-to-br", gradient)} />
               )}
               <img
                 src={category.coverImage || category.images![0]}
@@ -63,8 +150,12 @@ export const CategoryCard = memo(function CategoryCard({
               />
             </>
           ) : (
-            <div className="flex h-full items-center justify-center bg-gradient-to-br from-secondary via-secondary/80 to-secondary/60">
-              <FolderOpen className="h-12 w-12 text-muted-foreground/20 transition-transform duration-300 group-hover:scale-110" />
+            <div className={cn(
+              "flex h-full items-center justify-center bg-gradient-to-br",
+              gradient,
+              "transition-transform duration-300 group-hover:scale-105"
+            )}>
+              <Icon className="h-12 w-12 text-white/80 drop-shadow-lg transition-transform duration-300 group-hover:scale-110" />
             </div>
           )}
 

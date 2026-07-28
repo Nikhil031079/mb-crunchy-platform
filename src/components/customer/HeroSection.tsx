@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import { Link } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Utensils, ShoppingBag, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { SITE_NAME } from "@/constants";
+import { SITE_NAME, ROUTES } from "@/constants";
 
 import type { Offer, BusinessUnit } from "@/types";
 
@@ -218,7 +218,7 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
           />
         </>
       ) : (
-        <div className="h-full w-full bg-gradient-to-br from-primary/80 via-primary to-primary/60" />
+        <div className="h-full w-full bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600" />
       )}
 
       {/* Overlay */}
@@ -354,7 +354,7 @@ export const HeroSection = memo(function HeroSection({
       className={cn(
         "relative w-full overflow-hidden",
         heightClass,
-        !hasBanners && "bg-gradient-to-br from-primary/90 via-primary to-primary/70"
+        !hasBanners && "bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600"
       )}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
@@ -417,7 +417,7 @@ export const HeroSection = memo(function HeroSection({
       ) : (
         /* Default Hero — decorative background */
         <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/90 via-primary to-primary/70" />
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600" />
           {/* Decorative circles */}
           <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/5" />
           <div className="absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-white/5" />

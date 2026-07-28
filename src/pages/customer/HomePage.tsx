@@ -13,15 +13,15 @@ import {
   Sparkles,
   Utensils,
   Package,
-  Clock,
   ChevronRight,
   Percent,
+  LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
-import { SITE_NAME, SITE_DESCRIPTION } from "@/constants";
+import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
@@ -134,6 +134,12 @@ function CategoriesSection({
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between mb-6">
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <LayoutGrid className="h-4 w-4 text-accent" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-accent">
+                Categories
+              </span>
+            </div>
             <h2 className="text-xl font-bold sm:text-2xl">Browse by Category</h2>
             <p className="mt-1 text-sm text-muted-foreground">Find exactly what you need</p>
           </div>
@@ -652,9 +658,9 @@ export default function HomePage() {
         </div>
       ) : (
         <HeroSection
-          title={`Order Delicious Food & Essentials`}
-          subtitle={`Fresh from the kitchen, straight to your door`}
-          description={SITE_DESCRIPTION}
+          title="Fresh Food, Organic Groceries & Everyday Essentials"
+          subtitle="Delicious snacks, refreshing beverages, natural groceries and daily essentials delivered to your doorstep."
+          description="One destination for Frozen Foods, Organic Products, Fresh Beverages and Everyday Essentials."
           badge="Your Favourite Stores, One Cart"
           size="lg"
           banners={heroBanners}
@@ -663,19 +669,20 @@ export default function HomePage() {
             !heroBanners
               ? [
                   {
-                    label: `Order from ${activeBusinessUnits[0]?.name ?? "Kitchen"}`,
+                    label: "Explore Kitchen",
                     href: `/${activeBusinessUnits[0]?.slug ?? "mb-kitchen"}`,
                     variant: "default",
                   },
-                  ...(activeBusinessUnits.length > 1
-                    ? [
-                        {
-                          label: `Order from ${activeBusinessUnits[1].name}`,
-                          href: `/${activeBusinessUnits[1].slug}`,
-                          variant: "outline" as const,
-                        },
-                      ]
-                    : []),
+                  {
+                    label: "Shop Mart",
+                    href: `/${activeBusinessUnits[1]?.slug ?? "mb-mart"}`,
+                    variant: "outline" as const,
+                  },
+                  {
+                    label: "Categories",
+                    href: ROUTES.HOME,
+                    variant: "secondary" as const,
+                  },
                 ]
               : undefined
           }

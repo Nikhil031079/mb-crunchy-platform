@@ -76,16 +76,16 @@ export function CustomerNavbar({
           {/* Logo */}
           <Link
             to={ROUTES.HOME}
-            className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
+            className="flex items-center gap-3 transition-opacity hover:opacity-80"
           >
             {logo ? (
-              <img src={logo} alt={siteName} className="h-9 w-9 rounded-lg object-contain" />
+              <img src={logo} alt={siteName} className="h-12 w-12 rounded-xl object-contain" />
             ) : (
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <ChefHat className="h-5 w-5" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                <ChefHat className="h-6 w-6" />
               </div>
             )}
-            <span className="text-lg font-bold tracking-tight">
+            <span className="text-xl font-bold tracking-tight">
               {siteName}
             </span>
           </Link>
