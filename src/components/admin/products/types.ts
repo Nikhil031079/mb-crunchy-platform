@@ -60,9 +60,11 @@ export interface Product {
   slug: string;
   description?: string;
   imageUrl?: string;
+  images: string[];
   price: number;
   compareAtPrice?: number;
   variants: AdminVariant[];
+  stockTotal?: number;
   sku?: string;
   stockQuantity?: number;
   unit?: ProductUnit;
@@ -81,7 +83,7 @@ export interface ProductFormValues {
   name: string;
   slug: string;
   description: string;
-  imageUrl: string;
+  images: string[];
   price: number;
   compareAtPrice: string;
   variants: AdminVariant[];
@@ -98,7 +100,7 @@ export interface ProductFormValues {
   displayOrder: number;
 }
 
-export type ProductSortKey = "name" | "slug" | "businessUnitName" | "categoryName" | "status" | "displayOrder" | "price";
+export type ProductSortKey = "name" | "slug" | "businessUnitName" | "categoryName" | "status" | "displayOrder" | "price" | "stockTotal";
 export type SortDirection = "asc" | "desc";
 
 export interface ProductFilters {

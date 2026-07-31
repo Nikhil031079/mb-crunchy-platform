@@ -59,7 +59,7 @@ export function CustomerLayout() {
         <Outlet />
       </main>
       <div className="pb-14 lg:pb-0">
-        <CustomerFooter />
+        <CustomerFooter businessUnits={businessUnits} settingsMap={settingsMap} />
       </div>
       <MobileBottomBar />
     </div>

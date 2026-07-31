@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, User, ChefHat } from "lucide-react";
+import { ShoppingCart, User, ChefHat, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,14 @@ export function MobileNav({
               <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Quick Links
               </p>
+              <Link
+                to={ROUTES.SEARCH}
+                onClick={onClose}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Search className="h-4 w-4" />
+                Search
+              </Link>
               <Link
                 to={ROUTES.CART}
                 onClick={onClose}

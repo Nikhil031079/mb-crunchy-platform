@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { Home, ShoppingCart, User } from "lucide-react";
+import { Home, ShoppingCart, User, Search } from "lucide-react";
 
 import { ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ export function MobileBottomBar() {
     badge?: number;
   }> = [
     { icon: Home, label: "Home", to: ROUTES.HOME },
+    { icon: Search, label: "Search", to: ROUTES.SEARCH },
     {
       icon: ShoppingCart,
       label: "Cart",
@@ -38,6 +39,7 @@ export function MobileBottomBar() {
 
   const isActive = (to: string) => {
     if (to === ROUTES.HOME) return path === "/";
+    if (to === ROUTES.SEARCH) return path.startsWith("/search");
     return path.startsWith(to);
   };
 

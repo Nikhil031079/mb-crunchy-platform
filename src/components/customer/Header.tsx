@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Link, useLocation } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, User, Menu, X, ChefHat } from "lucide-react";
+import { ShoppingCart, User, Menu, X, ChefHat, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +95,13 @@ export function Header({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5">
+          {/* Search */}
+          <Link to={ROUTES.SEARCH} aria-label="Search products">
+            <Button variant="ghost" size="icon">
+              <Search className="h-5 w-5" />
+            </Button>
+          </Link>
+
           {/* Cart */}
           <Link to={ROUTES.CART} aria-label="Shopping cart">
             <Button variant="ghost" size="icon" className="relative">

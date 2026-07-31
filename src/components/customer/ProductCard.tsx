@@ -1,20 +1,20 @@
 import { useState, useCallback, memo } from "react";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
-import { ShoppingCart, Heart, ImageOff, Star, Minus, Plus } from "lucide-react";
+import { Heart, ImageOff, Star, Minus, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatCurrency, calculateDiscount } from "@/utils";
 import { useCart } from "@/stores/cart";
-import { StockBadge } from "./StockBadge";
+import { useAuth } from "@/hooks/use-auth";
 
 import type { Product, CatalogItem } from "@/types";
 import type { StockInfo } from "./StockBadge";
 
-type CardProduct = Pick<
+export type CardProduct = Pick<
   Product,
   "_id" | "name" | "slug" | "coverImage" | "images" | "variants" | "tags"
 > &
@@ -33,6 +33,8 @@ interface ProductCardProps {
   className?: string;
   compact?: boolean;
   stockInfo?: StockInfo;
+  /** Optional rating summary (average + count) */
+  rating?: { average: number; count: number };
 }
 
 export const ProductCard = memo(function ProductCard({
@@ -47,10 +49,13 @@ export const ProductCard = memo(function ProductCard({
   className,
   compact = false,
   stockInfo,
+  rating,
 }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
+  const [hoverImageError, setHoverImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const { cart, addItem, updateQuantity } = useCart();
+  const { cart, updateQuantity } = useCart();
+  const { isAuthenticated } = useAuth();
 
   const hasVariants = "variants" in product && product.variants && product.variants.length > 0;
   const minPrice = hasVariants
@@ -70,9 +75,22 @@ export const ProductCard = memo(function ProductCard({
     : undefined;
 
   const discount = compareAtPrice ? calculateDiscount(minPrice, compareAtPrice) : 0;
-  const coverSrc = product.coverImage || ('images' in product ? product.images?.[0] : undefined);
+  const productImages = "images" in product && Array.isArray(product.images) ? product.images : [];
+  const coverSrc = product.coverImage || productImages[0];
+  const hoverSrc = productImages.length > 1 ? productImages[1] : undefined;
+
+  // Badge detection via tag conventions ("best-seller", "new-arrival", …)
+  const tags = "tags" in product ? (product.tags ?? []) : [];
+  const normalizedTags = tags.map((t) => t.toLowerCase().replace(/[\s_]+/g, "-"));
+  const isBestSeller = normalizedTags.some((t) =>
+    ["best-seller", "bestseller", "bestsellers", "top-rated", "popular"].includes(t)
+  );
+  const isNewArrival = normalizedTags.some((t) =>
+    ["new", "new-arrival", "newly-added", "just-in"].includes(t)
+  );
 
   const isOutOfStock = stockInfo?.status === "out_of_stock";
+  const isLowStock = stockInfo?.status === "low_stock";
 
   // Check if this product is in the cart and get its quantity
   const defaultVariantName = hasVariants ? product.variants![0].optionValue : "Default";
@@ -115,8 +133,20 @@ export const ProductCard = memo(function ProductCard({
   const handleFavorite = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    onFavorite?.(product);
-  }, [onFavorite, product]);
+    if (onFavorite) {
+      onFavorite(product);
+      return;
+    }
+    if (!isAuthenticated) {
+      toast.info("Sign in to save favourites", {
+        description: "Create a free account to save your favourite items.",
+      });
+      return;
+    }
+    toast.info("Favourites coming soon", {
+      description: "Favourite syncing will be available in the next update.",
+    });
+  }, [onFavorite, product, isAuthenticated]);
 
   const productUrl = businessUnitSlug
     ? categorySlug
@@ -127,9 +157,9 @@ export const ProductCard = memo(function ProductCard({
   const inner = (
     <Card
       className={cn(
-        "relative overflow-hidden transition-all duration-300",
+        "group relative overflow-hidden transition-all duration-300",
         "border border-border/50 hover:border-border",
-        "hover:shadow-md",
+        "hover:shadow-lg hover:-translate-y-0.5",
         isOutOfStock && "opacity-70",
         className
       )}
@@ -147,12 +177,23 @@ export const ProductCard = memo(function ProductCard({
                   className={cn(
                     "h-full w-full object-cover transition-all duration-500",
                     "group-hover:scale-105",
+                    hoverSrc && "group-hover:opacity-0",
                     imageLoaded ? "opacity-100" : "opacity-0"
                   )}
                   loading="lazy"
                   onLoad={() => setImageLoaded(true)}
                   onError={() => setImageError(true)}
                 />
+                {hoverSrc && !hoverImageError && (
+                  <img
+                    src={hoverSrc}
+                    alt=""
+                    aria-hidden
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover opacity-0 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100"
+                    onError={() => setHoverImageError(true)}
+                  />
+                )}
               </>
             ) : (
               <div className="flex h-full items-center justify-center">
@@ -160,15 +201,34 @@ export const ProductCard = memo(function ProductCard({
               </div>
             )}
 
-            {/* Discount Badge */}
-            {discount > 0 && (
-              <div className="absolute left-0 top-0">
-                <Badge
-                  variant="default"
-                  className="rounded-none rounded-br-lg bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 h-auto"
-                >
-                  {discount}% OFF
-                </Badge>
+            {/* Badge stack — top-left */}
+            {(discount > 0 || isBestSeller || isNewArrival) && (
+              <div className="absolute left-0 top-0 z-10 flex flex-col items-start gap-1">
+                {discount > 0 && (
+                  <Badge
+                    variant="default"
+                    className="rounded-none rounded-br-lg bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 h-auto"
+                  >
+                    {discount}% OFF
+                  </Badge>
+                )}
+                {isBestSeller && (
+                  <Badge
+                    variant="default"
+                    className="rounded-none rounded-br-lg bg-orange-600 text-white text-[10px] font-bold px-2 py-1 h-auto gap-0.5"
+                  >
+                    <Star className="h-2.5 w-2.5 fill-current" />
+                    Best Seller
+                  </Badge>
+                )}
+                {isNewArrival && (
+                  <Badge
+                    variant="default"
+                    className="rounded-none rounded-br-lg bg-sky-600 text-white text-[10px] font-bold px-2 py-1 h-auto"
+                  >
+                    New Arrival
+                  </Badge>
+                )}
               </div>
             )}
 
@@ -197,20 +257,59 @@ export const ProductCard = memo(function ProductCard({
               </div>
             )}
 
-            {/* Favorite Button */}
-            {onFavorite && (
-              <button
-                onClick={handleFavorite}
-                className="absolute right-2 top-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm transition-colors hover:bg-background/90"
-                aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
+            {/* Favorite Button — placeholder for real favourites */}
+            <button
+              onClick={handleFavorite}
+              className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm transition-all hover:bg-background hover:scale-110"
+              aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
+            >
+              <Heart
+                className={cn(
+                  "h-3.5 w-3.5 transition-colors",
+                  isFavorited ? "fill-red-500 text-red-500" : "text-muted-foreground"
+                )}
+              />
+            </button>
+
+            {/* Quick Add — floating circular button (Blinkit-style stepper) */}
+            {onAddToCart && !isOutOfStock && (
+              <div
+                className={cn(
+                  "absolute bottom-2 right-2 z-10",
+                  cartQuantity === 0 &&
+                    "lg:opacity-0 lg:transition-opacity lg:duration-200 lg:group-hover:opacity-100"
+                )}
               >
-                <Heart
-                  className={cn(
-                    "h-3.5 w-3.5 transition-colors",
-                    isFavorited ? "fill-red-500 text-red-500" : "text-muted-foreground"
-                  )}
-                />
-              </button>
+                {cartQuantity === 0 ? (
+                  <button
+                    onClick={handleAdd}
+                    aria-label={`Add ${product.name} to cart`}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md transition-all duration-200 hover:bg-emerald-700 active:scale-95"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <div className="flex h-8 items-center rounded-full bg-emerald-600 text-white shadow-md">
+                    <button
+                      onClick={handleDecrement}
+                      aria-label={`Decrease quantity of ${product.name}`}
+                      className="flex h-full w-7 items-center justify-center rounded-l-full transition-colors hover:bg-emerald-700"
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="min-w-[1.5rem] text-center text-xs font-bold tabular-nums">
+                      {cartQuantity}
+                    </span>
+                    <button
+                      onClick={handleIncrement}
+                      aria-label={`Increase quantity of ${product.name}`}
+                      className="flex h-full w-7 items-center justify-center rounded-r-full transition-colors hover:bg-emerald-700"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -252,98 +351,49 @@ export const ProductCard = memo(function ProductCard({
             )}
 
             {/* Price + Rating row */}
-            <div className="mt-2 flex items-end justify-between">
-              <div className="flex items-baseline gap-1">
-                <span className="text-sm font-bold">
+            <div className="mt-2 flex items-end justify-between gap-2">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[15px] font-bold tracking-tight text-foreground">
                   {formatCurrency(minPrice)}
                 </span>
                 {maxPrice > minPrice && (
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[11px] text-muted-foreground">
                     – {formatCurrency(maxPrice)}
                   </span>
                 )}
                 {compareAtPrice && compareAtPrice > minPrice && (
-                  <span className="text-[10px] text-muted-foreground line-through">
+                  <span className="text-[11px] text-muted-foreground line-through">
                     {formatCurrency(compareAtPrice)}
                   </span>
                 )}
               </div>
 
-              {/* Rating placeholder */}
-              {!("featured" in product) && (
-                <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                  <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
-                  <span>New</span>
-                </div>
-              )}
+              {/* Rating — real summary when available, otherwise placeholder */}
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                {rating && rating.count > 0 ? (
+                  <>
+                    <span className="font-semibold text-foreground">{rating.average.toFixed(1)}</span>
+                    <span className="text-muted-foreground/70">({rating.count})</span>
+                  </>
+                ) : (
+                  <span className="font-medium text-amber-600 dark:text-amber-400">New</span>
+                )}
+              </div>
             </div>
+
+            {/* Low stock hint */}
+            {isLowStock && !compact && (
+              <p className="mt-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                Only {stockInfo!.quantity} left
+              </p>
+            )}
 
             {/* Variant hint */}
             {hasVariants && product.variants!.length > 1 && (
               <p className="mt-1 text-[10px] text-muted-foreground">
                 {product.variants!.length} options available
               </p>
-            )}
-
-            {/* Add to Cart / Quantity Selector — Blinkit-style */}
-            {onAddToCart && !isOutOfStock && (
-              <div className="mt-2.5">
-                {cartQuantity === 0 ? (
-                  /* ADD Button */
-                  <button
-                    onClick={handleAdd}
-                    className={cn(
-                      "flex w-full items-center justify-center gap-1.5 rounded-lg",
-                      "border-2 border-emerald-600 bg-white py-1.5 text-sm font-semibold",
-                      "text-emerald-600 transition-all duration-200",
-                      "hover:bg-emerald-50 hover:shadow-sm",
-                      "active:scale-[0.98]",
-                      "dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-700 dark:hover:bg-emerald-900"
-                    )}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    ADD
-                  </button>
-                ) : (
-                  /* [-] Qty [+] Selector */
-                  <div
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-lg",
-                      "border-2 border-emerald-600 bg-emerald-600",
-                      "text-white font-semibold",
-                      "transition-all duration-200",
-                      "dark:bg-emerald-700 dark:border-emerald-700"
-                    )}
-                  >
-                    <button
-                      onClick={handleDecrement}
-                      className="flex h-full w-10 items-center justify-center transition-colors hover:bg-emerald-700 dark:hover:bg-emerald-600 rounded-l-lg"
-                      aria-label={`Decrease quantity of ${product.name}`}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </button>
-                    <span className="min-w-[2rem] text-center text-sm tabular-nums">
-                      {cartQuantity}
-                    </span>
-                    <button
-                      onClick={handleIncrement}
-                      className="flex h-full w-10 items-center justify-center transition-colors hover:bg-emerald-700 dark:hover:bg-emerald-600 rounded-r-lg"
-                      aria-label={`Increase quantity of ${product.name}`}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Out of stock CTA */}
-            {isOutOfStock && (
-              <div className="mt-2.5">
-                <div className="flex w-full items-center justify-center rounded-lg border-2 border-border/60 bg-secondary/50 py-1.5 text-xs font-medium text-muted-foreground">
-                  Out of Stock
-                </div>
-              </div>
             )}
           </CardContent>
         </Card>
@@ -372,7 +422,9 @@ export const ProductCard = memo(function ProductCard({
 export function ProductCardSkeleton({ compact = false }: { compact?: boolean }) {
   return (
     <Card className="overflow-hidden border border-border/50">
-      <div className="aspect-[4/3] animate-pulse bg-secondary/50" />
+      <div className="relative aspect-[4/3] animate-pulse bg-secondary/50">
+        <div className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-secondary" />
+      </div>
       <CardContent className={cn("p-3", compact ? "p-2.5" : "p-3")}>
         <div className="flex items-start gap-1.5">
           <div className="mt-0.5 h-4 w-4 shrink-0 rounded-sm bg-secondary animate-pulse" />
@@ -385,7 +437,6 @@ export function ProductCardSkeleton({ compact = false }: { compact?: boolean }) 
           <div className="h-4 w-16 animate-pulse rounded bg-secondary" />
           <div className="h-3 w-8 animate-pulse rounded bg-secondary" />
         </div>
-        <div className="mt-2.5 h-8 w-full animate-pulse rounded-lg bg-secondary" />
       </CardContent>
     </Card>
   );

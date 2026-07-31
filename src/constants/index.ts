@@ -12,6 +12,7 @@ export const SITE_DESCRIPTION = "Your premium destination for quality products a
 
 export const ROUTES = {
   HOME: "/",
+  SEARCH: "/search",
   AUTH: "/auth",
   CART: "/cart",
   CHECKOUT: "/checkout",

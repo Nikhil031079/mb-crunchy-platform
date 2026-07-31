@@ -15,6 +15,13 @@ import {
   ZoomIn,
   Sparkles,
   TrendingUp,
+  Bike,
+  Store,
+  RotateCcw,
+  ShieldCheck,
+  PackagePlus,
+  Leaf,
+  BadgeCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,7 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Product, ProductVariant, BusinessUnitSettings, InventoryItem, CatalogItem } from "@/types";
+import type { BusinessUnit, Category, Product, ProductVariant, BusinessUnitSettings, InventoryItem, CatalogItem, ReviewStats } from "@/types";
 import { StockBadge, getStockStatus } from "@/components/customer/StockBadge";
 import type { StockInfo } from "@/components/customer/StockBadge";
 
@@ -105,6 +112,19 @@ function findMatchingVariant(
 // ============================================================================
 // ProductPage
 // ============================================================================
+
+function DetailFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-secondary/20 px-3 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-0.5 truncate text-xs font-medium" title={value}>
+        {value}
+      </p>
+    </div>
+  );
+}
 
 export default function ProductPage() {
   const { businessUnitSlug, categorySlug, productSlug } = useParams<{
@@ -183,6 +203,25 @@ export default function ProductPage() {
       ? { businessUnitId: businessUnit._id as any, limit: 4 }
       : "skip"
   ) as CatalogItem[] | undefined;
+
+  const reviewStats = useQuery(
+    api.reviews.getStats,
+    product?._id
+      ? { catalogItemId: product._id as any }
+      : "skip"
+  ) as ReviewStats | undefined;
+
+  const recommendationIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const item of relatedItems ?? []) ids.push(item._id);
+    for (const item of trendingItems ?? []) ids.push(item._id);
+    return Array.from(new Set(ids)) as Id<"catalogItems">[];
+  }, [relatedItems, trendingItems]);
+
+  const recRatingsMap = useQuery(
+    api.reviews.getAverageByCatalogItemIds,
+    recommendationIds.length > 0 ? { ids: recommendationIds } : "skip"
+  ) as Record<string, { average: number; count: number }> | undefined;
 
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
@@ -470,6 +509,22 @@ export default function ProductPage() {
 
   const bu = businessUnit!;
   const prod = product!;
+
+  // Badge detection via tag conventions
+  const normalizedTags = (prod.tags ?? []).map((t) => t.toLowerCase().replace(/[\s_]+/g, "-"));
+  const isBestSeller = normalizedTags.some((t) =>
+    ["best-seller", "bestseller", "bestsellers", "top-rated", "popular"].includes(t)
+  );
+  const isNewArrival = normalizedTags.some((t) =>
+    ["new", "new-arrival", "newly-added", "just-in"].includes(t)
+  );
+
+  const vegNonVeg = prod.vegNonVeg === "non-veg" ? "nonveg" : prod.vegNonVeg === "veg" ? "veg" : undefined;
+  const hasReviewStats = reviewStats !== undefined;
+
+  // Delivery / service info (from BU settings)
+  const deliveryFee = buSettings?.deliveryFee ?? 0;
+  const freeDeliveryThreshold = buSettings?.freeDeliveryThreshold;
 
   return (
     <div className="min-h-screen bg-background">
@@ -778,6 +833,77 @@ export default function ProductPage() {
               {prod.name}
             </h1>
 
+            {/* Rating + Veg/Non-veg + badges row */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+              {hasReviewStats && (
+                reviewStats!.count > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById("reviews-section")?.scrollIntoView({ behavior: "smooth" })}
+                    className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    aria-label={`Rated ${reviewStats!.average.toFixed(1)} out of 5 from ${reviewStats!.count} reviews. Scroll to reviews.`}
+                  >
+                    <span className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            star <= Math.round(reviewStats!.average)
+                              ? "fill-amber-400 text-amber-400"
+                              : "fill-transparent text-muted-foreground/30"
+                          )}
+                        />
+                      ))}
+                    </span>
+                    <span className="font-semibold text-foreground">{reviewStats!.average.toFixed(1)}</span>
+                    <span>({reviewStats!.count})</span>
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Star className="h-3.5 w-3.5 fill-transparent text-muted-foreground/30" />
+                    No reviews yet
+                  </span>
+                )
+              )}
+
+              {vegNonVeg && (
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-sm border-2 p-[2px]",
+                      vegNonVeg === "veg" ? "border-green-600" : "border-red-600"
+                    )}
+                    aria-hidden
+                  >
+                    <span
+                      className={cn(
+                        "h-full w-full rounded-full",
+                        vegNonVeg === "veg" ? "bg-green-600" : "bg-red-600"
+                      )}
+                    />
+                  </span>
+                  <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                    <Leaf className="h-3 w-3 text-emerald-600 dark:text-emerald-500" />
+                    {vegNonVeg === "veg" ? "Vegetarian" : "Non-Vegetarian"}
+                  </span>
+                </span>
+              )}
+
+              {isBestSeller && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                  <BadgeCheck className="h-3 w-3" />
+                  Best Seller
+                </span>
+              )}
+              {isNewArrival && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                  <Sparkles className="h-3 w-3" />
+                  New Arrival
+                </span>
+              )}
+            </div>
+
             {prod.description && (
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 {prod.description}
@@ -818,19 +944,26 @@ export default function ProductPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {group.options.map((opt) => (
-                      <SelectItem key={opt.optionValue} value={opt.optionValue}>
-                        <span className="flex items-center gap-2">
-                          <span>{opt.optionValue}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatCurrency(opt.price)}
+                    {group.options.map((opt) => {
+                      const optStock = getStockStatus(inventoryItems, opt.optionValue);
+                      const optDisabled = !opt.active || optStock.status === "out_of_stock";
+                      return (
+                        <SelectItem key={opt.optionValue} value={opt.optionValue} disabled={optDisabled}>
+                          <span className="flex items-center gap-2">
+                            <span>{opt.optionValue}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatCurrency(opt.price)}
+                            </span>
+                            {!opt.active && (
+                              <Badge variant="outline" className="text-[10px]">Unavailable</Badge>
+                            )}
+                            {opt.active && optStock.status === "out_of_stock" && (
+                              <Badge variant="destructive" className="text-[10px]">Out of stock</Badge>
+                            )}
                           </span>
-                          {!opt.active && (
-                            <Badge variant="outline" className="text-[10px]">Unavailable</Badge>
-                          )}
-                        </span>
-                      </SelectItem>
-                    ))}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -948,15 +1081,150 @@ export default function ProductPage() {
                 </Link>
               </div>
             </div>
+
+            {/* Key Details */}
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              {category && catSlug && (
+                <DetailFact label="Category" value={category.name} />
+              )}
+              {prod.unit && <DetailFact label="Unit" value={prod.unit} />}
+              {prod.sku && <DetailFact label="SKU" value={prod.sku} />}
+              {selectedVariant?.barcode && (
+                <DetailFact label="Barcode" value={selectedVariant.barcode} />
+              )}
+              {selectedVariant?.sku && <DetailFact label="Variant SKU" value={selectedVariant.sku} />}
+              {prod.taxPercentage !== undefined && (
+                <DetailFact label="Tax" value={`${prod.taxPercentage}%`} />
+              )}
+              {prod.tags.length > 0 && (
+                <DetailFact label="Tags" value={prod.tags.slice(0, 4).join(", ")} />
+              )}
+            </div>
           </div>
         </motion.div>
+
+        {/* ================================================================ */}
+        {/* DELIVERY + RETURNS INFO                                          */}
+        {/* ================================================================ */}
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <Bike className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Delivery</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  {deliveryFee > 0
+                    ? `Delivery fee ${formatCurrency(deliveryFee)}${freeDeliveryThreshold ? ` — free above ${formatCurrency(freeDeliveryThreshold)}` : ""}`
+                    : "Delivery available near you"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400">
+                <Store className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Pickup</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Order online &amp; pick up from {bu.name}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
+                <RotateCcw className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Easy Returns</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Returns within 7 days on non-perishable items
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400">
+                <ShieldCheck className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Quality Promise</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Fresh, quality-checked items every order
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================================================================ */}
+        {/* RETURN POLICY                                                    */}
+        {/* ================================================================ */}
+
+        <div className="mt-6 rounded-xl border border-border/60 bg-secondary/20 p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Return Policy
+          </p>
+          <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+            <li className="flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              Damaged or incorrect items can be reported within 48 hours of delivery for a free replacement.
+            </li>
+            <li className="flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              Perishable food items must be inspected at the time of delivery.
+            </li>
+            <li className="flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              Refunds for approved returns are processed within 3–5 business days.
+            </li>
+          </ul>
+        </div>
       </div>
+
+      {/* ================================================================== */}
+      {/* FREQUENTLY BOUGHT TOGETHER                                        */}
+      {/* ================================================================== */}
+
+      <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+        <SectionHeader
+          title="Frequently Bought Together"
+          subtitle={`Perfect pairings for ${prod.name}`}
+        />
+        <div className="mt-4 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-secondary/20 px-6 py-10 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-secondary text-primary">
+            <PackagePlus className="h-6 w-6" />
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold">Curated pairings are on the way</h3>
+            <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
+              We&apos;re analysing what customers order with {prod.name} to surface the perfect pairings. Check back soon!
+            </p>
+          </div>
+          <Link to={`/${buSlug}`}>
+            <Button variant="outline" size="sm">
+              <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
+              Browse {bu.name}
+            </Button>
+          </Link>
+        </div>
+      </section>
 
       {/* ================================================================== */}
       {/* REVIEWS SECTION                                                    */}
       {/* ================================================================== */}
 
-      <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+      <div id="reviews-section" className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-12 sm:px-6 lg:px-8">
         <ReviewSection
           catalogItemId={prod._id}
           businessUnitId={bu._id}
@@ -982,8 +1250,10 @@ export default function ProductPage() {
                     <ProductCard
                       key={item._id}
                       product={item}
+                      businessUnitSlug={buSlug}
                       index={0}
                       compact
+                      rating={recRatingsMap?.[item._id]}
                     />
                   ))}
                 </div>
@@ -1001,8 +1271,10 @@ export default function ProductPage() {
                     <ProductCard
                       key={item._id}
                       product={item}
+                      businessUnitSlug={buSlug}
                       index={0}
                       compact
+                      rating={recRatingsMap?.[item._id]}
                     />
                   ))}
                 </div>

@@ -14,6 +14,12 @@ export { BusinessUnitSwitcher, BusinessUnitSwitcherSkeleton } from "./BusinessUn
 export { HeroSection, HeroSectionSkeleton } from "./HeroSection";
 export { SectionHeader, SectionHeaderSkeleton } from "./SectionHeader";
 export { OfferBanner, OfferBannerSkeleton } from "./OfferBanner";
+export { DeliveryInfoStrip } from "./DeliveryInfoStrip";
+export { TestimonialsSection } from "./TestimonialsSection";
+export { BestSellersSection } from "./BestSellersSection";
+export { ComboOffersSection } from "./ComboOffersSection";
+export { CategoryNavBar } from "./CategoryNavBar";
+export { CategoryEmptyState } from "./CategoryEmptyState";
 
 // Cards
 export { ProductCard, ProductCardSkeleton } from "./ProductCard";

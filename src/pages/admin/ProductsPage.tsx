@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { AlertCircle, Package, Plus, RefreshCw } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { toast } from "sonner";
 
 import { ProductDialogs } from "@/components/admin/products/ProductDialogs";
 import { ProductFormDialog } from "@/components/admin/products/ProductFormDialog";
@@ -24,6 +26,10 @@ const PAGE_SIZE = 8;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function fromConvex(doc: any, buMap: Map<string, string>, catMap: Map<string, string>): Product {
+  const stockFromVariants = (doc.variants ?? []).reduce(
+    (sum: number, v: any) => sum + (typeof v.stock === "number" ? v.stock : 0),
+    0
+  );
   return {
     id: doc._id,
     businessUnitId: doc.businessUnitId,
@@ -34,6 +40,7 @@ function fromConvex(doc: any, buMap: Map<string, string>, catMap: Map<string, st
     slug: doc.slug,
     description: doc.description,
     imageUrl: doc.coverImage ?? doc.images?.[0] ?? undefined,
+    images: doc.images ?? [],
     price: doc.variants?.[0]?.price ?? 0,
     compareAtPrice: doc.variants?.[0]?.compareAtPrice,
     variants: (doc.variants ?? []).map((v: any) => ({
@@ -52,6 +59,7 @@ function fromConvex(doc: any, buMap: Map<string, string>, catMap: Map<string, st
       sortOrder: v.sortOrder ?? 0,
       active: v.active ?? true,
     })),
+    stockTotal: stockFromVariants > 0 ? stockFromVariants : doc.stockQuantity,
     sku: doc.sku,
     stockQuantity: doc.stockQuantity,
     unit: doc.unit,
@@ -101,8 +109,8 @@ function toCreateArgs(values: ProductFormValues) {
     name: values.name,
     slug: values.slug,
     description: values.description || undefined,
-    images: values.imageUrl ? [values.imageUrl] : [],
-    coverImage: values.imageUrl || undefined,
+    images: values.images.map((url) => url.trim()).filter(Boolean),
+    coverImage: values.images.find((url) => url.trim() !== "")?.trim() || undefined,
     variants,
     tags: values.tags ? values.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     sku: values.sku || undefined,
@@ -152,8 +160,8 @@ function toUpdateArgs(id: string, values: ProductFormValues) {
     name: values.name,
     slug: values.slug,
     description: values.description || undefined,
-    images: values.imageUrl ? [values.imageUrl] : [],
-    coverImage: values.imageUrl || undefined,
+    images: values.images.map((url) => url.trim()).filter(Boolean),
+    coverImage: values.images.find((url) => url.trim() !== "")?.trim() || undefined,
     variants,
     tags: values.tags ? values.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     sku: values.sku || undefined,
@@ -270,6 +278,24 @@ export default function ProductsPage() {
     }
   };
 
+  const toggleFeatured = async (product: Product) => {
+    try {
+      await updateProd({ id: product.id as Id<"products">, featured: !product.featured, sessionToken: getSessionToken()! });
+      toast.success(product.featured ? "Removed from featured" : "Marked as featured", { description: product.name });
+    } catch (err) {
+      toast.error("Could not update featured", { description: err instanceof Error ? err.message : "Unknown error" });
+    }
+  };
+
+  const toggleAvailable = async (product: Product) => {
+    try {
+      await updateProd({ id: product.id as Id<"products">, available: !product.available, sessionToken: getSessionToken()! });
+      toast.success(product.available ? "Product hidden" : "Product is now available", { description: product.name });
+    } catch (err) {
+      toast.error("Could not update availability", { description: err instanceof Error ? err.message : "Unknown error" });
+    }
+  };
+
   return <div>
     <PageHeader title="Products" description="Manage your product catalog across all business units.">
       <Button size="sm" onClick={openCreateDialog}><Plus className="mr-1.5 size-4" />Add product</Button>
@@ -277,8 +303,8 @@ export default function ProductsPage() {
 
     {error ? <Alert variant="destructive"><AlertCircle className="size-4" /><AlertTitle>Could not load products</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{error}<Button size="sm" variant="outline" onClick={() => setError(null)}><RefreshCw className="size-4" />Try again</Button></AlertDescription></Alert> : <section className="overflow-hidden rounded-xl border" aria-label="Product management">
       <ProductToolbar filters={filters} businessUnits={businessUnitOptions} onFiltersChange={resetPageAndSetFilters} onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all" })} />
-      {isLoading ? <ProductTable products={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={() => undefined} onDelete={() => undefined} onRestore={() => undefined} /> : visibleProducts.length === 0 ? <EmptyState icon={Package} title="No products found" description={filteredProducts.length === 0 && products.length > 0 ? "Try adjusting your search or filters." : EMPTY_MESSAGES.PRODUCTS} action={products.length === 0 ? { label: "Create product", onClick: openCreateDialog } : undefined} /> : <>
-        <ProductTable products={visibleProducts} sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={(prod) => { setEditingProduct(prod); setFormOpen(true); }} onDelete={setDeleteTarget} onRestore={setRestoreTarget} />
+      {isLoading ? <ProductTable products={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={() => undefined} onDelete={() => undefined} onRestore={() => undefined} onToggleFeatured={() => undefined} onToggleAvailable={() => undefined} /> : visibleProducts.length === 0 ? <EmptyState icon={Package} title="No products found" description={filteredProducts.length === 0 && products.length > 0 ? "Try adjusting your search or filters." : EMPTY_MESSAGES.PRODUCTS} action={products.length === 0 ? { label: "Create product", onClick: openCreateDialog } : undefined} /> : <>
+        <ProductTable products={visibleProducts} sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={(prod) => { setEditingProduct(prod); setFormOpen(true); }} onDelete={setDeleteTarget} onRestore={setRestoreTarget} onToggleFeatured={toggleFeatured} onToggleAvailable={toggleAvailable} />
         <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedProducts.length)} of {sortedProducts.length}</p><Pagination className="mx-0 w-auto"><PaginationContent><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2" aria-live="polite">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination></div>
       </>}
     </section>}

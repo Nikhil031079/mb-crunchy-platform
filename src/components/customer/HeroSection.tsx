@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import { Link } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Sparkles, Utensils, ShoppingBag, LayoutGrid } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { SITE_NAME, ROUTES } from "@/constants";
+import { SITE_NAME } from "@/constants";
 
-import type { Offer, BusinessUnit } from "@/types";
+import type { BusinessUnit } from "@/types";
 
 // ============================================================================
 // Types
@@ -26,6 +26,8 @@ interface HeroBanner {
   subtitle?: string;
   description?: string;
   backgroundImage?: string;
+  /** Tailwind gradient classes used when no background image is provided */
+  gradient?: string;
   overlayColor?: string;
   actions?: HeroAction[];
   badge?: string;
@@ -65,11 +67,24 @@ function DefaultHeroContent({
   description,
   actions,
   badge,
-  alignment,
+  alignment = "center",
   businessUnits,
 }: Pick<HeroSectionProps, "title" | "subtitle" | "description" | "actions" | "badge" | "alignment" | "businessUnits">) {
+  const alignClasses =
+    alignment === "left"
+      ? "text-left"
+      : alignment === "right"
+        ? "text-right"
+        : "text-center";
+  const justifyClasses =
+    alignment === "left"
+      ? "justify-start"
+      : alignment === "right"
+        ? "justify-end"
+        : "justify-center";
+
   return (
-    <div className="relative z-10 mx-auto max-w-4xl px-4 text-center">
+    <div className={cn("relative z-10 mx-auto max-w-4xl px-4", alignClasses)}>
       {/* Badge */}
       {badge && (
         <motion.div
@@ -129,7 +144,7 @@ function DefaultHeroContent({
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.4 }}
-        className="mt-8 flex flex-wrap items-center justify-center gap-3"
+        className={cn("mt-8 flex flex-wrap items-center gap-3", justifyClasses)}
       >
         {actions?.map((action) =>
           action.href ? (
@@ -218,8 +233,18 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
           />
         </>
       ) : (
-        <div className="h-full w-full bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600" />
+        <div
+          className={cn(
+            "h-full w-full bg-gradient-to-br",
+            banner.gradient ?? "from-emerald-600 via-emerald-500 to-teal-600"
+          )}
+        />
       )}
+
+      {/* Decorative pattern (over gradient, under overlay) */}
+      <div className="absolute inset-0 opacity-20 bg-grid" />
+      <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/5" />
+      <div className="absolute -bottom-20 -left-20 h-72 w-72 rounded-full bg-white/5" />
 
       {/* Overlay */}
       <div
@@ -227,40 +252,66 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
         style={{
           background: banner.overlayColor
             ? `${banner.overlayColor}`
-            : "linear-gradient(135deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.3) 100%)",
+            : "linear-gradient(135deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 100%)",
         }}
       />
 
       {/* Content */}
       <div className="relative z-10 flex h-full items-center">
         <div className="mx-auto max-w-4xl px-4 text-center w-full">
-          {banner.badge && (
-            <Badge
-              variant="secondary"
-              className="mb-4 gap-1.5 bg-white/10 text-white/90 backdrop-blur-sm border-white/10 px-3 py-1 text-xs"
-            >
-              {banner.badge}
-            </Badge>
-          )}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15 }}
+          >
+            {banner.badge && (
+              <Badge
+                variant="secondary"
+                className="mb-4 gap-1.5 bg-white/10 text-white/90 backdrop-blur-sm border-white/10 px-3 py-1 text-xs"
+              >
+                {banner.badge}
+              </Badge>
+            )}
+          </motion.div>
 
-          <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl drop-shadow-lg">
+          <motion.h2
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.25 }}
+            className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl drop-shadow-lg text-balance"
+          >
             {banner.title}
-          </h2>
+          </motion.h2>
 
           {banner.subtitle && (
-            <p className="mt-3 text-base text-white/80 sm:text-lg drop-shadow-sm">
+            <motion.p
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.35 }}
+              className="mt-3 text-base text-white/85 sm:text-lg drop-shadow-sm text-balance"
+            >
               {banner.subtitle}
-            </p>
+            </motion.p>
           )}
 
           {banner.description && (
-            <p className="mx-auto mt-2 max-w-xl text-sm text-white/60">
+            <motion.p
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              className="mx-auto mt-2 max-w-xl text-sm text-white/70"
+            >
               {banner.description}
-            </p>
+            </motion.p>
           )}
 
           {banner.actions && banner.actions.length > 0 && (
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.45 }}
+              className="mt-6 flex flex-wrap items-center justify-center gap-3"
+            >
               {banner.actions.map((action) =>
                 action.href ? (
                   <Link key={action.label} to={action.href}>
@@ -294,7 +345,7 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
                   </Button>
                 )
               )}
-            </div>
+            </motion.div>
           )}
         </div>
       </div>
@@ -310,8 +361,6 @@ export const HeroSection = memo(function HeroSection({
   title,
   subtitle,
   description,
-  backgroundImage,
-  overlayColor,
   actions,
   badge,
   alignment = "center",
@@ -418,6 +467,7 @@ export const HeroSection = memo(function HeroSection({
         /* Default Hero — decorative background */
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600" />
+          <div className="absolute inset-0 opacity-20 bg-grid" />
           {/* Decorative circles */}
           <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/5" />
           <div className="absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-white/5" />
