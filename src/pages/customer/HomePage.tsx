@@ -1,14 +1,10 @@
-import { useMemo, useCallback, useState, useEffect } from "react";
+import { useMemo, useCallback } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
   Leaf,
-  ShoppingBag,
-  ShoppingCart,
   Truck,
-  ShieldCheck,
-  Zap,
   ArrowRight,
   Sparkles,
   Utensils,
@@ -16,15 +12,17 @@ import {
   ChevronRight,
   Percent,
   LayoutGrid,
+  ChefHat,
+  BadgeCheck,
+  CreditCard,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
-import { SITE_NAME, ROUTES } from "@/constants";
+import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
-import { useAuth } from "@/hooks/use-auth";
 
 // Customer Reusable Components
 import {
@@ -32,19 +30,22 @@ import {
   SectionHeader,
   OfferBanner,
   ProductCard,
-  ProductCardSkeleton,
-  ComboCard,
-  ComboCardSkeleton,
   PartyPackCard,
-  PartyPackCardSkeleton,
   CardGridSkeleton,
+  DeliveryInfoStrip,
+  TestimonialsSection,
+  BestSellersSection,
+  ComboOffersSection,
 } from "@/components/customer";
 
 // Shared components
 import { CategoryCard } from "@/components/shared/CategoryCard";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { getCategoryCatalog, enrichCategory } from "@/data/categories";
 
-import type { BusinessUnit, Category, Combo, Offer, PartyPack, Content } from "@/types";
+import type { EnrichedCategory } from "@/data/categories";
+
+import type { BusinessUnit, Category, Offer, PartyPack, Content } from "@/types";
 
 // ============================================================================
 // Why Choose MB Crunchy — Static brand values
@@ -59,40 +60,40 @@ interface WhyChooseItem {
 
 const WHY_CHOOSE_ITEMS: WhyChooseItem[] = [
   {
+    icon: ChefHat,
+    title: "Freshly Prepared",
+    description: "Meals and dishes prepared fresh, every single day for maximum taste.",
+    color: "text-orange-600 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-400",
+  },
+  {
+    icon: Sparkles,
+    title: "Premium Ingredients",
+    description: "Carefully sourced, high-quality ingredients in every single product.",
+    color: "text-purple-600 bg-purple-50 dark:bg-purple-950/50 dark:text-purple-400",
+  },
+  {
     icon: Leaf,
-    title: "Fresh Food",
-    description: "Farm-fresh ingredients sourced daily for our Kitchen and Mart selections.",
-    color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50",
-  },
-  {
-    icon: ShoppingBag,
-    title: "Daily Grocery",
-    description: "All your everyday essentials available under one roof, anytime.",
-    color: "text-blue-600 bg-blue-50 dark:bg-blue-950/50",
-  },
-  {
-    icon: ShoppingCart,
-    title: "One Cart",
-    description: "Mix items from Kitchen and Mart in a single order. One checkout, one delivery.",
-    color: "text-accent bg-accent/5",
+    title: "Organic Products",
+    description: "Farm-fresh organic groceries and natural staples, free of harmful chemicals.",
+    color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-400",
   },
   {
     icon: Truck,
     title: "Fast Delivery",
     description: "Swift and reliable delivery right to your doorstep, when you need it.",
-    color: "text-amber-600 bg-amber-50 dark:bg-amber-950/50",
+    color: "text-amber-600 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-400",
   },
   {
-    icon: ShieldCheck,
-    title: "Trusted Quality",
+    icon: CreditCard,
+    title: "Secure Payments",
+    description: "Multiple secure payment options — UPI, cards and more — fully protected.",
+    color: "text-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-400",
+  },
+  {
+    icon: BadgeCheck,
+    title: "Quality Assured",
     description: "Every product meets our strict quality standards before reaching you.",
-    color: "text-green-600 bg-green-50 dark:bg-green-950/50",
-  },
-  {
-    icon: Zap,
-    title: "Fast Service",
-    description: "Quick order processing and responsive support to serve you better.",
-    color: "text-purple-600 bg-purple-50 dark:bg-purple-950/50",
+    color: "text-green-600 bg-green-50 dark:bg-green-950/50 dark:text-green-400",
   },
 ];
 
@@ -111,14 +112,14 @@ function CategoriesSection({
   const cats0 = useQuery(
     api.categories.getByBusinessUnit,
     businessUnits[0]?._id
-      ? { businessUnitId: businessUnits[0]._id as any }
+      ? { businessUnitId: businessUnits[0]._id }
       : "skip",
   ) as Category[] | undefined;
 
   const cats1 = useQuery(
     api.categories.getByBusinessUnit,
     businessUnits[1]?._id
-      ? { businessUnitId: businessUnits[1]._id as any }
+      ? { businessUnitId: businessUnits[1]._id }
       : "skip",
   ) as Category[] | undefined;
 
@@ -147,12 +148,16 @@ function CategoriesSection({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {allCategories.slice(0, 6).map((cat, index) => {
             const buSlug = businessUnits.find((b) => b._id === cat.businessUnitId)?.slug ?? "";
+            const enriched = enrichCategory(cat, getCategoryCatalog(buSlug)) as EnrichedCategory;
             return (
               <CategoryCard
                 key={cat._id}
-                category={cat}
+                category={enriched}
                 businessUnitSlug={buSlug}
                 index={index}
+                icon={enriched.catalog?.icon}
+                gradient={enriched.catalog?.gradient}
+                featured={enriched.catalog?.featured}
               />
             );
           })}
@@ -177,22 +182,10 @@ function BusinessUnitSection({
     businessUnitId: bu._id,
   });
 
-  const combos = bu.enableCombos
-    ? (useQuery(api.combos.getByBusinessUnit, {
-        businessUnitId: bu._id,
-      }) as Combo[] | undefined)
-    : ([] as Combo[]);
-
-  const partyPacks = bu.enablePartyPacks
-    ? (useQuery(api.partyPacks.getByBusinessUnit, {
-        businessUnitId: bu._id,
-      }) as PartyPack[] | undefined)
-    : ([] as PartyPack[]);
-
-  const bestSellers = useQuery(api.catalogItems.getBestSellers, {
-    businessUnitId: bu._id,
-    limit: 8,
-  });
+  const partyPacks = useQuery(
+    api.partyPacks.getByBusinessUnit,
+    bu.enablePartyPacks ? { businessUnitId: bu._id } : "skip",
+  ) as PartyPack[] | undefined;
 
   const navigate = useNavigate();
   const { addItem } = useCart();
@@ -219,20 +212,16 @@ function BusinessUnitSection({
 
   const isDataLoaded =
     featuredProducts !== undefined &&
-    combos !== undefined &&
-    partyPacks !== undefined &&
-    bestSellers !== undefined;
+    (partyPacks !== undefined || !bu.enablePartyPacks);
 
   const hasFeatured = featuredProducts && featuredProducts.length > 0;
-  const hasCombos = combos && combos.length > 0;
   const hasPartyPacks = partyPacks && partyPacks.length > 0;
-  const hasBestSellers = bestSellers && bestSellers.length > 0 && bestSellers.length !== (featuredProducts?.length ?? 0);
 
   if (!isDataLoaded) {
     return <BusinessUnitSectionSkeleton buIndex={buIndex} />;
   }
 
-  if (!hasFeatured && !hasCombos && !hasPartyPacks && !hasBestSellers) return null;
+  if (!hasFeatured && !hasPartyPacks) return null;
 
   const buSlug = bu.slug;
 
@@ -306,52 +295,8 @@ function BusinessUnitSection({
           </div>
         )}
 
-        {/* Best Sellers */}
-        {hasBestSellers && (
-          <div className="mb-10">
-            <SectionHeader
-              title="Best Sellers"
-              subtitle="Top picks from our customers"
-              action={{
-                label: `Browse ${bu.name}`,
-                onClick: () => (navigate(`/${buSlug}`)),
-              }}
-              size="sm"
-            />
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {bestSellers!.slice(0, 10).map((item: any, index: number) => (
-                <ProductCard
-                  key={item._id}
-                  product={item}
-                  businessUnitSlug={buSlug}
-                  index={index}
-                  compact
-                  onAddToCart={handleAddToCart}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Combos */}
-        {hasCombos && (
-          <div className="mb-10">
-            <SectionHeader
-              title={`${bu.name} Combos`}
-              subtitle="Curated bundles at great value"
-              action={{
-                label: "View All Combos",
-                onClick: () => (navigate(`/${buSlug}`)),
-              }}
-              size="sm"
-            />
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {combos!.slice(0, 4).map((combo, index) => (
-                <ComboCard key={combo._id} combo={combo} index={index} />
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Best Sellers — consolidated in the global BestSellersSection */}
+        {/* Combos — consolidated in the global ComboOffersSection */}
 
         {/* Party Packs */}
         {hasPartyPacks && (
@@ -407,7 +352,6 @@ function BusinessUnitSectionSkeleton({ buIndex }: { buIndex: number }) {
 // ============================================================================
 
 function RecentlyViewedSection() {
-  const { user } = useAuth();
   const customer = useQuery(api.customers.getByAuthUser, {});
 
   const recentCollections = useQuery(
@@ -481,7 +425,6 @@ function RecentlyViewedSection() {
 // ============================================================================
 
 function RecommendedSection() {
-  const { user } = useAuth();
   const customer = useQuery(api.customers.getByAuthUser, {});
 
   const recentCollections = useQuery(
@@ -599,13 +542,6 @@ export default function HomePage() {
     [allOffers]
   );
 
-  const scrollToSection = useCallback((elementId: string) => {
-    const el = document.getElementById(elementId);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, []);
-
   // Build hero banners from content + active offers
   const heroBanners = useMemo(() => {
     const contentBanners = (heroContent ?? []).map((c) => ({
@@ -638,6 +574,56 @@ export default function HomePage() {
     return merged.length > 0 ? merged.slice(0, 5) : undefined;
   }, [heroContent, activeOffers, activeBusinessUnits]);
 
+  // Default promotional slides shown when no admin-created banners exist
+  const defaultPromoSlides = useMemo(() => {
+    const kitchenSlug = activeBusinessUnits[0]?.slug ?? "mb-kitchen";
+    const martSlug = activeBusinessUnits[1]?.slug ?? "mb-mart";
+    return [
+      {
+        _id: "promo-fresh",
+        badge: "Fresh & Fast",
+        title: "Fresh Food Delivered Fast",
+        subtitle: "Hot meals and fresh groceries at your doorstep in minutes.",
+        gradient: "from-emerald-600 via-emerald-500 to-teal-600",
+        actions: [
+          { label: "Explore Kitchen", href: `/${kitchenSlug}`, variant: "default" as const },
+          { label: "Shop Mart", href: `/${martSlug}`, variant: "outline" as const },
+        ],
+      },
+      {
+        _id: "promo-organic",
+        badge: "100% Organic",
+        title: "Organic Grocery Collection",
+        subtitle: "Farm-fresh organic staples for your healthy everyday kitchen.",
+        gradient: "from-green-600 via-green-500 to-lime-600",
+        actions: [
+          { label: "Shop Mart", href: `/${martSlug}`, variant: "default" as const },
+        ],
+      },
+      {
+        _id: "promo-mojitos",
+        badge: "Cool & Refreshing",
+        title: "Mojitos Starting at ₹50",
+        subtitle: "Refreshing summer favourites at unbeatable prices.",
+        gradient: "from-purple-600 via-fuchsia-500 to-pink-600",
+        actions: [
+          { label: "Explore Kitchen", href: `/${kitchenSlug}`, variant: "default" as const },
+        ],
+      },
+      {
+        _id: "promo-combos",
+        badge: "Party Time",
+        title: "Combo Meals & Party Packs",
+        subtitle: "Curated combos and party packs perfect for every occasion.",
+        gradient: "from-amber-500 via-orange-500 to-red-600",
+        actions: [
+          { label: "Explore Kitchen", href: `/${kitchenSlug}`, variant: "default" as const },
+          { label: "Shop Mart", href: `/${martSlug}`, variant: "outline" as const },
+        ],
+      },
+    ];
+  }, [activeBusinessUnits]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* ================================================================ */}
@@ -663,40 +649,37 @@ export default function HomePage() {
           description="One destination for Frozen Foods, Organic Products, Fresh Beverages and Everyday Essentials."
           badge="Your Favourite Stores, One Cart"
           size="lg"
-          banners={heroBanners}
+          banners={heroBanners ?? defaultPromoSlides}
           businessUnits={activeBusinessUnits}
-          actions={
-            !heroBanners
-              ? [
-                  {
-                    label: "Explore Kitchen",
-                    href: `/${activeBusinessUnits[0]?.slug ?? "mb-kitchen"}`,
-                    variant: "default",
-                  },
-                  {
-                    label: "Shop Mart",
-                    href: `/${activeBusinessUnits[1]?.slug ?? "mb-mart"}`,
-                    variant: "outline" as const,
-                  },
-                  {
-                    label: "Categories",
-                    href: ROUTES.HOME,
-                    variant: "secondary" as const,
-                  },
-                ]
-              : undefined
-          }
         />
       )}
 
       {/* ================================================================ */}
-      {/* 2. BROWSE BY CATEGORY — Premium category grid                    */}
+      {/* 2. DELIVERY INFORMATION STRIP                                   */}
+      {/* ================================================================ */}
+
+      {!isLoading && <DeliveryInfoStrip />}
+
+      {/* ================================================================ */}
+      {/* 3. BROWSE BY CATEGORY — Premium category grid                    */}
       {/* ================================================================ */}
 
       {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
-      {/* 3. TODAY'S DEALS                                                 */}
+      {/* 4. BEST SELLERS — Global top picks row                          */}
+      {/* ================================================================ */}
+
+      {!isLoading && <BestSellersSection businessUnits={activeBusinessUnits} />}
+
+      {/* ================================================================ */}
+      {/* 5. COMBO OFFERS — Global bundles row                            */}
+      {/* ================================================================ */}
+
+      {!isLoading && <ComboOffersSection businessUnits={activeBusinessUnits} />}
+
+      {/* ================================================================ */}
+      {/* 6. TODAY'S DEALS                                                 */}
       {/* ================================================================ */}
 
       {!isLoading && activeOffers.length > 0 && (
@@ -724,7 +707,7 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 4. PER-BUSINESS UNIT SECTIONS                                    */}
+      {/* 7. PER-BUSINESS UNIT SECTIONS                                    */}
       {/* ================================================================ */}
 
       {!isLoading && activeBusinessUnits.length === 0 && (
@@ -752,24 +735,30 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 5. RECENTLY VIEWED                                               */}
+      {/* 8. RECENTLY VIEWED                                               */}
       {/* ================================================================ */}
 
       {!isLoading && <RecentlyViewedSection />}
 
       {/* ================================================================ */}
-      {/* 6. RECOMMENDED FOR YOU                                           */}
+      {/* 9. RECOMMENDED FOR YOU                                           */}
       {/* ================================================================ */}
 
       {!isLoading && <RecommendedSection />}
 
       {/* ================================================================ */}
-      {/* 7. WHY CHOOSE MB CRUNCHY                                        */}
+      {/* 10. WHY CHOOSE MB CRUNCHY                                        */}
       {/* ================================================================ */}
 
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
+            <div className="mb-2 flex items-center justify-center gap-2">
+              <Sparkles className="h-4 w-4 text-accent" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-accent">
+                Why Us
+              </span>
+            </div>
             <h2 className="text-xl font-bold sm:text-2xl">
               Why Choose {SITE_NAME}
             </h2>
@@ -789,10 +778,10 @@ export default function HomePage() {
                   transition={{ duration: 0.35, delay: index * 0.06 }}
                   className="group"
                 >
-                  <div className="rounded-2xl border border-border/40 bg-card p-5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 hover:border-accent/20">
+                  <div className="h-full rounded-2xl border border-border/40 bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5 hover:border-accent/20">
                     <div
                       className={cn(
-                        "mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110",
+                        "mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3",
                         item.color
                       )}
                     >
@@ -811,7 +800,13 @@ export default function HomePage() {
       </section>
 
       {/* ================================================================ */}
-      {/* 8. FINAL CTA                                                     */}
+      {/* 11. CUSTOMER TESTIMONIALS (demo placeholders)                    */}
+      {/* ================================================================ */}
+
+      {!isLoading && <TestimonialsSection />}
+
+      {/* ================================================================ */}
+      {/* 12. FINAL CTA                                                     */}
       {/* ================================================================ */}
 
       <section className="relative overflow-hidden bg-primary py-16 text-primary-foreground sm:py-20">

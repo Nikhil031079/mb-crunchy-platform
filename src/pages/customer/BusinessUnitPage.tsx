@@ -46,10 +46,13 @@ import { getStockStatus, getProductStockStatus } from "@/components/customer/Sto
 import type { StockInfo } from "@/components/customer/StockBadge";
 
 // Shared components
-import { CategoryCard } from "@/components/shared/CategoryCard";
+import { CategoryCard, CategoryIcon } from "@/components/shared/CategoryCard";
 import { SearchBar } from "@/components/shared/SearchBar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { getCategoryCatalog, enrichCategory } from "@/data/categories";
+
+import type { EnrichedCategory } from "@/data/categories";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -60,7 +63,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product } from "@/types";
+import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product, CatalogItem } from "@/types";
+import type { Id } from "@convex/_generated/dataModel";
 
 // ============================================================================
 // Sort Options
@@ -208,6 +212,46 @@ export default function BusinessUnitPage() {
     () => (categories ?? []).filter((c) => c.status === "active"),
     [categories]
   );
+
+  // Enrich categories with catalog metadata (icons, gradients, featured)
+  const catalog = useMemo(
+    () => getCategoryCatalog(businessUnit?.slug),
+    [businessUnit?.slug]
+  );
+
+  const enrichedCategories = useMemo<EnrichedCategory[]>(
+    () => activeCategories.map((c) => enrichCategory(c, catalog)),
+    [activeCategories, catalog]
+  );
+
+  // Product count per category (products with a synced catalog item)
+  const catalogItemBySourceId = useMemo(() => {
+    const map = new Map<string, CatalogItem>();
+    for (const item of catalogItems ?? []) {
+      if (item.itemType === "product") map.set(item.sourceId, item);
+    }
+    return map;
+  }, [catalogItems]);
+
+  const countByCategoryId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of allProducts ?? []) {
+      if (!catalogItemBySourceId.has(p._id)) continue;
+      map.set(p.categoryId, (map.get(p.categoryId) ?? 0) + 1);
+    }
+    return map;
+  }, [allProducts, catalogItemBySourceId]);
+
+  // Ratings summary for catalog items (keyed by catalog item id)
+  const catalogItemIds = useMemo(
+    () => (catalogItems ?? []).map((i) => i._id as Id<"catalogItems">),
+    [catalogItems]
+  );
+
+  const ratingsMap = useQuery(
+    api.reviews.getAverageByCatalogItemIds,
+    catalogItemIds.length > 0 ? { ids: catalogItemIds } : "skip"
+  ) as Record<string, { average: number; count: number }> | undefined;
 
   // Active combos (check feature flag)
   const activeCombos = useMemo(
@@ -572,7 +616,7 @@ export default function BusinessUnitPage() {
       {/* ================================================================ */}
 
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        {activeCategories.length > 0 && (
+        {enrichedCategories.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             <Button
               variant={activeCategoryId === null ? "default" : "outline"}
@@ -582,7 +626,7 @@ export default function BusinessUnitPage() {
             >
               All
             </Button>
-            {activeCategories.map((cat) => (
+            {enrichedCategories.map((cat) => (
               <Button
                 key={cat._id}
                 variant={activeCategoryId === cat._id ? "default" : "outline"}
@@ -590,6 +634,20 @@ export default function BusinessUnitPage() {
                 onClick={() => handleCategoryChange(cat._id)}
                 className="shrink-0 rounded-full text-xs"
               >
+                {cat.catalog?.icon && (
+                  <span
+                    className={cn(
+                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white",
+                      cat.catalog.gradient
+                    )}
+                  >
+                    <CategoryIcon
+                      icon={cat.catalog.icon}
+                      name={cat.name}
+                      className="h-3 w-3"
+                    />
+                  </span>
+                )}
                 {cat.name}
               </Button>
             ))}
@@ -597,9 +655,9 @@ export default function BusinessUnitPage() {
         )}
 
         {/* Category Cards (when no filter is active) */}
-        {activeCategoryId === null && activeCategories.length > 0 && !searchQuery && (
+        {activeCategoryId === null && enrichedCategories.length > 0 && !searchQuery && (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {activeCategories.slice(0, 6).map((cat, index) => (
+            {enrichedCategories.slice(0, 6).map((cat, index) => (
               <button
                 key={cat._id}
                 onClick={() => handleCategoryChange(cat._id)}
@@ -609,6 +667,10 @@ export default function BusinessUnitPage() {
                   category={cat}
                   businessUnitSlug={buSlug}
                   index={index}
+                  productCount={countByCategoryId.get(cat._id) ?? 0}
+                  icon={cat.catalog?.icon}
+                  gradient={cat.catalog?.gradient}
+                  featured={cat.catalog?.featured}
                 />
               </button>
             ))}
@@ -683,6 +745,7 @@ export default function BusinessUnitPage() {
                   showDescription={viewMode === "list"}
                   onAddToCart={handleAddToCart}
                   stockInfo={getStockInfoForProduct(item)}
+                  rating={ratingsMap?.[item._id]}
                 />
               ))}
             </div>

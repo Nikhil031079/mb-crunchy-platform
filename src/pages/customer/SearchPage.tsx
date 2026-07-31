@@ -10,6 +10,10 @@ import {
   Package,
   X,
   Sparkles,
+  Filter,
+  ArrowUpDown,
+  Zap,
+  PackageCheck,
 } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
@@ -24,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import type { BusinessUnit, CatalogItem } from "@/types";
+import type { BusinessUnit, CatalogItem, Category, Product, InventoryItem } from "@/types";
 
 // ============================================================================
 // Constants
@@ -101,7 +105,21 @@ function highlightMatch(text: string, query: string): React.ReactNode {
 interface SearchResult extends CatalogItem {
   _businessUnitName: string;
   _businessUnitSlug: string;
+  _categoryId?: string;
 }
+
+// ============================================================================
+// Filter + Sort State
+// ============================================================================
+
+type SearchSort = "relevance" | "price-asc" | "price-desc" | "rating";
+
+const SORT_OPTIONS: { label: string; value: SearchSort }[] = [
+  { label: "Relevance", value: "relevance" },
+  { label: "Price: Low to High", value: "price-asc" },
+  { label: "Price: High to Low", value: "price-desc" },
+  { label: "Top Rated", value: "rating" },
+];
 
 // ============================================================================
 // Skeletons
@@ -248,6 +266,12 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
   const [debouncedQuery, setDebouncedQuery] = useState(queryParam);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
+  // Filter + sort state
+  const [sortBy, setSortBy] = useState<SearchSort>("relevance");
+  const [featuredOnly, setFeaturedOnly] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
   // Load recent searches on mount
   useEffect(() => {
     setRecentSearches(getRecentSearches());
@@ -361,6 +385,42 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
     return results;
   }, [buIds.length, searchResults0, searchResults1, searchResults2, searchResults3]);
 
+  // Helper data for filters (only fetched while actively searching)
+  const isSearching = debouncedQuery.trim().length > 0;
+  const categoriesAll = useQuery(api.categories.getAll, isSearching ? {} : "skip") as
+    | Category[]
+    | undefined;
+  const productsAll = useQuery(api.products.getAll, isSearching ? {} : "skip") as
+    | Product[]
+    | undefined;
+  const inventoryAll = useQuery(api.inventory.getAll, isSearching ? {} : "skip") as
+    | InventoryItem[]
+    | undefined;
+
+  const categoryById = useMemo(() => {
+    const map = new Map<string, { name: string; businessUnitId: string }>();
+    for (const category of categoriesAll ?? []) {
+      map.set(category._id, { name: category.name, businessUnitId: category.businessUnitId });
+    }
+    return map;
+  }, [categoriesAll]);
+
+  const productCategoryBySourceId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const product of productsAll ?? []) map.set(product._id, product.categoryId);
+    return map;
+  }, [productsAll]);
+
+  const availableCatalogItemIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const inv of inventoryAll ?? []) {
+      if (inv.deletedAt) continue;
+      const quantity = inv.stockQuantity - (inv.reservedStock ?? 0);
+      if (inv.available && quantity > 0) set.add(inv.catalogItemId);
+    }
+    return set;
+  }, [inventoryAll]);
+
   // Flatten into enriched results
   const allResults = useMemo(() => {
     const enriched: SearchResult[] = [];
@@ -373,22 +433,12 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
           ...item,
           _businessUnitName: bu.name,
           _businessUnitSlug: bu.slug,
+          _categoryId: item.itemType === "product" ? productCategoryBySourceId.get(item.sourceId) : undefined,
         });
       }
     }
     return enriched;
-  }, [allRawResults, buIds, activeBUs]);
-
-  // Group by BU
-  const groupedResults = useMemo(() => {
-    const groups: Record<string, SearchResult[]> = {};
-    for (const item of allResults) {
-      const key = item._businessUnitName;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    }
-    return groups;
-  }, [allResults]);
+  }, [allRawResults, buIds, activeBUs, productCategoryBySourceId]);
 
   // Collect all item IDs for ratings
   const resultIds = useMemo(() => allResults.map((item) => item._id as string), [allResults]);
@@ -398,8 +448,81 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
     resultIds.length > 0 ? { ids: resultIds as never[] } : "skip",
   );
 
+  // Category options derived from the current result set
+  const categoryOptions = useMemo(() => {
+    const options: { id: string; label: string }[] = [];
+    const seen = new Set<string>();
+    for (const item of allResults) {
+      if (!item._categoryId || seen.has(item._categoryId)) continue;
+      const category = categoryById.get(item._categoryId);
+      if (category) {
+        seen.add(item._categoryId);
+        options.push({ id: item._categoryId, label: category.name });
+      }
+    }
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+  }, [allResults, categoryById]);
+
+  const selectedCategoryOption = selectedCategory === "all"
+    ? "all"
+    : categoryOptions.find((option) => option.id === selectedCategory)
+      ? selectedCategory
+      : "all";
+
+  // Apply filters + sort
+  const visibleResults = useMemo(() => {
+    let list = allResults;
+    if (featuredOnly) list = list.filter((item) => item.featured);
+    if (inStockOnly) list = list.filter((item) => availableCatalogItemIds.has(item._id));
+    if (selectedCategoryOption !== "all") {
+      list = list.filter((item) => item._categoryId === selectedCategoryOption);
+    }
+    const sorted = [...list];
+    switch (sortBy) {
+      case "price-asc":
+        sorted.sort((a, b) => a.price - b.price);
+        break;
+      case "price-desc":
+        sorted.sort((a, b) => b.price - a.price);
+        break;
+      case "rating": {
+        const ratings = ratingsMap as Record<string, { average: number; count: number }> | undefined;
+        sorted.sort((a, b) => {
+          const ra = ratings?.[a._id];
+          const rb = ratings?.[b._id];
+          const countDiff = (rb?.count ?? 0) - (ra?.count ?? 0);
+          if (countDiff !== 0) return countDiff;
+          return (rb?.average ?? 0) - (ra?.average ?? 0);
+        });
+        break;
+      }
+      case "relevance":
+        break;
+    }
+    return sorted;
+  }, [allResults, featuredOnly, inStockOnly, selectedCategoryOption, sortBy, availableCatalogItemIds, ratingsMap]);
+
+  const filtersActive = featuredOnly || inStockOnly || selectedCategory !== "all" || sortBy !== "relevance";
+
+  const clearFilters = useCallback(() => {
+    setSortBy("relevance");
+    setFeaturedOnly(false);
+    setInStockOnly(false);
+    setSelectedCategory("all");
+  }, []);
+
+  // Group filtered results by BU
+  const groupedResults = useMemo(() => {
+    const groups: Record<string, SearchResult[]> = {};
+    for (const item of visibleResults) {
+      const key = item._businessUnitName;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    }
+    return groups;
+  }, [visibleResults]);
+
   // State flags
-  const isSearching = debouncedQuery.trim().length > 0;
   const isBUsLoading = activeBUs === undefined;
   const isResultsLoading = isSearching && buIds.length > 0 && (
     searchResults0 === undefined ||
@@ -409,6 +532,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
   );
   const isLoading = isBUsLoading || isResultsLoading;
   const hasResults = allResults.length > 0;
+  const hasVisibleResults = visibleResults.length > 0;
 
   // ==========================================================================
   // Render
@@ -447,6 +571,79 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
               </button>
             )}
           </div>
+
+          {/* Filter + Sort Bar */}
+          {isSearching && (
+            <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+              <div className="relative flex shrink-0 items-center">
+                <ArrowUpDown className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SearchSort)}
+                  aria-label="Sort results"
+                  className="h-8 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {categoryOptions.length > 0 && (
+                <div className="relative flex shrink-0 items-center">
+                  <Filter className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <select
+                    value={selectedCategoryOption}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    aria-label="Filter by category"
+                    className="h-8 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
+                  >
+                    <option value="all">All Categories</option>
+                    {categoryOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <button
+                onClick={() => setFeaturedOnly((value) => !value)}
+                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                  featuredOnly
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border/60 bg-card text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Featured
+              </button>
+
+              <button
+                onClick={() => setInStockOnly((value) => !value)}
+                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                  inStockOnly
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border/60 bg-card text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <PackageCheck className="h-3.5 w-3.5" />
+                In Stock
+              </button>
+
+              {filtersActive && (
+                <button
+                  onClick={clearFilters}
+                  className="h-8 shrink-0 rounded-full px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -582,7 +779,27 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
           {/* ================================================================ */}
           {/* SEARCH RESULTS                                                   */}
           {/* ================================================================ */}
-          {isSearching && !isLoading && hasResults && (
+          {isSearching && !isLoading && hasResults && !hasVisibleResults && (
+            <motion.div
+              key="filtered-empty"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              <EmptyState
+                title="No matches for your filters"
+                description="Try adjusting or clearing the filters to see more results."
+                icon={Filter}
+                action={
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    Clear Filters
+                  </Button>
+                }
+              />
+            </motion.div>
+          )}
+
+          {isSearching && !isLoading && hasResults && hasVisibleResults && (
             <motion.div
               key="results"
               initial={{ opacity: 0 }}
@@ -590,9 +807,19 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
               exit={{ opacity: 0 }}
               className="space-y-8"
             >
-              <p className="text-sm text-muted-foreground">
-                {allResults.length} result{allResults.length === 1 ? "" : "s"} for &quot;{debouncedQuery}&quot;
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {visibleResults.length} result{visibleResults.length === 1 ? "" : "s"} for &quot;{debouncedQuery}&quot;
+                </p>
+                {filtersActive && (
+                  <button
+                    onClick={clearFilters}
+                    className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
 
               {Object.entries(groupedResults).map(([buName, items]) => (
                 <section key={buName}>
