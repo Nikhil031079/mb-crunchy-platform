@@ -22,6 +22,8 @@ export interface Combo {
   status: ComboStatus;
   featured: boolean;
   displayOrder: number;
+  /** Marketing extensions stored in the combo `settings` object. */
+  settings?: Record<string, unknown>;
 }
 
 export interface ComboFormValues {
@@ -37,6 +39,8 @@ export interface ComboFormValues {
   status: ComboStatus;
   featured: boolean;
   displayOrder: number;
+  /** Short label rendered as a badge on the combo card, e.g. "Bestseller". */
+  highlightBadge: string;
 }
 
 export type ComboSortKey = "name" | "slug" | "businessUnitName" | "status" | "displayOrder" | "price";

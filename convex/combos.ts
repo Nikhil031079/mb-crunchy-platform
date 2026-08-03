@@ -94,6 +94,7 @@ export const create = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    settings: v.optional(v.any()),
     sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
@@ -165,6 +166,7 @@ export const update = mutation({
     metaDescription: v.optional(v.string()),
     metaKeywords: v.optional(v.string()),
     canonicalUrl: v.optional(v.string()),
+    settings: v.optional(v.any()),
     sessionToken: v.string(),
   },
   handler: async (ctx, args) => {

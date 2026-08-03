@@ -29,6 +29,8 @@ import type * as loyalty from "../loyalty.js";
 import type * as migrations_convertVariants from "../migrations/convertVariants.js";
 import type * as notifications from "../notifications.js";
 import type * as offers from "../offers.js";
+import type * as orderActivities from "../orderActivities.js";
+import type * as orderNotes from "../orderNotes.js";
 import type * as orders from "../orders.js";
 import type * as partyPacks from "../partyPacks.js";
 import type * as products from "../products.js";
@@ -67,6 +69,8 @@ declare const fullApi: ApiFromModules<{
   "migrations/convertVariants": typeof migrations_convertVariants;
   notifications: typeof notifications;
   offers: typeof offers;
+  orderActivities: typeof orderActivities;
+  orderNotes: typeof orderNotes;
   orders: typeof orders;
   partyPacks: typeof partyPacks;
   products: typeof products;

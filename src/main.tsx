@@ -47,6 +47,9 @@ const InventoryPage = lazy(() => import("@/pages/admin/InventoryPage"));
 const CustomersPage = lazy(() => import("@/pages/admin/CustomersPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
+const HomepageSectionsPage = lazy(() => import("@/pages/admin/HomepageSectionsPage"));
+const FlashSalesPage = lazy(() => import("@/pages/admin/FlashSalesPage"));
+const HappyHourPage = lazy(() => import("@/pages/admin/HappyHourPage"));
 
 // Shared Pages
 const AuthPage = lazy(() => import("@/pages/Auth.tsx"));
@@ -209,6 +212,9 @@ function AppRoutes() {
           <Route path="customers" element={<CustomersPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="banners" element={<BannersPage />} />
+          <Route path="homepage-sections" element={<HomepageSectionsPage />} />
+          <Route path="flash-sales" element={<FlashSalesPage />} />
+          <Route path="happy-hour" element={<HappyHourPage />} />
         </Route>
 
         {/* ============ Auth ============ */}

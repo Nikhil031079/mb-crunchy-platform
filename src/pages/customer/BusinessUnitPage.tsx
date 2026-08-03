@@ -26,6 +26,7 @@ import { api } from "@convex/_generated/api";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
+import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 
 // Customer reusable components
@@ -115,6 +116,12 @@ export default function BusinessUnitPage() {
 
   const isBuLoading = businessUnit === undefined;
   const isBuNotFound = businessUnit === null;
+
+  // Remember which store the shopper browses (BU personalization on homepage)
+  const { setPreference } = useBrowsingPreference();
+  useEffect(() => {
+    if (businessUnit?._id) setPreference(businessUnit._id);
+  }, [businessUnit?._id, setPreference]);
 
   // Once BU is loaded, fetch all related data
   const categories = useQuery(

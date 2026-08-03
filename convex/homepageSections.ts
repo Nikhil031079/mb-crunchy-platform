@@ -90,6 +90,40 @@ export const initializeDefaults = mutation({
   },
 });
 
+export const create = mutation({
+  args: {
+    sessionToken: v.string(),
+    businessUnitId: v.id("businessUnits"),
+    sectionType: v.union(
+      v.literal("hero"),
+      v.literal("businessUnits"),
+      v.literal("featuredProducts"),
+      v.literal("combos"),
+      v.literal("partyPacks"),
+      v.literal("offers"),
+      v.literal("content"),
+      v.literal("testimonials"),
+      v.literal("footer")
+    ),
+    title: v.optional(v.string()),
+    displayOrder: v.number(),
+    visible: v.boolean(),
+    settings: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
+    const { sessionToken: _, ...insertArgs } = args;
+    const now = Date.now();
+
+    return await ctx.db.insert("homepageSections", {
+      ...insertArgs,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
 export const update = mutation({
   args: {
     sessionToken: v.string(),

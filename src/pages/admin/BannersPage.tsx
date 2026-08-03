@@ -37,7 +37,21 @@ function fromConvex(doc: any, buMap: Map<string, string>): Banner {
     status: doc.status,
     startDate: doc.startDate,
     endDate: doc.endDate,
+    settings: doc.settings,
   };
+}
+
+function toSettingsArgs(values: BannerFormValues): Record<string, unknown> {
+  const settings: Record<string, unknown> = {};
+  if (values.mobileImage) settings.mobileImage = values.mobileImage;
+  if (values.exclusive) settings.exclusive = true;
+  if (values.backgroundColor) settings.backgroundColor = values.backgroundColor;
+  if (values.textColor) settings.textColor = values.textColor;
+  if (values.iconUrl) settings.icon = values.iconUrl;
+  if (values.richText) settings.richText = true;
+  if (values.sectionWidth !== "contained") settings.sectionWidth = values.sectionWidth;
+  if (values.contentBlockStyle !== "card") settings.contentBlockStyle = values.contentBlockStyle;
+  return settings;
 }
 
 function toCreateArgs(values: BannerFormValues) {
@@ -55,6 +69,7 @@ function toCreateArgs(values: BannerFormValues) {
     status: values.status as any,
     startDate: values.startDate ? new Date(values.startDate).getTime() : undefined,
     endDate: values.endDate ? new Date(values.endDate).getTime() : undefined,
+    settings: toSettingsArgs(values),
   };
 }
 
@@ -72,6 +87,7 @@ function toUpdateArgs(id: string, values: BannerFormValues) {
     status: values.status as any,
     startDate: values.startDate ? new Date(values.startDate).getTime() : undefined,
     endDate: values.endDate ? new Date(values.endDate).getTime() : undefined,
+    settings: toSettingsArgs(values),
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -95,6 +111,7 @@ export default function BannersPage() {
   const [editingBanner, setEditingBanner] = useState<Banner>();
   const [deleteTarget, setDeleteTarget] = useState<Banner>();
   const [restoreTarget, setRestoreTarget] = useState<Banner>();
+  const [previewTarget, setPreviewTarget] = useState<Banner>();
 
   const buMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -188,7 +205,7 @@ export default function BannersPage() {
             onClear={() => resetPageAndSetFilters({ query: "", status: "all", contentType: "all", businessUnitId: "all" })}
           />
           {isLoading ? (
-            <BannerTable banners={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={() => undefined} onDelete={() => undefined} onRestore={() => undefined} />
+            <BannerTable banners={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={() => undefined} onDelete={() => undefined} onRestore={() => undefined} onPreview={() => undefined} />
           ) : visibleBanners.length === 0 ? (
             <EmptyState
               icon={Image}
@@ -206,6 +223,7 @@ export default function BannersPage() {
                 onEdit={(b) => { setEditingBanner(b); setFormOpen(true); }}
                 onDelete={setDeleteTarget}
                 onRestore={setRestoreTarget}
+                onPreview={setPreviewTarget}
               />
               <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedBanners.length)} of {sortedBanners.length}</p>
@@ -232,8 +250,10 @@ export default function BannersPage() {
       <BannerDialogs
         deleteTarget={deleteTarget}
         restoreTarget={restoreTarget}
+        previewTarget={previewTarget}
         onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }}
         onRestoreOpenChange={(open) => { if (!open) setRestoreTarget(undefined); }}
+        onPreviewOpenChange={(open) => { if (!open) setPreviewTarget(undefined); }}
         onConfirmDelete={archiveBanner}
         onConfirmRestore={confirmRestore}
       />

@@ -29,6 +29,8 @@ export interface Banner {
   status: BannerStatus;
   startDate?: number;
   endDate?: number;
+  /** Marketing extensions stored in the content `settings` object. */
+  settings?: Record<string, unknown>;
 }
 
 export interface BannerFormValues {
@@ -38,12 +40,23 @@ export interface BannerFormValues {
   subtitle: string;
   body: string;
   imageUrl: string;
+  mobileImage: string;
   buttonText: string;
   buttonLink: string;
   displayOrder: number;
   status: BannerStatus;
   startDate: string;
   endDate: string;
+  // Hero-specific
+  exclusive: boolean;
+  // Promotion / content-block styling
+  backgroundColor: string;
+  textColor: string;
+  iconUrl: string;
+  // Content-block specific
+  richText: boolean;
+  sectionWidth: "full" | "contained" | "narrow";
+  contentBlockStyle: "card" | "fullBleed";
 }
 
 export type BannerSortKey = "title" | "contentType" | "status" | "displayOrder" | "businessUnitName";

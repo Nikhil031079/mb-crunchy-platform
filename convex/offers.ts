@@ -76,6 +76,7 @@ export const create = mutation({
     displayOrder: v.number(),
     status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
     banner: v.optional(v.string()),
+    settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -113,6 +114,7 @@ export const update = mutation({
       v.union(v.literal("active"), v.literal("inactive"), v.literal("archived"))
     ),
     banner: v.optional(v.string()),
+    settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);

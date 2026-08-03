@@ -1,4 +1,4 @@
-import { ArrowUpDown, Image, MoreHorizontal, Pencil, Archive, ArchiveRestore } from "lucide-react";
+import { ArrowUpDown, Image, MoreHorizontal, Pencil, Archive, ArchiveRestore, Eye } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { getCampaignWindowStatus } from "@/utils";
 import { contentTypeLabels } from "./types";
 import type { Banner, BannerSortKey, SortDirection } from "./types";
 
@@ -18,12 +19,27 @@ interface BannerTableProps {
   onEdit: (banner: Banner) => void;
   onDelete: (banner: Banner) => void;
   onRestore: (banner: Banner) => void;
+  onPreview?: (banner: Banner) => void;
 }
 
 const statusColor: Record<string, string> = {
   active: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
   inactive: "bg-amber-500/10 text-amber-600 border-amber-200",
   archived: "bg-gray-500/10 text-gray-600 border-gray-200",
+};
+
+const scheduleColor: Record<string, string> = {
+  active: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+  scheduled: "bg-blue-500/10 text-blue-600 border-blue-200",
+  expired: "bg-red-500/10 text-red-600 border-red-200",
+  none: "bg-gray-500/10 text-gray-600 border-gray-200",
+};
+
+const scheduleLabel: Record<string, string> = {
+  active: "Active",
+  scheduled: "Scheduled",
+  expired: "Expired",
+  none: "No schedule",
 };
 
 function SortHeader({ label, sortKey, currentKey, direction, onSort }: { label: string; sortKey: BannerSortKey; currentKey: BannerSortKey; direction: SortDirection; onSort: (key: BannerSortKey) => void }) {
@@ -49,7 +65,7 @@ function LoadingRows() {
   ));
 }
 
-export function BannerTable({ banners, isLoading, sortKey, sortDirection, onSort, onEdit, onDelete, onRestore }: BannerTableProps) {
+export function BannerTable({ banners, isLoading, sortKey, sortDirection, onSort, onEdit, onDelete, onRestore, onPreview }: BannerTableProps) {
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -58,6 +74,7 @@ export function BannerTable({ banners, isLoading, sortKey, sortDirection, onSort
             <TableHead><SortHeader label="Title" sortKey="title" currentKey={sortKey} direction={sortDirection} onSort={onSort} /></TableHead>
             <TableHead><SortHeader label="Type" sortKey="contentType" currentKey={sortKey} direction={sortDirection} onSort={onSort} /></TableHead>
             <TableHead><SortHeader label="Status" sortKey="status" currentKey={sortKey} direction={sortDirection} onSort={onSort} /></TableHead>
+            <TableHead>Schedule</TableHead>
             <TableHead><SortHeader label="Order" sortKey="displayOrder" currentKey={sortKey} direction={sortDirection} onSort={onSort} /></TableHead>
             <TableHead>Store</TableHead>
             <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
@@ -66,7 +83,7 @@ export function BannerTable({ banners, isLoading, sortKey, sortDirection, onSort
         <TableBody>
           {isLoading ? <LoadingRows /> : banners.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
                 No banners found.
               </TableCell>
             </TableRow>
@@ -89,6 +106,7 @@ export function BannerTable({ banners, isLoading, sortKey, sortDirection, onSort
               </TableCell>
               <TableCell><Badge variant="outline" className="text-xs">{contentTypeLabels[banner.contentType]}</Badge></TableCell>
               <TableCell><Badge variant="outline" className={cn("text-xs capitalize", statusColor[banner.status])}>{banner.status}</Badge></TableCell>
+              <TableCell><ScheduleBadge banner={banner} /></TableCell>
               <TableCell className="text-sm">{banner.displayOrder}</TableCell>
               <TableCell className="text-sm text-muted-foreground">{banner.businessUnitName ?? "Global"}</TableCell>
               <TableCell>
@@ -103,6 +121,11 @@ export function BannerTable({ banners, isLoading, sortKey, sortDirection, onSort
                     <DropdownMenuItem onClick={() => onEdit(banner)}>
                       <Pencil className="mr-2 h-4 w-4" />Edit
                     </DropdownMenuItem>
+                    {onPreview && (
+                      <DropdownMenuItem onClick={() => onPreview(banner)}>
+                        <Eye className="mr-2 h-4 w-4" />Preview
+                      </DropdownMenuItem>
+                    )}
                     {banner.status === "archived" ? (
                       <DropdownMenuItem onClick={() => onRestore(banner)}>
                         <ArchiveRestore className="mr-2 h-4 w-4" />Restore
@@ -120,5 +143,19 @@ export function BannerTable({ banners, isLoading, sortKey, sortDirection, onSort
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+function ScheduleBadge({ banner }: { banner: Banner }) {
+  const status = getCampaignWindowStatus(banner.startDate, banner.endDate);
+  return (
+    <Badge variant="outline" className={cn("text-xs capitalize", scheduleColor[status])}>
+      {scheduleLabel[status]}
+      {status === "scheduled" && banner.startDate && (
+        <span className="ml-1 font-normal text-muted-foreground">
+          {new Date(banner.startDate).toLocaleDateString()}
+        </span>
+      )}
+    </Badge>
   );
 }

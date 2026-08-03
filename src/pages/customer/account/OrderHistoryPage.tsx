@@ -1,10 +1,12 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "convex/react";
-import { Package, ChevronDown, ChevronUp, RefreshCw, Loader2 } from "lucide-react";
+import { Package, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 
+import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 import { formatCurrency } from "@/utils";
 import { useCart } from "@/stores/cart";
 
@@ -46,6 +48,13 @@ export default function OrderHistoryPage() {
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+
+  const activities = useQuery(
+    api.orderActivities.getByOrderForCustomer,
+    expandedOrderId
+      ? { orderId: expandedOrderId as unknown as Id<"orders"> }
+      : "skip"
+  );
 
   const { addItem } = useCart();
 
@@ -233,6 +242,19 @@ export default function OrderHistoryPage() {
                             Reorder
                           </Button>
                         )}
+
+                        <Separator />
+
+                        {/* Activity Timeline */}
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                            Activity Timeline
+                          </p>
+                          <OrderActivityFeed
+                            activities={activities}
+                            emptyTitle="No activity yet"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>

@@ -1,10 +1,11 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, BadgePercent, Check, ImageOff } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BadgePercent, Flame, Star } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { getOfferMarketingSettings } from "@/utils";
 
 import { OfferRowActions } from "./OfferRowActions";
 import type { Offer, OfferSortKey, SortDirection } from "./types";
@@ -42,6 +43,25 @@ function ImagePreview({ offer }: { offer: Offer }) {
   return <div className="flex size-9 items-center justify-center rounded-md border bg-secondary text-xs font-bold text-muted-foreground"><BadgePercent className="size-4" /></div>;
 }
 
+function MarketingBadges({ offer }: { offer: Offer }) {
+  const settings = getOfferMarketingSettings(offer);
+  if (!settings.featured && !settings.isFlashSale && !settings.flashSaleFeatured) return null;
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-1">
+      {settings.isFlashSale && (
+        <Badge variant="outline" className="border-orange-200 bg-orange-500/10 px-1 py-0 text-[10px] font-medium text-orange-600">
+          <Flame className="size-3" />Flash
+        </Badge>
+      )}
+      {settings.featured && (
+        <Badge variant="outline" className="border-amber-200 bg-amber-500/10 px-1 py-0 text-[10px] font-medium text-amber-600">
+          <Star className="size-3" />Featured
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 export function OfferTable({ offers, isLoading = false, sortKey, sortDirection, onSort, onEdit, onDelete, onRestore }: OfferTableProps) {
   return <Table>
     <TableHeader><TableRow>
@@ -49,7 +69,7 @@ export function OfferTable({ offers, isLoading = false, sortKey, sortDirection, 
     </TableRow></TableHeader>
     <TableBody>
       {isLoading ? Array.from({ length: 6 }, (_, index) => <TableRow key={index}><TableCell><Skeleton className="size-9" /></TableCell>{Array.from({ length: 9 }, (_, cellIndex) => <TableCell key={cellIndex}><Skeleton className="h-5 w-24" /></TableCell>)}</TableRow>) : offers.map((offer) => <TableRow key={offer.id}>
-        <TableCell><ImagePreview offer={offer} /></TableCell><TableCell className="font-medium">{offer.title}</TableCell><TableCell className="text-muted-foreground">{offer.code ? <Badge variant="secondary" className="font-mono">{offer.code}</Badge> : <span className="text-muted-foreground italic">Auto</span>}</TableCell><TableCell className="text-muted-foreground">{offer.businessUnitName}</TableCell><TableCell><Badge variant="outline" className="border-emerald-200 bg-emerald-500/10 text-emerald-700">{formatDiscount(offer.discountType, offer.discountValue, offer.maxDiscount)}</Badge></TableCell><TableCell className="text-muted-foreground">{offer.minOrderValue ? `₹${offer.minOrderValue}` : "—"}</TableCell><TableCell className="text-muted-foreground">{offer.usedCount}{offer.usageLimit ? ` / ${offer.usageLimit}` : ""}</TableCell><TableCell className="text-muted-foreground">{formatTimestamp(offer.startsAt)} — {formatTimestamp(offer.endsAt)}</TableCell><TableCell><Badge variant="outline" className={cn("capitalize", statusClassNames[offer.status])}>{offer.status}</Badge></TableCell><TableCell>{offer.displayOrder}</TableCell><TableCell><OfferRowActions offer={offer} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} /></TableCell>
+        <TableCell><ImagePreview offer={offer} /></TableCell><TableCell className="font-medium"><div className="min-w-0"><p className="truncate">{offer.title}</p><MarketingBadges offer={offer} /></div></TableCell><TableCell className="text-muted-foreground">{offer.code ? <Badge variant="secondary" className="font-mono">{offer.code}</Badge> : <span className="text-muted-foreground italic">Auto</span>}</TableCell><TableCell className="text-muted-foreground">{offer.businessUnitName}</TableCell><TableCell><Badge variant="outline" className="border-emerald-200 bg-emerald-500/10 text-emerald-700">{formatDiscount(offer.discountType, offer.discountValue, offer.maxDiscount)}</Badge></TableCell><TableCell className="text-muted-foreground">{offer.minOrderValue ? `₹${offer.minOrderValue}` : "—"}</TableCell><TableCell className="text-muted-foreground">{offer.usedCount}{offer.usageLimit ? ` / ${offer.usageLimit}` : ""}</TableCell><TableCell className="text-muted-foreground">{formatTimestamp(offer.startsAt)} — {formatTimestamp(offer.endsAt)}</TableCell><TableCell><Badge variant="outline" className={cn("capitalize", statusClassNames[offer.status])}>{offer.status}</Badge></TableCell><TableCell>{offer.displayOrder}</TableCell><TableCell><OfferRowActions offer={offer} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} /></TableCell>
       </TableRow>)}
     </TableBody>
   </Table>;

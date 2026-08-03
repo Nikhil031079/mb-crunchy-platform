@@ -1,5 +1,5 @@
-import { useMemo, useCallback } from "react";
-import { Link, useNavigate } from "react-router";
+import { useMemo } from "react";
+import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import {
@@ -7,35 +7,33 @@ import {
   Truck,
   ArrowRight,
   Sparkles,
-  Utensils,
-  Package,
-  ChevronRight,
-  Percent,
-  LayoutGrid,
   ChefHat,
   BadgeCheck,
   CreditCard,
+  LayoutGrid,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
 import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
-import { useCart } from "@/stores/cart";
+import { isContentActive, getContentMarketingSettings } from "@/utils";
+import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 
 // Customer Reusable Components
 import {
   HeroSection,
-  SectionHeader,
-  OfferBanner,
-  ProductCard,
-  PartyPackCard,
-  CardGridSkeleton,
+  HeroSectionSkeleton,
   DeliveryInfoStrip,
-  TestimonialsSection,
-  BestSellersSection,
-  ComboOffersSection,
+  PromoBannerStrip,
+  HappyHourBanner,
+  FlashSalesSection,
+  HomepageSectionRenderer,
+  RecentlyViewedSection,
+  ContinueShoppingSection,
+  RecommendedForYouSection,
+  TrendingNowSection,
+  SeasonalSection,
 } from "@/components/customer";
 
 // Shared components
@@ -45,7 +43,7 @@ import { getCategoryCatalog, enrichCategory } from "@/data/categories";
 
 import type { EnrichedCategory } from "@/data/categories";
 
-import type { BusinessUnit, Category, Offer, PartyPack, Content } from "@/types";
+import type { BusinessUnit, Category, Content, HomepageSection } from "@/types";
 
 // ============================================================================
 // Why Choose MB Crunchy — Static brand values
@@ -168,366 +166,14 @@ function CategoriesSection({
 }
 
 // ============================================================================
-// BusinessUnitSection — Per-BU child component with its own hooks
-// ============================================================================
-
-function BusinessUnitSection({
-  bu,
-  buIndex,
-}: {
-  bu: BusinessUnit;
-  buIndex: number;
-}) {
-  const featuredProducts = useQuery(api.catalogItems.getFeatured, {
-    businessUnitId: bu._id,
-  });
-
-  const partyPacks = useQuery(
-    api.partyPacks.getByBusinessUnit,
-    bu.enablePartyPacks ? { businessUnitId: bu._id } : "skip",
-  ) as PartyPack[] | undefined;
-
-  const navigate = useNavigate();
-  const { addItem } = useCart();
-
-  const handleAddToCart = useCallback(
-    (product: any) => {
-      const defaultVariant = product.variants?.[0];
-      addItem({
-        catalogItemId: product._id,
-        itemType: "product",
-        businessUnitId: bu._id,
-        name: product.name,
-        variantName: defaultVariant?.name ?? "Default",
-        quantity: 1,
-        unitPrice: product.price ?? defaultVariant?.price ?? 0,
-        image: product.coverImage || product.thumbnail,
-      });
-      toast.success("Added to cart", {
-        description: `${product.name}`,
-      });
-    },
-    [addItem, bu._id]
-  );
-
-  const isDataLoaded =
-    featuredProducts !== undefined &&
-    (partyPacks !== undefined || !bu.enablePartyPacks);
-
-  const hasFeatured = featuredProducts && featuredProducts.length > 0;
-  const hasPartyPacks = partyPacks && partyPacks.length > 0;
-
-  if (!isDataLoaded) {
-    return <BusinessUnitSectionSkeleton buIndex={buIndex} />;
-  }
-
-  if (!hasFeatured && !hasPartyPacks) return null;
-
-  const buSlug = bu.slug;
-
-  return (
-    <section
-      key={bu._id}
-      className={cn("py-12 sm:py-16", buIndex % 2 === 1 && "bg-secondary/20")}
-    >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* BU Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {bu.logo ? (
-              <img
-                src={bu.logo}
-                alt=""
-                className="h-10 w-10 rounded-xl object-cover shadow-sm"
-              />
-            ) : (
-              <div
-                className="flex h-10 w-10 items-center justify-center rounded-xl shadow-sm"
-                style={{ backgroundColor: bu.themeColor || "#000" }}
-              >
-                {buIndex === 0 ? (
-                  <Utensils className="h-5 w-5 text-white" />
-                ) : (
-                  <Package className="h-5 w-5 text-white" />
-                )}
-              </div>
-            )}
-            <div>
-              <h2 className="text-xl font-bold sm:text-2xl">{bu.name}</h2>
-              {bu.description && (
-                <p className="text-sm text-muted-foreground">{bu.description}</p>
-              )}
-            </div>
-          </div>
-          <Link
-            to={`/${buSlug}`}
-            className="hidden items-center gap-1 text-sm font-medium text-accent transition-colors hover:underline sm:flex"
-          >
-            View All
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        {/* Featured Products */}
-        {hasFeatured && (
-          <div className="mb-10">
-            <SectionHeader
-              title="Popular Items"
-              subtitle="Our most-loved selections"
-              action={{
-                label: `Browse ${bu.name}`,
-                onClick: () => (navigate(`/${buSlug}`)),
-              }}
-              size="sm"
-            />
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {featuredProducts!.slice(0, 10).map((item: any, index: number) => (
-                <ProductCard
-                  key={item._id}
-                  product={item}
-                  businessUnitSlug={buSlug}
-                  index={index}
-                  compact
-                  onAddToCart={handleAddToCart}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Best Sellers — consolidated in the global BestSellersSection */}
-        {/* Combos — consolidated in the global ComboOffersSection */}
-
-        {/* Party Packs */}
-        {hasPartyPacks && (
-          <div>
-            <SectionHeader
-              title={`${bu.name} Party Packs`}
-              subtitle="Perfect for gatherings and events"
-              action={{
-                label: "View All Packs",
-                onClick: () => (navigate(`/${buSlug}`)),
-              }}
-              size="sm"
-            />
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {partyPacks!.slice(0, 4).map((pack, index) => (
-                <PartyPackCard key={pack._id} partyPack={pack} index={index} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-// ============================================================================
-// BusinessUnitSectionSkeleton
-// ============================================================================
-
-function BusinessUnitSectionSkeleton({ buIndex }: { buIndex: number }) {
-  return (
-    <section className={cn("py-12 sm:py-16", buIndex % 2 === 0 && "bg-secondary/20")}>
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="h-10 w-10 animate-pulse rounded-xl bg-secondary" />
-          <div className="space-y-2">
-            <div className="h-6 w-32 animate-pulse rounded bg-secondary" />
-            <div className="h-4 w-48 animate-pulse rounded bg-secondary" />
-          </div>
-        </div>
-        <div className="mb-5">
-          <div className="mb-2 h-1 w-8 animate-pulse rounded-full bg-secondary" />
-          <div className="h-6 w-36 animate-pulse rounded bg-secondary" />
-        </div>
-        <CardGridSkeleton count={5} columns={4} type="product" />
-      </div>
-    </section>
-  );
-}
-
-// ============================================================================
-// RecentlyViewedSection
-// ============================================================================
-
-function RecentlyViewedSection() {
-  const customer = useQuery(api.customers.getByAuthUser, {});
-
-  const recentCollections = useQuery(
-    api.collections.getByCustomerAndType,
-    customer?._id
-      ? { customerId: customer._id, collectionType: "recentlyViewed" }
-      : "skip",
-  );
-
-  const recentIds = useMemo(() => {
-    if (!recentCollections || recentCollections.length === 0) return [];
-    return recentCollections
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 8)
-      .map((c) => c.itemId as any);
-  }, [recentCollections]);
-
-  const recentItems = useQuery(
-    api.catalogItems.getByIds,
-    recentIds.length > 0 ? { ids: recentIds } : "skip",
-  );
-
-  const { addItem } = useCart();
-
-  const handleAddToCart = useCallback(
-    (product: any) => {
-      const defaultVariant = product.variants?.[0];
-      addItem({
-        catalogItemId: product._id,
-        itemType: "product",
-        businessUnitId: product.businessUnitId,
-        name: product.name,
-        variantName: defaultVariant?.name ?? "Default",
-        quantity: 1,
-        unitPrice: product.price ?? defaultVariant?.price ?? 0,
-        image: product.coverImage || product.thumbnail,
-      });
-      toast.success("Added to cart", { description: product.name });
-    },
-    [addItem],
-  );
-
-  if (!customer?._id || !recentItems || recentItems.length === 0) return null;
-
-  return (
-    <section className="bg-secondary/20 py-12 sm:py-16">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          title="Recently Viewed"
-          subtitle="Items you've browsed recently"
-          size="sm"
-        />
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {recentItems.slice(0, 10).map((item: any, index: number) => (
-            <ProductCard
-              key={item._id}
-              product={item}
-              index={index}
-              compact
-              onAddToCart={handleAddToCart}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ============================================================================
-// RecommendedSection
-// ============================================================================
-
-function RecommendedSection() {
-  const customer = useQuery(api.customers.getByAuthUser, {});
-
-  const recentCollections = useQuery(
-    api.collections.getByCustomerAndType,
-    customer?._id
-      ? { customerId: customer._id, collectionType: "recentlyViewed" }
-      : "skip",
-  );
-
-  const viewedBuIds = useMemo(() => {
-    if (!recentCollections || recentCollections.length === 0) return [];
-    const ids = new Set<string>();
-    for (const c of recentCollections) {
-      const buId = (c as Record<string, unknown>).businessUnitId;
-      if (buId) ids.add(buId as string);
-    }
-    return Array.from(ids).slice(0, 3);
-  }, [recentCollections]);
-
-  const excludeIds = useMemo(() => {
-    if (!recentCollections) return [];
-    return recentCollections.map((c) => c.itemId as any);
-  }, [recentCollections]);
-
-  const rec0 = useQuery(
-    api.catalogItems.getRecommended,
-    viewedBuIds[0] ? { businessUnitId: viewedBuIds[0] as any, excludeIds, limit: 4 } : "skip",
-  );
-  const rec1 = useQuery(
-    api.catalogItems.getRecommended,
-    viewedBuIds[1] ? { businessUnitId: viewedBuIds[1] as any, excludeIds, limit: 4 } : "skip",
-  );
-  const rec2 = useQuery(
-    api.catalogItems.getRecommended,
-    viewedBuIds[2] ? { businessUnitId: viewedBuIds[2] as any, excludeIds, limit: 4 } : "skip",
-  );
-
-  const { addItem } = useCart();
-
-  const handleAddToCart = useCallback(
-    (product: any) => {
-      const defaultVariant = product.variants?.[0];
-      addItem({
-        catalogItemId: product._id,
-        itemType: "product",
-        businessUnitId: product.businessUnitId,
-        name: product.name,
-        variantName: defaultVariant?.name ?? "Default",
-        quantity: 1,
-        unitPrice: product.price ?? defaultVariant?.price ?? 0,
-        image: product.coverImage || product.thumbnail,
-      });
-      toast.success("Added to cart", { description: product.name });
-    },
-    [addItem],
-  );
-
-  const recommendedItems = useMemo(() => {
-    const all = [...(rec0 ?? []), ...(rec1 ?? []), ...(rec2 ?? [])];
-    const seen = new Set<string>();
-    return all.filter((item: any) => {
-      if (seen.has(item._id)) return false;
-      seen.add(item._id);
-      return true;
-    }).slice(0, 10);
-  }, [rec0, rec1, rec2]);
-
-  if (!customer?._id || recommendedItems.length === 0) return null;
-
-  return (
-    <section className="py-12 sm:py-16">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <SectionHeader
-          title="Recommended for You"
-          subtitle="Based on your browsing history"
-          size="sm"
-        />
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {recommendedItems.map((item: any, index: number) => (
-            <ProductCard
-              key={item._id}
-              product={item}
-              index={index}
-              compact
-              onAddToCart={handleAddToCart}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ============================================================================
 // HomePage Component
 // ============================================================================
 
 export default function HomePage() {
   const businessUnits = useQuery(api.businessUnits.getActive) as BusinessUnit[] | undefined;
-  const allOffers = useQuery(api.offers.getAll) as Offer[] | undefined;
   const heroContent = useQuery(api.content.getByType, { contentType: "hero" }) as Content[] | undefined;
 
-  const isLoading = businessUnits === undefined;
+  const isLoading = businessUnits === undefined || heroContent === undefined;
 
   const activeBusinessUnits = useMemo(
     () =>
@@ -537,42 +183,47 @@ export default function HomePage() {
     [businessUnits]
   );
 
-  const activeOffers = useMemo(
-    () => (allOffers ?? []).filter((o) => o.status === "active"),
-    [allOffers]
-  );
+  // The primary business unit drives the homepage section layout ordering.
+  const primaryBu = activeBusinessUnits[0];
 
-  // Build hero banners from content + active offers
+  const { preferredBusinessUnitId } = useBrowsingPreference();
+
+  // Prefer the shopper's preferred BU layout when available; fall back to the
+  // primary BU. Sections themselves are ordered by priority + preference below.
+  const layoutBu =
+    activeBusinessUnits.find((bu) => bu._id === preferredBusinessUnitId) ??
+    primaryBu;
+
+  const homepageSections = useQuery(
+    api.homepageSections.getVisible,
+    layoutBu ? { businessUnitId: layoutBu._id } : "skip",
+  ) as HomepageSection[] | undefined;
+
+  const sectionsReady = layoutBu === undefined || homepageSections !== undefined;
+
+  // Build hero banners dynamically from active hero content (date-valid).
   const heroBanners = useMemo(() => {
-    const contentBanners = (heroContent ?? []).map((c) => ({
-      _id: c._id,
-      title: c.title,
-      subtitle: c.body ?? c.subtitle,
-      backgroundImage: c.coverImage ?? c.images?.[0],
-      badge: c.buttonText,
-      actions: c.buttonLink
-        ? [{ label: c.buttonText ?? "Learn More", href: c.buttonLink, variant: "default" as const }]
-        : undefined,
-    }));
+    const contentBanners = (heroContent ?? [])
+      .filter((c) => c.status === "active" && isContentActive(c))
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .map((c) => {
+        const settings = getContentMarketingSettings(c);
+        return {
+          _id: c._id,
+          title: c.title,
+          subtitle: c.subtitle ?? c.body,
+          description: c.body && c.subtitle ? c.body : undefined,
+          backgroundImage: c.coverImage ?? c.images?.[0],
+          mobileImage: settings.mobileImage,
+          badge: c.buttonText ?? undefined,
+          actions: c.buttonLink
+            ? [{ label: c.buttonText ?? "Learn More", href: c.buttonLink, variant: "default" as const }]
+            : undefined,
+        };
+      });
 
-    const offerBanners = activeOffers.slice(0, 5).map((offer) => ({
-      _id: offer._id,
-      title: offer.title,
-      subtitle: offer.description,
-      backgroundImage: offer.banner,
-      badge: offer.discountType === "percentage"
-        ? `${offer.discountValue}% OFF`
-        : offer.discountType === "fixed"
-        ? `₹${offer.discountValue} OFF`
-        : "Special Offer",
-      actions: [
-        { label: "Shop Now", href: `/${activeBusinessUnits[0]?.slug ?? ""}`, variant: "default" as const },
-      ],
-    }));
-
-    const merged = [...contentBanners, ...offerBanners];
-    return merged.length > 0 ? merged.slice(0, 5) : undefined;
-  }, [heroContent, activeOffers, activeBusinessUnits]);
+    return contentBanners.length > 0 ? contentBanners.slice(0, 5) : undefined;
+  }, [heroContent]);
 
   // Default promotional slides shown when no admin-created banners exist
   const defaultPromoSlides = useMemo(() => {
@@ -627,21 +278,11 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* ================================================================ */}
-      {/* 1. HERO SECTION — Full-width rotating banner                     */}
+      {/* 1. HERO SECTION — Full-width rotating banner (dynamic content)   */}
       {/* ================================================================ */}
 
       {isLoading ? (
-        <div className="flex min-h-[420px] sm:min-h-[480px] w-full animate-pulse items-center bg-secondary/50">
-          <div className="mx-auto w-full max-w-2xl space-y-6 px-4">
-            <div className="mx-auto h-6 w-32 rounded-full bg-secondary" />
-            <div className="mx-auto h-12 w-3/4 rounded-lg bg-secondary" />
-            <div className="mx-auto h-4 w-1/2 rounded bg-secondary" />
-            <div className="flex justify-center gap-3 pt-4">
-              <div className="h-12 w-36 rounded-full bg-secondary" />
-              <div className="h-12 w-36 rounded-full bg-secondary" />
-            </div>
-          </div>
-        </div>
+        <HeroSectionSkeleton />
       ) : (
         <HeroSection
           title="Fresh Food, Organic Groceries & Everyday Essentials"
@@ -655,99 +296,91 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 2. DELIVERY INFORMATION STRIP                                   */}
+      {/* 2. PROMOTIONAL BANNER STRIP — active promotions (horizontal)     */}
+      {/* ================================================================ */}
+
+      {!isLoading && <PromoBannerStrip />}
+
+      {/* ================================================================ */}
+      {/* 3. HAPPY HOUR — active announcement banner, when currently valid */}
+      {/* ================================================================ */}
+
+      {!isLoading && <HappyHourBanner />}
+
+      {/* ================================================================ */}
+      {/* 4. DELIVERY INFORMATION STRIP                                   */}
       {/* ================================================================ */}
 
       {!isLoading && <DeliveryInfoStrip />}
 
       {/* ================================================================ */}
-      {/* 3. BROWSE BY CATEGORY — Premium category grid                    */}
+      {/* 5. FLASH SALES — time-urgent active offers with countdown        */}
+      {/* ================================================================ */}
+
+      {!isLoading && <FlashSalesSection businessUnits={activeBusinessUnits} />}
+
+      {/* ================================================================ */}
+      {/* 6. BROWSE BY CATEGORY — Premium category grid                    */}
       {/* ================================================================ */}
 
       {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
-      {/* 4. BEST SELLERS — Global top picks row                          */}
+      {/* 7. DYNAMIC HOMEPAGE SECTIONS — ordered via homepageSections      */}
       {/* ================================================================ */}
 
-      {!isLoading && <BestSellersSection businessUnits={activeBusinessUnits} />}
-
-      {/* ================================================================ */}
-      {/* 5. COMBO OFFERS — Global bundles row                            */}
-      {/* ================================================================ */}
-
-      {!isLoading && <ComboOffersSection businessUnits={activeBusinessUnits} />}
-
-      {/* ================================================================ */}
-      {/* 6. TODAY'S DEALS                                                 */}
-      {/* ================================================================ */}
-
-      {!isLoading && activeOffers.length > 0 && (
-        <section id="todays-deals" className="py-12 sm:py-16 bg-gradient-to-b from-secondary/30 to-background">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex items-end justify-between mb-6">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Percent className="h-4 w-4 text-accent" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-accent">
-                    Deals
-                  </span>
-                </div>
-                <h2 className="text-xl font-bold sm:text-2xl">Today's Best Deals</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Limited-time offers you don't want to miss</p>
-              </div>
+      {!isLoading && sectionsReady && (
+        activeBusinessUnits.length === 0 ? (
+          <section className="py-16">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+              <EmptyState
+                title="Explore our services"
+                description="Once business units are created, their products and offers will appear here."
+                icon={Sparkles}
+              />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {activeOffers.slice(0, 6).map((offer, index) => (
-                <OfferBanner key={offer._id} banner={offer} index={index} variant="card" />
-              ))}
-            </div>
-          </div>
-        </section>
+          </section>
+        ) : (
+          <HomepageSectionRenderer
+            sections={homepageSections}
+            businessUnits={activeBusinessUnits}
+            preferredBusinessUnitId={preferredBusinessUnitId ?? undefined}
+          />
+        )
       )}
 
       {/* ================================================================ */}
-      {/* 7. PER-BUSINESS UNIT SECTIONS                                    */}
+      {/* 8. SEASONAL PICKS — time-aware themed product row                 */}
       {/* ================================================================ */}
 
-      {!isLoading && activeBusinessUnits.length === 0 && (
-        <section className="py-16">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <EmptyState
-              title="Explore our services"
-              description="Once business units are created, their products and offers will appear here."
-              icon={Sparkles}
-            />
-          </div>
-        </section>
-      )}
-
-      {activeBusinessUnits.map((bu, buIndex) => (
-        <BusinessUnitSection key={bu._id} bu={bu} buIndex={buIndex} />
-      ))}
-
-      {isLoading && (
-        <>
-          {[1, 2].map((sectionIdx) => (
-            <BusinessUnitSectionSkeleton key={sectionIdx} buIndex={sectionIdx} />
-          ))}
-        </>
-      )}
+      {!isLoading && <SeasonalSection businessUnits={activeBusinessUnits} />}
 
       {/* ================================================================ */}
-      {/* 8. RECENTLY VIEWED                                               */}
+      {/* 9. CONTINUE SHOPPING — cart-category related products            */}
       {/* ================================================================ */}
 
-      {!isLoading && <RecentlyViewedSection />}
+      {!isLoading && <ContinueShoppingSection businessUnits={activeBusinessUnits} />}
 
       {/* ================================================================ */}
-      {/* 9. RECOMMENDED FOR YOU                                           */}
+      {/* 10. RECOMMENDED FOR YOU — deterministic personalized picks        */}
       {/* ================================================================ */}
 
-      {!isLoading && <RecommendedSection />}
+      {!isLoading && <RecommendedForYouSection businessUnits={activeBusinessUnits} />}
 
       {/* ================================================================ */}
-      {/* 10. WHY CHOOSE MB CRUNCHY                                        */}
+      {/* 11. RECENTLY VIEWED — localStorage, guest-friendly                */}
+      {/* ================================================================ */}
+
+      {!isLoading && <RecentlyViewedSection businessUnits={activeBusinessUnits} />}
+
+      {/* ================================================================ */}
+      {/* 12. TRENDING NOW — featured/order/view ranked row                 */}
+      {/* ================================================================ */}
+
+      {!isLoading && <TrendingNowSection businessUnits={activeBusinessUnits} />}
+
+      {/* ================================================================ */}
+      {/* 13. WHY CHOOSE MB CRUNCHY                                        */}
       {/* ================================================================ */}
 
       <section className="py-16 sm:py-20">
@@ -800,13 +433,7 @@ export default function HomePage() {
       </section>
 
       {/* ================================================================ */}
-      {/* 11. CUSTOMER TESTIMONIALS (demo placeholders)                    */}
-      {/* ================================================================ */}
-
-      {!isLoading && <TestimonialsSection />}
-
-      {/* ================================================================ */}
-      {/* 12. FINAL CTA                                                     */}
+      {/* 14. FINAL CTA                                                    */}
       {/* ================================================================ */}
 
       <section className="relative overflow-hidden bg-primary py-16 text-primary-foreground sm:py-20">

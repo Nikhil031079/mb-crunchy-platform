@@ -1,9 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { Combine } from "lucide-react";
+import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
+
+import { useCart } from "@/stores/cart";
+import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
 import { ComboCard, ComboCardSkeleton } from "./ComboCard";
@@ -20,6 +24,8 @@ interface ComboOffersSectionProps {
 
 export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
   const navigate = useNavigate();
+  const { addItem } = useCart();
+  const { bySource } = useCatalogItemMap(businessUnits);
 
   const combosEnabled = businessUnits.filter((bu) => bu.enableCombos);
 
@@ -65,6 +71,24 @@ export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
 
   const firstBuSlug = combosEnabled[0]?.slug;
 
+  const handleAddToCart = useCallback(
+    (combo: Combo) => {
+      const catalogItem = bySource.get(combo._id);
+      addItem({
+        catalogItemId: catalogItem?._id ?? combo._id,
+        itemType: "combo",
+        businessUnitId: combo.businessUnitId,
+        name: combo.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: combo.price,
+        image: combo.coverImage || combo.thumbnail || combo.images?.[0],
+      });
+      toast.success("Added to cart", { description: combo.name });
+    },
+    [addItem, bySource]
+  );
+
   if (isLoading) {
     return (
       <section className="py-12 sm:py-16">
@@ -107,7 +131,12 @@ export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
         />
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           {combos.slice(0, 4).map((combo, index) => (
-            <ComboCard key={combo._id} combo={combo} index={index} />
+            <ComboCard
+              key={combo._id}
+              combo={combo}
+              index={index}
+              onAddToCart={handleAddToCart}
+            />
           ))}
         </div>
       </div>

@@ -26,6 +26,8 @@ interface HeroBanner {
   subtitle?: string;
   description?: string;
   backgroundImage?: string;
+  /** Optimized image used on small screens when provided */
+  mobileImage?: string;
   /** Tailwind gradient classes used when no background image is provided */
   gradient?: string;
   overlayColor?: string;
@@ -215,21 +217,34 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
+  const hasImage = Boolean(banner.backgroundImage) && !imageError;
+
   return (
     <div className="relative h-full w-full">
       {/* Background Image */}
-      {banner.backgroundImage && !imageError ? (
+      {hasImage ? (
         <>
           {!imageLoaded && <div className="absolute inset-0 animate-pulse bg-secondary" />}
+          {/* Desktop image */}
           <img
             src={banner.backgroundImage}
             alt={banner.title}
             className={cn(
-              "h-full w-full object-cover transition-opacity duration-700",
+              "hidden h-full w-full object-cover transition-opacity duration-700 md:block",
               imageLoaded ? "opacity-100" : "opacity-0"
             )}
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
+          />
+          {/* Mobile image (falls back to desktop image) */}
+          <img
+            src={banner.mobileImage ?? banner.backgroundImage}
+            alt={banner.title}
+            className={cn(
+              "h-full w-full object-cover transition-opacity duration-700 md:hidden",
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            loading="eager"
           />
         </>
       ) : (

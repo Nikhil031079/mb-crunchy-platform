@@ -85,6 +85,16 @@ export const ComboCard = memo(function ComboCard({
               </Badge>
             )}
 
+            {/* Highlight Badge */}
+            {typeof combo.settings?.highlightBadge === "string" && combo.settings.highlightBadge ? (
+              <Badge
+                variant="default"
+                className="absolute bottom-2 left-2 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5"
+              >
+                {combo.settings.highlightBadge}
+              </Badge>
+            ) : null}
+
             {/* Favorite Button */}
             {onFavorite && (
               <Button

@@ -19,7 +19,6 @@ import {
   Store,
   RotateCcw,
   ShieldCheck,
-  PackagePlus,
   Leaf,
   BadgeCheck,
 } from "lucide-react";
@@ -36,9 +35,13 @@ import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 // Hooks
 import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
+import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 
 // Customer components
 import { QuantitySelector, ProductCard, SectionHeader } from "@/components/customer";
+import { FrequentlyBoughtTogetherSection } from "@/components/customer/FrequentlyBoughtTogetherSection";
+import { CrossSellSections } from "@/components/customer/CrossSellSections";
 import { ReviewSection } from "@/components/customer/ReviewSection";
 
 // Shared components
@@ -434,6 +437,28 @@ export default function ProductPage() {
       }).catch(() => {});
     }
   }, [customer?._id, product?._id, recordRecentlyViewed]);
+
+  // LocalStorage recently-viewed (guest + signed-in) — capped & deduped
+  const { recordView } = useRecentlyViewed();
+  useEffect(() => {
+    if (product && businessUnit) {
+      recordView({
+        catalogItemId: product._id,
+        businessUnitId: businessUnit._id,
+        itemType: "product",
+        name: product.name,
+        slug: product.slug,
+        image: product.coverImage ?? product.images?.[0],
+        price: product.variants?.[0]?.price ?? 0,
+      });
+    }
+  }, [product, businessUnit, recordView]);
+
+  // Browsing preference (BU personalization on the homepage)
+  const { setPreference } = useBrowsingPreference();
+  useEffect(() => {
+    if (businessUnit?._id) setPreference(businessUnit._id);
+  }, [businessUnit?._id, setPreference]);
 
   // ==========================================================================
   // Page Title
@@ -1193,32 +1218,23 @@ export default function ProductPage() {
       </div>
 
       {/* ================================================================== */}
-      {/* FREQUENTLY BOUGHT TOGETHER                                        */}
+      {/* FREQUENTLY BOUGHT TOGETHER + CROSS-SELL                            */}
       {/* ================================================================== */}
 
-      <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
-        <SectionHeader
-          title="Frequently Bought Together"
-          subtitle={`Perfect pairings for ${prod.name}`}
-        />
-        <div className="mt-4 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-secondary/20 px-6 py-10 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-secondary text-primary">
-            <PackagePlus className="h-6 w-6" />
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold">Curated pairings are on the way</h3>
-            <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
-              We&apos;re analysing what customers order with {prod.name} to surface the perfect pairings. Check back soon!
-            </p>
-          </div>
-          <Link to={`/${buSlug}`}>
-            <Button variant="outline" size="sm">
-              <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
-              Browse {bu.name}
-            </Button>
-          </Link>
-        </div>
-      </section>
+      {product && businessUnit && (
+        <>
+          <FrequentlyBoughtTogetherSection
+            catalogItemId={product._id}
+            businessUnitId={businessUnit._id}
+            businessUnits={[businessUnit]}
+            productName={product.name}
+          />
+          <CrossSellSections
+            businessUnit={businessUnit}
+            excludeIds={[product._id as Id<"catalogItems">]}
+          />
+        </>
+      )}
 
       {/* ================================================================== */}
       {/* REVIEWS SECTION                                                    */}
@@ -1283,6 +1299,44 @@ export default function ProductPage() {
           </div>
         </div>
       )}
+
+      {/* ================================================================== */}
+      {/* STICKY MOBILE ADD-TO-CART BAR                                      */}
+      {/* ================================================================== */}
+
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+        <div className="mx-auto flex max-w-2xl items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{prod.name}</p>
+            <p className="text-sm font-bold">
+              {formatCurrency((selectedVariant?.price ?? minPrice) * quantity)}
+              {compareAtPrice && compareAtPrice > (selectedVariant?.price ?? 0) && (
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground line-through">
+                  {formatCurrency(compareAtPrice)}
+                </span>
+              )}
+            </p>
+          </div>
+          <Button
+            size="lg"
+            onClick={handleAddToCart}
+            disabled={!selectedVariant || !storeIsOpen || isOutOfStock}
+            className="h-11 shrink-0 gap-2 px-6"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            {!storeIsOpen
+              ? "Store Closed"
+              : isOutOfStock
+                ? "Out of Stock"
+                : isItemInCart
+                  ? "Add More"
+                  : "Add to Cart"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Spacer so the sticky bar never covers content on mobile */}
+      <div className="h-20 lg:hidden" aria-hidden="true" />
     </div>
   );
 }

@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
@@ -118,9 +119,19 @@ export const create = mutation({
     status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
+    settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+
+    await assertHeroExclusive(ctx, {
+      excludeId: undefined,
+      contentType: args.contentType,
+      status: args.status,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      settings: args.settings,
+    });
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
@@ -151,9 +162,22 @@ export const update = mutation({
     ),
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
+    settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Content not found");
+
+    await assertHeroExclusive(ctx, {
+      excludeId: args.id,
+      contentType: existing.contentType,
+      status: args.status ?? existing.status,
+      startDate: args.startDate ?? existing.startDate,
+      endDate: args.endDate ?? existing.endDate,
+      settings: args.settings ?? existing.settings,
+    });
 
     const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
@@ -173,3 +197,67 @@ export const softDelete = mutation({
     });
   },
 });
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function isHeroExclusive(settings: Record<string, unknown> | undefined): boolean {
+  return settings?.exclusive === true;
+}
+
+function rangesOverlap(
+  aStart: number | undefined,
+  aEnd: number | undefined,
+  bStart: number | undefined,
+  bEnd: number | undefined
+): boolean {
+  if (!aStart || !aEnd || !bStart || !bEnd) return false;
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+/**
+ * Prevent two exclusive hero banners from being active in the same time window.
+ * Only enforced when a hero banner is marked `exclusive` in settings.
+ */
+async function assertHeroExclusive(
+  ctx: QueryCtx,
+  candidate: {
+    excludeId: string | undefined;
+    contentType: string;
+    status: string;
+    startDate?: number;
+    endDate?: number;
+    settings?: Record<string, unknown>;
+  }
+): Promise<void> {
+  if (candidate.contentType !== "hero") return;
+  if (!isHeroExclusive(candidate.settings)) return;
+  if (candidate.status !== "active") return;
+
+  const heroes = await ctx.db
+    .query("content")
+    .withIndex("by_content_type", (q) => q.eq("contentType", "hero"))
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+
+  for (const hero of heroes) {
+    if (candidate.excludeId && hero._id === candidate.excludeId) continue;
+    if (hero.status !== "active") continue;
+    if (!isHeroExclusive(hero.settings)) continue;
+    if (
+      rangesOverlap(
+        candidate.startDate,
+        candidate.endDate,
+        hero.startDate,
+        hero.endDate
+      )
+    ) {
+      throw new Error(
+        `This exclusive hero banner overlaps with "${hero.title}" (${new Date(
+          hero.startDate!
+        ).toLocaleDateString()} – ${new Date(hero.endDate!).toLocaleDateString()}). Choose a different schedule.`
+      );
+    }
+  }
+}

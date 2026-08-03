@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
+import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/utils";
@@ -27,9 +28,7 @@ import { formatCurrency, formatDate } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 
 // ============================================================================
 // Order Tracking Page — phone lookup → order list → status timeline
@@ -95,6 +94,11 @@ export default function OrderTrackingPage() {
   );
 
   const selectedOrder = orders?.find((o) => o._id === selectedOrderId);
+
+  const activities = useQuery(
+    api.orderActivities.getByOrderForCustomer,
+    selectedOrder ? { orderId: selectedOrder._id } : "skip"
+  );
 
   // ==========================================================================
   // Status Timeline
@@ -392,6 +396,14 @@ export default function OrderTrackingPage() {
                                 </div>
                               )}
                             </div>
+                          </div>
+
+                          {/* Activity Timeline */}
+                          <div className="mt-4 pt-4 border-t border-border/60">
+                            <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
+                              Activity Timeline
+                            </p>
+                            <OrderActivityFeed activities={activities} />
                           </div>
                         </motion.div>
                       )}

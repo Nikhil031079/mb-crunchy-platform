@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAdminSession } from "./utils/adminAuth";
+import { logActivity } from "./orderActivities";
 
 // ============================================================================
 // Helpers
@@ -368,6 +369,15 @@ export const reserveStock = mutation({
       newStock: doc.stockQuantity,
       orderId: args.orderId,
     });
+
+    await logActivity(ctx, {
+      orderId: args.orderId,
+      businessUnitId: doc.businessUnitId,
+      action: "inventory_reserved",
+      newValue: `${args.quantity} × ${doc.variantName}`,
+      actor: "system",
+      visibleToCustomer: true,
+    });
   },
 });
 
@@ -433,6 +443,15 @@ export const restoreStock = mutation({
       previousStock: doc.stockQuantity,
       newStock: doc.stockQuantity,
       orderId: args.orderId,
+    });
+
+    await logActivity(ctx, {
+      orderId: args.orderId,
+      businessUnitId: doc.businessUnitId,
+      action: "inventory_released",
+      newValue: `${args.quantity} × ${doc.variantName}`,
+      actor: "system",
+      visibleToCustomer: true,
     });
   },
 });

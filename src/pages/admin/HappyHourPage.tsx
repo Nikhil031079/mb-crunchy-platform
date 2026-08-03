@@ -1,0 +1,263 @@
+import { useMemo, useState } from "react";
+import { AlertCircle, Clock3, Plus, RefreshCw } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
+
+import { BannerDialogs } from "@/components/admin/banners/BannerDialogs";
+import { BannerFormDialog } from "@/components/admin/banners/BannerFormDialog";
+import { BannerTable } from "@/components/admin/banners/BannerTable";
+import type { Banner, BannerFormValues, BannerSortKey, SortDirection } from "@/components/admin/banners/types";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { EMPTY_MESSAGES } from "@/constants";
+
+const PAGE_SIZE = 10;
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function fromConvex(doc: any, buMap: Map<string, string>): Banner {
+  return {
+    id: doc._id,
+    businessUnitId: doc.businessUnitId,
+    businessUnitName: doc.businessUnitId ? buMap.get(doc.businessUnitId) ?? "Unknown" : undefined,
+    contentType: doc.contentType,
+    title: doc.title,
+    subtitle: doc.subtitle,
+    body: doc.body,
+    imageUrl: doc.coverImage ?? doc.images?.[0] ?? undefined,
+    buttonText: doc.buttonText,
+    buttonLink: doc.buttonLink,
+    displayOrder: doc.displayOrder,
+    status: doc.status,
+    startDate: doc.startDate,
+    endDate: doc.endDate,
+    settings: doc.settings,
+  };
+}
+
+function toSettingsArgs(values: BannerFormValues): Record<string, unknown> {
+  const settings: Record<string, unknown> = {};
+  if (values.mobileImage) settings.mobileImage = values.mobileImage;
+  if (values.backgroundColor) settings.backgroundColor = values.backgroundColor;
+  if (values.textColor) settings.textColor = values.textColor;
+  if (values.iconUrl) settings.icon = values.iconUrl;
+  if (values.richText) settings.richText = true;
+  if (values.sectionWidth !== "contained") settings.sectionWidth = values.sectionWidth;
+  if (values.contentBlockStyle !== "card") settings.contentBlockStyle = values.contentBlockStyle;
+  return settings;
+}
+
+function toCreateArgs(values: BannerFormValues) {
+  return {
+    businessUnitId: values.businessUnitId ? (values.businessUnitId as any) : undefined,
+    contentType: "announcement" as any,
+    title: values.title,
+    subtitle: values.subtitle || undefined,
+    body: values.body || undefined,
+    images: values.imageUrl ? [values.imageUrl] : [],
+    coverImage: values.imageUrl || undefined,
+    buttonText: values.buttonText || undefined,
+    buttonLink: values.buttonLink || undefined,
+    displayOrder: values.displayOrder,
+    status: values.status as any,
+    startDate: values.startDate ? new Date(values.startDate).getTime() : undefined,
+    endDate: values.endDate ? new Date(values.endDate).getTime() : undefined,
+    settings: toSettingsArgs(values),
+  };
+}
+
+function toUpdateArgs(id: string, values: BannerFormValues) {
+  return {
+    id: id as any,
+    title: values.title,
+    subtitle: values.subtitle || undefined,
+    body: values.body || undefined,
+    images: values.imageUrl ? [values.imageUrl] : undefined,
+    coverImage: values.imageUrl || undefined,
+    buttonText: values.buttonText || undefined,
+    buttonLink: values.buttonLink || undefined,
+    displayOrder: values.displayOrder,
+    status: values.status as any,
+    startDate: values.startDate ? new Date(values.startDate).getTime() : undefined,
+    endDate: values.endDate ? new Date(values.endDate).getTime() : undefined,
+    settings: toSettingsArgs(values),
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+export default function HappyHourPage() {
+  const { getSessionToken } = useAdminAuth();
+  const allDocs = useQuery(api.content.getAll);
+  const allBUs = useQuery(api.businessUnits.getAll);
+  const createContent = useMutation(api.content.create);
+  const updateContent = useMutation(api.content.update);
+  const softDeleteContent = useMutation(api.content.softDelete);
+
+  const isLoading = allDocs === undefined || allBUs === undefined;
+  const [error, setError] = useState<string | null>(null);
+
+  const [sortKey, setSortKey] = useState<BannerSortKey>("displayOrder");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [page, setPage] = useState(1);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<Banner>();
+  const [deleteTarget, setDeleteTarget] = useState<Banner>();
+
+  const buMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const bu of allBUs ?? []) map.set(bu._id, bu.name);
+    return map;
+  }, [allBUs]);
+
+  const businessUnitOptions = useMemo(() => (allBUs ?? []).map((bu) => ({ id: bu._id, name: bu.name })), [allBUs]);
+
+  const announcements = useMemo(
+    () => (allDocs ?? [])
+      .filter((doc) => doc.contentType === "announcement")
+      .map((doc) => fromConvex(doc, buMap)),
+    [allDocs, buMap],
+  );
+
+  const sortedBanners = useMemo(() => [...announcements].sort((left, right) => {
+    const leftValue = left[sortKey] ?? "";
+    const rightValue = right[sortKey] ?? "";
+    const comparison = typeof leftValue === "number" && typeof rightValue === "number" ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue));
+    return sortDirection === "asc" ? comparison : -comparison;
+  }), [announcements, sortDirection, sortKey]);
+
+  const pageCount = Math.max(1, Math.ceil(sortedBanners.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const visibleBanners = sortedBanners.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const handleSort = (nextKey: BannerSortKey) => {
+    if (nextKey === sortKey) setSortDirection((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(nextKey); setSortDirection("asc"); }
+  };
+
+  const openCreateDialog = () => { setEditingBanner(undefined); setFormOpen(true); };
+
+  const saveBanner = async (values: BannerFormValues) => {
+    try {
+      if (editingBanner) {
+        await updateContent({ ...toUpdateArgs(editingBanner.id, values), sessionToken: getSessionToken()! });
+      } else {
+        await createContent({ ...toCreateArgs(values), sessionToken: getSessionToken()! });
+      }
+      setFormOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save announcement");
+    }
+  };
+
+  const archiveBanner = async () => {
+    if (!deleteTarget) return;
+    try {
+      await softDeleteContent({ id: deleteTarget.id as Id<"content">, sessionToken: getSessionToken()! });
+      setDeleteTarget(undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to archive announcement");
+    }
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Happy Hour"
+        description="Manage time-windowed Happy Hour announcements shown as a strip on the homepage."
+      >
+        <Button size="sm" onClick={openCreateDialog}>
+          <Plus className="mr-1.5 size-4" />
+          Add announcement
+        </Button>
+      </PageHeader>
+
+      {error ? (
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertTitle>Could not load announcements</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {error}
+            <Button size="sm" variant="outline" onClick={() => setError(null)}>
+              <RefreshCw className="size-4" />
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <section className="overflow-hidden rounded-xl border" aria-label="Happy hour management">
+          <div className="flex flex-col gap-2 border-b p-4">
+            <p className="text-sm text-muted-foreground">
+              Announcements with contentType "announcement" render as a full-width strip above the homepage hero.
+              Use the start/end dates to schedule happy-hour windows.
+            </p>
+          </div>
+          {isLoading ? (
+            <BannerTable
+              banners={[]}
+              isLoading
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+              onEdit={() => undefined}
+              onDelete={() => undefined}
+              onRestore={() => undefined}
+            />
+          ) : visibleBanners.length === 0 ? (
+            <EmptyState
+              icon={Clock3}
+              title="No happy hour announcements"
+              description={EMPTY_MESSAGES.BANNERS}
+              action={{ label: "Create announcement", onClick: openCreateDialog }}
+            />
+          ) : (
+            <>
+              <BannerTable
+                banners={visibleBanners}
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                onSort={handleSort}
+                onEdit={(b) => { setEditingBanner(b); setFormOpen(true); }}
+                onDelete={setDeleteTarget}
+                onRestore={() => undefined}
+              />
+              <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedBanners.length)} of {sortedBanners.length}</p>
+                <Pagination className="mx-0 w-auto">
+                  <PaginationContent>
+                    <PaginationItem><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage((c) => c - 1)}>Previous</Button></PaginationItem>
+                    <PaginationItem><span className="px-2" aria-live="polite">Page {currentPage} of {pageCount}</span></PaginationItem>
+                    <PaginationItem><Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage((c) => c + 1)}>Next</Button></PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      <BannerFormDialog
+        open={formOpen}
+        banner={editingBanner}
+        businessUnits={businessUnitOptions}
+        onOpenChange={setFormOpen}
+        onSubmit={saveBanner}
+        lockContentType="announcement"
+      />
+      <BannerDialogs
+        deleteTarget={deleteTarget}
+        restoreTarget={undefined}
+        previewTarget={undefined}
+        onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }}
+        onRestoreOpenChange={() => undefined}
+        onPreviewOpenChange={() => undefined}
+        onConfirmDelete={archiveBanner}
+        onConfirmRestore={() => undefined}
+      />
+    </div>
+  );
+}

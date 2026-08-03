@@ -96,6 +96,20 @@ export const getAllByBusinessUnit = query({
   },
 });
 
+export const getByIds = query({
+  args: { ids: v.array(v.id("products")) },
+  handler: async (ctx, args) => {
+    const results = await Promise.all(
+      args.ids.map(async (id) => {
+        const doc = await ctx.db.get(id);
+        if (!doc || doc.deletedAt) return null;
+        return doc;
+      }),
+    );
+    return results.filter(Boolean);
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================

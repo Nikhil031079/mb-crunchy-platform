@@ -52,7 +52,19 @@ function fromConvex(doc: any, buMap: Map<string, string>): Offer {
     status: doc.status,
     displayOrder: doc.displayOrder,
     banner: doc.banner,
+    settings: doc.settings,
   };
+}
+
+function toSettingsArgs(values: OfferFormValues): Record<string, unknown> {
+  const settings: Record<string, unknown> = {};
+  if (values.featured) settings.featured = true;
+  if (!values.homeVisible) settings.homeVisible = false;
+  if (!values.categoryVisible) settings.categoryVisible = false;
+  if (values.isFlashSale) settings.isFlashSale = true;
+  if (values.flashSalePriority !== 0) settings.flashSalePriority = values.flashSalePriority;
+  if (values.flashSaleFeatured) settings.flashSaleFeatured = true;
+  return settings;
 }
 
 function toCreateArgs(values: OfferFormValues) {
@@ -73,6 +85,7 @@ function toCreateArgs(values: OfferFormValues) {
     displayOrder: values.displayOrder,
     status: values.status,
     banner: values.banner || undefined,
+    settings: toSettingsArgs(values),
   };
 }
 
@@ -94,6 +107,7 @@ function toUpdateArgs(id: string, values: OfferFormValues) {
     displayOrder: values.displayOrder,
     status: values.status,
     banner: values.banner || undefined,
+    settings: toSettingsArgs(values),
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

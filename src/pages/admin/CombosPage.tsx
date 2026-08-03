@@ -53,7 +53,14 @@ function fromConvex(doc: any, buMap: Map<string, string>): Combo {
     status: doc.status as ComboStatus,
     featured: doc.featured,
     displayOrder: doc.displayOrder,
+    settings: doc.settings,
   };
+}
+
+function toSettingsArgs(values: ComboFormValues): Record<string, unknown> {
+  const settings: Record<string, unknown> = {};
+  if (values.highlightBadge) settings.highlightBadge = values.highlightBadge;
+  return settings;
 }
 
 function toCreateArgs(values: ComboFormValues) {
@@ -78,6 +85,7 @@ function toCreateArgs(values: ComboFormValues) {
     status: values.status,
     featured: values.featured,
     displayOrder: values.displayOrder,
+    settings: toSettingsArgs(values),
   };
 }
 
@@ -103,6 +111,7 @@ function toUpdateArgs(id: string, values: ComboFormValues) {
     status: values.status,
     featured: values.featured,
     displayOrder: values.displayOrder,
+    settings: toSettingsArgs(values),
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

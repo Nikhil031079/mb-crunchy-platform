@@ -5,7 +5,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+
+import { getContentMarketingSettings } from "@/utils";
 
 import { contentTypes, contentTypeLabels, bannerStatuses } from "./types";
 import type { Banner, BannerFormValues, BannerStatus, ContentType } from "./types";
@@ -17,31 +20,48 @@ const emptyValues: BannerFormValues = {
   subtitle: "",
   body: "",
   imageUrl: "",
+  mobileImage: "",
   buttonText: "",
   buttonLink: "",
   displayOrder: 1,
   status: "active",
   startDate: "",
   endDate: "",
+  exclusive: false,
+  backgroundColor: "",
+  textColor: "",
+  iconUrl: "",
+  richText: false,
+  sectionWidth: "contained",
+  contentBlockStyle: "card",
 };
 
-const toFormValues = (banner?: Banner): BannerFormValues =>
-  banner
-    ? {
-        businessUnitId: banner.businessUnitId ?? "",
-        contentType: banner.contentType,
-        title: banner.title,
-        subtitle: banner.subtitle ?? "",
-        body: banner.body ?? "",
-        imageUrl: banner.imageUrl ?? "",
-        buttonText: banner.buttonText ?? "",
-        buttonLink: banner.buttonLink ?? "",
-        displayOrder: banner.displayOrder,
-        status: banner.status,
-        startDate: banner.startDate ? new Date(banner.startDate).toISOString().slice(0, 16) : "",
-        endDate: banner.endDate ? new Date(banner.endDate).toISOString().slice(0, 16) : "",
-      }
-    : emptyValues;
+const toFormValues = (banner?: Banner): BannerFormValues => {
+  if (!banner) return emptyValues;
+  const settings = getContentMarketingSettings(banner);
+  return {
+    businessUnitId: banner.businessUnitId ?? "",
+    contentType: banner.contentType,
+    title: banner.title,
+    subtitle: banner.subtitle ?? "",
+    body: banner.body ?? "",
+    imageUrl: banner.imageUrl ?? "",
+    mobileImage: settings.mobileImage ?? "",
+    buttonText: banner.buttonText ?? "",
+    buttonLink: banner.buttonLink ?? "",
+    displayOrder: banner.displayOrder,
+    status: banner.status,
+    startDate: banner.startDate ? new Date(banner.startDate).toISOString().slice(0, 16) : "",
+    endDate: banner.endDate ? new Date(banner.endDate).toISOString().slice(0, 16) : "",
+    exclusive: settings.exclusive,
+    backgroundColor: settings.backgroundColor ?? "",
+    textColor: settings.textColor ?? "",
+    iconUrl: settings.icon ?? "",
+    richText: settings.richText,
+    sectionWidth: settings.sectionWidth ?? "contained",
+    contentBlockStyle: settings.contentBlockStyle ?? "card",
+  };
+};
 
 interface BannerFormDialogProps {
   open: boolean;
@@ -49,9 +69,11 @@ interface BannerFormDialogProps {
   businessUnits: { id: string; name: string }[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: BannerFormValues) => void;
+  /** When set, the content type is locked to this value (e.g. Happy Hour). */
+  lockContentType?: ContentType;
 }
 
-export function BannerFormDialog({ open, banner, businessUnits, onOpenChange, onSubmit }: BannerFormDialogProps) {
+export function BannerFormDialog({ open, banner, businessUnits, onOpenChange, onSubmit, lockContentType }: BannerFormDialogProps) {
   const isEditing = Boolean(banner);
   const dialogKey = `${banner?.id ?? "new"}-${open ? "open" : "closed"}`;
 
@@ -69,6 +91,7 @@ export function BannerFormDialog({ open, banner, businessUnits, onOpenChange, on
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
           isEditing={isEditing}
+          lockContentType={lockContentType}
         />
       </DialogContent>
     </Dialog>
@@ -81,24 +104,32 @@ interface BannerFormProps {
   isEditing: boolean;
   onSubmit: (values: BannerFormValues) => void;
   onCancel: () => void;
+  lockContentType?: ContentType;
 }
 
-function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel }: BannerFormProps) {
+function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel, lockContentType }: BannerFormProps) {
   const [values, setValues] = useState<BannerFormValues>(() => toFormValues(banner));
   const formId = useId();
   const update = <K extends keyof BannerFormValues>(key: K, value: BannerFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }));
 
+  const isHero = values.contentType === "hero";
+  const isPromotion = values.contentType === "promotion";
+  const isContentBlock = values.contentType === "homepageCard";
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     onSubmit({
       ...values,
+      contentType: lockContentType ?? values.contentType,
       title: values.title.trim(),
       subtitle: values.subtitle.trim(),
       body: values.body.trim(),
       imageUrl: values.imageUrl.trim(),
+      mobileImage: values.mobileImage.trim(),
       buttonText: values.buttonText.trim(),
       buttonLink: values.buttonLink.trim(),
+      iconUrl: values.iconUrl.trim(),
     });
   };
 
@@ -121,7 +152,11 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel }: Ba
           </div>
           <div className="grid gap-2">
             <Label htmlFor={`${formId}-type`}>Content Type</Label>
-            <Select value={values.contentType} onValueChange={(v) => update("contentType", v as ContentType)}>
+            <Select
+              value={lockContentType ?? values.contentType}
+              onValueChange={(v) => update("contentType", v as ContentType)}
+              disabled={Boolean(lockContentType)}
+            >
               <SelectTrigger id={`${formId}-type`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 {contentTypes.map((ct) => (
@@ -129,6 +164,9 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel }: Ba
                 ))}
               </SelectContent>
             </Select>
+            {lockContentType && (
+              <p className="text-xs text-muted-foreground">Type is fixed to {contentTypeLabels[lockContentType]}.</p>
+            )}
           </div>
         </div>
 
@@ -146,14 +184,28 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel }: Ba
 
         {/* Body */}
         <div className="grid gap-2">
-          <Label htmlFor={`${formId}-body`}>Body <span className="font-normal text-muted-foreground">(optional)</span></Label>
-          <Textarea id={`${formId}-body`} value={values.body} onChange={(e) => update("body", e.target.value)} placeholder="Detailed description or content..." rows={3} />
+          <Label htmlFor={`${formId}-body`}>
+            {values.richText ? "Rich Text (HTML)" : "Body"}
+            <span className="font-normal text-muted-foreground"> (optional)</span>
+          </Label>
+          <Textarea id={`${formId}-body`} value={values.body} onChange={(e) => update("body", e.target.value)} placeholder={values.richText ? "Supports <strong>HTML</strong> and links…" : "Detailed description or content..."} rows={3} />
+          {values.richText && (
+            <p className="text-xs text-muted-foreground">
+              Rendered as rich HTML on the homepage. Use basic markup only.
+            </p>
+          )}
         </div>
 
-        {/* Image URL */}
-        <div className="grid gap-2">
-          <Label htmlFor={`${formId}-image`}>Image URL <span className="font-normal text-muted-foreground">(optional)</span></Label>
-          <Input id={`${formId}-image`} value={values.imageUrl} onChange={(e) => update("imageUrl", e.target.value)} placeholder="https://..." />
+        {/* Images */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor={`${formId}-image`}>Desktop Image URL <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id={`${formId}-image`} value={values.imageUrl} onChange={(e) => update("imageUrl", e.target.value)} placeholder="https://..." />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`${formId}-mobileImage`}>Mobile Image URL <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id={`${formId}-mobileImage`} value={values.mobileImage} onChange={(e) => update("mobileImage", e.target.value)} placeholder="https://..." />
+          </div>
         </div>
 
         {/* Button Text + Link */}
@@ -167,6 +219,86 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel }: Ba
             <Input id={`${formId}-btnLink`} value={values.buttonLink} onChange={(e) => update("buttonLink", e.target.value)} placeholder="/category-url" />
           </div>
         </div>
+
+        {/* Hero-specific: exclusive */}
+        {isHero && (
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <div>
+              <Label htmlFor={`${formId}-exclusive`}>Exclusive hero</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Prevent other scheduled hero banners from overlapping this one.
+              </p>
+            </div>
+            <Switch id={`${formId}-exclusive`} checked={values.exclusive} onCheckedChange={(checked) => update("exclusive", checked)} />
+          </div>
+        )}
+
+        {/* Promotion-specific: colors + icon */}
+        {isPromotion && (
+          <div className="grid gap-4 rounded-lg border p-3 sm:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-bg`}>Background Color</Label>
+              <div className="flex items-center gap-2">
+                <Input id={`${formId}-bg`} type="color" value={values.backgroundColor || "#111827"} onChange={(e) => update("backgroundColor", e.target.value)} className="h-9 w-14 p-1" />
+                <Input value={values.backgroundColor} onChange={(e) => update("backgroundColor", e.target.value)} placeholder="#111827" className="flex-1 font-mono text-xs" />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-text`}>Text Color</Label>
+              <div className="flex items-center gap-2">
+                <Input id={`${formId}-text`} type="color" value={values.textColor || "#ffffff"} onChange={(e) => update("textColor", e.target.value)} className="h-9 w-14 p-1" />
+                <Input value={values.textColor} onChange={(e) => update("textColor", e.target.value)} placeholder="#ffffff" className="flex-1 font-mono text-xs" />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-icon`}>Icon / Image URL</Label>
+              <Input id={`${formId}-icon`} value={values.iconUrl} onChange={(e) => update("iconUrl", e.target.value)} placeholder="https://..." />
+            </div>
+          </div>
+        )}
+
+        {/* Content block-specific: rich text + layout */}
+        {isContentBlock && (
+          <div className="grid gap-4 rounded-lg border p-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor={`${formId}-rich`}>Rich text content</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Render the body as formatted HTML.</p>
+              </div>
+              <Switch id={`${formId}-rich`} checked={values.richText} onCheckedChange={(checked) => update("richText", checked)} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor={`${formId}-width`}>Section Width</Label>
+                <Select value={values.sectionWidth} onValueChange={(v) => update("sectionWidth", v as BannerFormValues["sectionWidth"])}>
+                  <SelectTrigger id={`${formId}-width`}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full width</SelectItem>
+                    <SelectItem value="contained">Contained</SelectItem>
+                    <SelectItem value="narrow">Narrow</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor={`${formId}-style`}>Block Style</Label>
+                <Select value={values.contentBlockStyle} onValueChange={(v) => update("contentBlockStyle", v as BannerFormValues["contentBlockStyle"])}>
+                  <SelectTrigger id={`${formId}-style`}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="fullBleed">Full bleed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-bg`}>Background Color</Label>
+              <div className="flex items-center gap-2">
+                <Input id={`${formId}-bg`} type="color" value={values.backgroundColor || "#ffffff"} onChange={(e) => update("backgroundColor", e.target.value)} className="h-9 w-14 p-1" />
+                <Input value={values.backgroundColor} onChange={(e) => update("backgroundColor", e.target.value)} placeholder="#ffffff" className="flex-1 font-mono text-xs" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Display Order + Status */}
         <div className="grid gap-4 sm:grid-cols-2">

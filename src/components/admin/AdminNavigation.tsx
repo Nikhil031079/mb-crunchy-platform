@@ -3,10 +3,12 @@ import { Link } from "react-router";
 import {
   Building2,
   ChevronDown,
+  Clock3,
   Combine,
   FolderTree,
   Image,
   LayoutDashboard,
+  LayoutTemplate,
   Package,
   PartyPopper,
   Settings,
@@ -14,6 +16,7 @@ import {
   Tag,
   Users,
   Warehouse,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -37,6 +40,9 @@ const iconMap: Record<AdminNavigationIcon, ComponentType<{ className?: string }>
   Image,
   Settings,
   Warehouse,
+  LayoutTemplate,
+  Zap,
+  Clock3,
 };
 
 interface AdminNavigationProps {

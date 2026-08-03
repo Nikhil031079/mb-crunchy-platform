@@ -290,6 +290,7 @@ export interface Combo extends Timestamps {
   metaDescription?: string;
   metaKeywords?: string;
   canonicalUrl?: string;
+  settings?: Record<string, unknown>;
   deletedAt?: number;
 }
 
@@ -365,6 +366,7 @@ export interface Offer extends Timestamps {
   displayOrder: number;
   status: EntityStatus;
   banner?: string;
+  settings?: Record<string, unknown>;
   deletedAt?: number;
 }
 
@@ -428,6 +430,61 @@ export type CreateOrderInput = Omit<
   Order,
   "_id" | "_creationTime" | "createdAt" | "orderNumber" | "updatedAt" | "deletedAt"
 >;
+
+// ============================================================================
+// Order Activity (Audit timeline)
+// ============================================================================
+
+export type OrderActivityAction =
+  | "order_created"
+  | "payment_pending"
+  | "payment_verified"
+  | "payment_failed"
+  | "payment_rejected"
+  | "order_accepted"
+  | "preparing"
+  | "ready"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled"
+  | "refund_initiated"
+  | "refund_completed"
+  | "manual_status_change"
+  | "inventory_reserved"
+  | "inventory_released"
+  | "note_added"
+  | "note_updated"
+  | "note_deleted";
+
+export interface OrderActivity {
+  _id: string;
+  _creationTime: number;
+  orderId: string;
+  businessUnitId: string;
+  action: OrderActivityAction;
+  previousValue?: string;
+  newValue?: string;
+  actor: string;
+  actorId?: string;
+  visibleToCustomer: boolean;
+  createdAt: number;
+}
+
+// ============================================================================
+// Order Note (Internal, admin-only)
+// ============================================================================
+
+export interface OrderNote {
+  _id: string;
+  _creationTime: number;
+  orderId: string;
+  businessUnitId: string;
+  author: string;
+  authorId?: string;
+  note: string;
+  createdAt: number;
+  updatedAt: number;
+}
 
 // ============================================================================
 // Customer
@@ -531,6 +588,7 @@ export interface Content extends Timestamps {
   status: EntityStatus;
   startDate?: number;
   endDate?: number;
+  settings?: Record<string, unknown>;
   deletedAt?: number;
 }
 

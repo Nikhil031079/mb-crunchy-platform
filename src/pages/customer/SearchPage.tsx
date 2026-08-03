@@ -14,12 +14,15 @@ import {
   ArrowUpDown,
   Zap,
   PackageCheck,
+  History,
+  LayoutGrid,
 } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
 
 import { formatCurrency, debounce } from "@/utils";
 import { SITE_NAME } from "@/constants";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 
 import { EmptyState } from "@/components/shared/EmptyState";
 
@@ -96,6 +99,46 @@ function highlightMatch(text: string, query: string): React.ReactNode {
       part
     ),
   );
+}
+
+// ============================================================================
+// Typo-tolerant "Did you mean" suggestions
+// ============================================================================
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    new Array<number>(n + 1).fill(0),
+  );
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost,
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+function suggestCorrection(query: string, corpus: string[]): string | null {
+  const target = query.toLowerCase().trim();
+  if (!target) return null;
+  let best: { word: string; dist: number } | null = null;
+  for (const word of corpus) {
+    const dist = levenshtein(target, word.toLowerCase());
+    if (dist <= 2 && dist <= Math.max(1, Math.floor(target.length / 3))) {
+      if (!best || dist < best.dist) best = { word, dist };
+    }
+  }
+  return best?.word ?? null;
 }
 
 // ============================================================================
@@ -277,6 +320,9 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
     setRecentSearches(getRecentSearches());
   }, []);
 
+  // Recently-viewed items for the idle suggestion panel
+  const { entries: recentlyViewedEntries } = useRecentlyViewed();
+
   // Sync URL → local state
   useEffect(() => {
     const q = searchParams.get("q") ?? "";
@@ -349,6 +395,48 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
   const activeBUs = useQuery(api.businessUnits.getActive) as BusinessUnit[] | undefined;
   const buIds = useMemo(() => (activeBUs ?? []).map((bu) => bu._id), [activeBUs]);
 
+  // Categories for the idle "Popular Categories" suggestion panel
+  const isSearching = debouncedQuery.trim().length > 0;
+  const idleCategories0 = useQuery(
+    api.categories.getByBusinessUnit,
+    !isSearching && buIds[0]
+      ? { businessUnitId: buIds[0] }
+      : "skip",
+  ) as Category[] | undefined;
+  const idleCategories1 = useQuery(
+    api.categories.getByBusinessUnit,
+    !isSearching && buIds[1]
+      ? { businessUnitId: buIds[1] }
+      : "skip",
+  ) as Category[] | undefined;
+
+  const popularCategories = useMemo(() => {
+    const seen = new Set<string>();
+    const all = [...(idleCategories0 ?? []), ...(idleCategories1 ?? [])];
+    return all
+      .filter((category) => category.status === "active")
+      .filter((category) => {
+        if (seen.has(category._id)) return false;
+        seen.add(category._id);
+        return true;
+      })
+      .slice(0, 6);
+  }, [idleCategories0, idleCategories1]);
+
+  const buSlugById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const bu of activeBUs ?? []) map.set(bu._id, bu.slug);
+    return map;
+  }, [activeBUs]);
+
+  const recentlyViewedSuggestions = useMemo(
+    () =>
+      recentlyViewedEntries
+        .slice(0, 6)
+        .map((entry) => ({ id: entry.catalogItemId, name: entry.name })),
+    [recentlyViewedEntries],
+  );
+
   // Hooks for per-BU search results (must be called unconditionally)
   const searchResults0 = useQuery(
     api.catalogItems.search,
@@ -386,7 +474,6 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
   }, [buIds.length, searchResults0, searchResults1, searchResults2, searchResults3]);
 
   // Helper data for filters (only fetched while actively searching)
-  const isSearching = debouncedQuery.trim().length > 0;
   const categoriesAll = useQuery(api.categories.getAll, isSearching ? {} : "skip") as
     | Category[]
     | undefined;
@@ -410,6 +497,32 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
     for (const product of productsAll ?? []) map.set(product._id, product.categoryId);
     return map;
   }, [productsAll]);
+
+  // Corpus of known item names for "Did you mean" suggestions — bounded so the
+  // edit-distance pass stays cheap on every keystroke.
+  const suggestionCorpus = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const tag of POPULAR_SUGGESTIONS) {
+      if (!seen.has(tag)) {
+        seen.add(tag);
+        list.push(tag);
+      }
+    }
+    for (const product of productsAll ?? []) {
+      if (list.length >= 200) break;
+      if (!seen.has(product.name)) {
+        seen.add(product.name);
+        list.push(product.name);
+      }
+    }
+    return list;
+  }, [productsAll]);
+
+  const didYouMean = useMemo(
+    () => suggestCorrection(debouncedQuery, suggestionCorpus),
+    [debouncedQuery, suggestionCorpus],
+  );
 
   const availableCatalogItemIds = useMemo(() => {
     const set = new Set<string>();
@@ -661,6 +774,28 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
               exit={{ opacity: 0 }}
               className="space-y-8"
             >
+              {/* Recently Viewed Items */}
+              {recentlyViewedSuggestions.length > 0 && (
+                <section>
+                  <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                    <History className="h-4 w-4 text-muted-foreground" />
+                    Recently Viewed
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {recentlyViewedSuggestions.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => handleSubmitSearch(item.name)}
+                        className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm transition-colors hover:border-primary/30 hover:bg-secondary/60"
+                      >
+                        <History className="h-3 w-3 text-muted-foreground/60" />
+                        <span>{item.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* Recent Searches */}
               {recentSearches.length > 0 && (
                 <section>
@@ -705,11 +840,40 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                 </section>
               )}
 
-              {/* Popular Suggestions */}
+              {/* Popular Categories */}
+              {popularCategories.length > 0 && (
+                <section>
+                  <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                    <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+                    Popular Categories
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {popularCategories.map((category) => {
+                      const buSlug = buSlugById.get(category.businessUnitId);
+                      return (
+                        <Link
+                          key={category._id}
+                          to={
+                            buSlug
+                              ? `/${buSlug}/${category.slug}`
+                              : `/search?q=${encodeURIComponent(category.name)}`
+                          }
+                          className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm transition-colors hover:border-primary/30 hover:bg-secondary/60"
+                        >
+                          <LayoutGrid className="h-3 w-3 text-muted-foreground/60" />
+                          <span>{category.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* Trending Searches */}
               <section>
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                   <Sparkles className="h-4 w-4 text-muted-foreground" />
-                  Popular Searches
+                  Trending Searches
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {POPULAR_SUGGESTIONS.map((tag) => (
@@ -773,6 +937,20 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                   </Button>
                 }
               />
+              {didYouMean && didYouMean.toLowerCase() !== debouncedQuery.trim().toLowerCase() && (
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Did you mean
+                  </span>
+                  <button
+                    onClick={() => handleSubmitSearch(didYouMean)}
+                    className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                  >
+                    <Search className="h-3 w-3" />
+                    {didYouMean}
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
 

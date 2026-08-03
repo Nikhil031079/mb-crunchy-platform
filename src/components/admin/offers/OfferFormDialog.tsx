@@ -1,12 +1,15 @@
 import { useId, useState } from "react";
-import { Info } from "lucide-react";
+import { Flame, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+
+import { getOfferMarketingSettings } from "@/utils";
 
 import type { DiscountType, Offer, OfferFormValues, OfferStatus } from "./types";
 
@@ -25,6 +28,12 @@ const emptyValues: OfferFormValues = {
   status: "active",
   displayOrder: 1,
   banner: "",
+  featured: false,
+  homeVisible: true,
+  categoryVisible: true,
+  isFlashSale: false,
+  flashSalePriority: 0,
+  flashSaleFeatured: false,
 };
 
 /** Convert timestamp (ms) to datetime-local string (YYYY-MM-DDTHH:mm) */
@@ -35,32 +44,32 @@ function toDatetimeLocal(ts: number | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** Convert datetime-local string to timestamp (ms) */
-function fromDatetimeLocal(str: string): number | undefined {
-  if (!str) return undefined;
-  const t = new Date(str).getTime();
-  return isNaN(t) ? undefined : t;
-}
-
-const toFormValues = (offer?: Offer): OfferFormValues =>
-  offer
-    ? {
-        businessUnitId: offer.businessUnitId,
-        title: offer.title,
-        description: offer.description ?? "",
-        code: offer.code ?? "",
-        discountType: offer.discountType,
-        discountValue: offer.discountValue,
-        minOrderValue: offer.minOrderValue?.toString() ?? "",
-        maxDiscount: offer.maxDiscount?.toString() ?? "",
-        startsAt: toDatetimeLocal(offer.startsAt),
-        endsAt: toDatetimeLocal(offer.endsAt),
-        usageLimit: offer.usageLimit?.toString() ?? "",
-        status: offer.status,
-        displayOrder: offer.displayOrder,
-        banner: offer.banner ?? "",
-      }
-    : emptyValues;
+const toFormValues = (offer?: Offer): OfferFormValues => {
+  if (!offer) return emptyValues;
+  const settings = getOfferMarketingSettings(offer);
+  return {
+    businessUnitId: offer.businessUnitId,
+    title: offer.title,
+    description: offer.description ?? "",
+    code: offer.code ?? "",
+    discountType: offer.discountType,
+    discountValue: offer.discountValue,
+    minOrderValue: offer.minOrderValue?.toString() ?? "",
+    maxDiscount: offer.maxDiscount?.toString() ?? "",
+    startsAt: toDatetimeLocal(offer.startsAt),
+    endsAt: toDatetimeLocal(offer.endsAt),
+    usageLimit: offer.usageLimit?.toString() ?? "",
+    status: offer.status,
+    displayOrder: offer.displayOrder,
+    banner: offer.banner ?? "",
+    featured: settings.featured,
+    homeVisible: settings.homeVisible,
+    categoryVisible: settings.categoryVisible,
+    isFlashSale: settings.isFlashSale,
+    flashSalePriority: settings.flashSalePriority,
+    flashSaleFeatured: settings.flashSaleFeatured,
+  };
+};
 
 interface OfferFormDialogProps {
   open: boolean;
@@ -380,6 +389,65 @@ function OfferForm({
             />
           </div>
         </div>
+
+        {/* Homepage marketing */}
+        <fieldset className="grid gap-4 rounded-lg border p-3">
+          <legend className="px-1 text-sm font-medium">Homepage marketing</legend>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor={`${formId}-featured`}>Featured offer</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Show on the homepage featured offers row.</p>
+              </div>
+              <Switch id={`${formId}-featured`} checked={values.featured} onCheckedChange={(checked) => update("featured", checked)} />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor={`${formId}-homeVisible`}>Visible on homepage</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Hide without deactivating the offer.</p>
+              </div>
+              <Switch id={`${formId}-homeVisible`} checked={values.homeVisible} onCheckedChange={(checked) => update("homeVisible", checked)} />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor={`${formId}-categoryVisible`}>Visible on category</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Hide from category pages.</p>
+              </div>
+              <Switch id={`${formId}-categoryVisible`} checked={values.categoryVisible} onCheckedChange={(checked) => update("categoryVisible", checked)} />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor={`${formId}-flashSaleFeatured`}>Flash sale featured</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Highlight in the flash sale section.</p>
+              </div>
+              <Switch id={`${formId}-flashSaleFeatured`} checked={values.flashSaleFeatured} onCheckedChange={(checked) => update("flashSaleFeatured", checked)} />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-lg bg-secondary/50 p-3">
+            <div className="flex items-start gap-2">
+              <Flame className="mt-0.5 size-4 text-orange-500" />
+              <div>
+                <Label htmlFor={`${formId}-flashSale`}>Flash sale item</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Include in the Flash Sales section. Set the priority to control ordering (higher shows first).
+                </p>
+              </div>
+            </div>
+            <Switch id={`${formId}-flashSale`} checked={values.isFlashSale} onCheckedChange={(checked) => update("isFlashSale", checked)} />
+          </div>
+          {values.isFlashSale && (
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-flashPriority`}>Flash Sale Priority</Label>
+              <Input
+                id={`${formId}-flashPriority`}
+                type="number"
+                min="0"
+                value={values.flashSalePriority}
+                onChange={(event) => update("flashSalePriority", Math.max(0, Number(event.target.value)))}
+              />
+            </div>
+          )}
+        </fieldset>
 
         {/* Banner Image */}
         <div className="grid gap-2">

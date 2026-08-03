@@ -27,6 +27,8 @@ import { useCart } from "@/stores/cart";
 // Customer components
 import { QuantitySelector } from "@/components/customer";
 import { ProductCard, ProductCardSkeleton } from "@/components/customer";
+import { FrequentlyBoughtTogetherSection } from "@/components/customer/FrequentlyBoughtTogetherSection";
+import { RecentlyViewedSection } from "@/components/customer/RecentlyViewedSection";
 
 // Shared components
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -36,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 
-import type { DeliveryZone, BusinessUnitSettings } from "@/types";
+import type { BusinessUnit, DeliveryZone, BusinessUnitSettings } from "@/types";
 
 // ============================================================================
 // CartPage — Enhanced with free delivery progress, savings, recommendations
@@ -65,6 +67,11 @@ export default function CartPage() {
       ? { businessUnitId: cart.businessUnitId as any }
       : "skip",
   ) as DeliveryZone[] | undefined;
+
+  // Active business units — used to link cross-sell cards back to their stores
+  const activeBUs = useQuery(api.businessUnits.getActive) as
+    | BusinessUnit[]
+    | undefined;
 
   // Fetch recommended products for the current BU, excluding items already in cart
   const cartItemIds = useMemo(
@@ -464,6 +471,20 @@ export default function CartPage() {
           </motion.div>
         )}
       </div>
+
+      {/* ================================================================ */}
+      {/* CROSS-SELL — Frequently Bought Together + Recently Viewed        */}
+      {/* ================================================================ */}
+
+      {cart.businessUnitId && cart.items[0] && (
+        <FrequentlyBoughtTogetherSection
+          catalogItemId={cart.items[0].catalogItemId}
+          businessUnitId={cart.businessUnitId}
+          businessUnits={activeBUs ?? []}
+          productName={cart.items[0].name}
+        />
+      )}
+      <RecentlyViewedSection businessUnits={activeBUs ?? []} />
     </div>
   );
 }

@@ -1,66 +1,21 @@
+import { useQuery } from "convex/react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { STATUS_COLORS, SITE_NAME } from "@/constants";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { STATUS_COLORS } from "@/constants";
 import { formatCurrency } from "@/utils";
 import { cn } from "@/lib/utils";
-import { Printer } from "lucide-react";
 
-import type { OrderRecord, OrderStatus } from "./types";
-import { PAYMENT_STATUS_LABELS, STATUS_LABELS } from "./types";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
-// ---------------------------------------------------------------------------
-// Status timeline
-// ---------------------------------------------------------------------------
-
-const TIMELINE_STEPS: OrderStatus[] = ["pending", "confirmed", "preparing", "ready", "out_for_delivery", "delivered"];
-
-function StatusTimeline({ currentStatus }: { currentStatus: OrderStatus }) {
-  const isCancelled = currentStatus === "cancelled" || currentStatus === "refunded";
-  const currentIndex = TIMELINE_STEPS.indexOf(currentStatus);
-
-  return (
-    <div className="space-y-2">
-      <h4 className="text-sm font-medium">Status Timeline</h4>
-      <div className="relative space-y-0">
-        {TIMELINE_STEPS.map((step, index) => {
-          const isCompleted = !isCancelled && currentIndex >= index;
-          const isCurrent = !isCancelled && currentIndex === index;
-
-          return (
-            <div key={step} className="relative flex items-start gap-3 pb-4">
-              {/* Vertical line */}
-              {index < TIMELINE_STEPS.length - 1 && (
-                <div className={cn("absolute left-[9px] top-5 h-full w-0.5", isCompleted ? "bg-primary" : "bg-border")} />
-              )}
-              {/* Dot */}
-              <div className={cn("relative z-10 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2", isCompleted ? "border-primary bg-primary" : "border-border bg-background", isCurrent && "ring-2 ring-primary/30")}>
-                {isCompleted && (
-                  <div className="size-2 rounded-full bg-primary-foreground" />
-                )}
-              </div>
-              {/* Label */}
-              <div className="min-w-0 flex-1">
-                <p className={cn("text-sm", isCompleted ? "font-medium text-foreground" : "text-muted-foreground")}>
-                  {STATUS_LABELS[step]}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {isCancelled && (
-        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-500/10 p-2">
-          <div className="size-2 rounded-full bg-red-500" />
-          <span className="text-sm font-medium text-red-700">
-            Order {STATUS_LABELS[currentStatus]}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
+import type { OrderRecord } from "./types";
+import { STATUS_LABELS } from "./types";
+import { PaymentStatusBadge, OrderTypeBadge, PrintInvoice, PrintPackingSlip } from "./shared";
+import { OrderNotesPanel } from "./OrderNotesPanel";
+import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 
 // ---------------------------------------------------------------------------
 // Item type badge
@@ -80,47 +35,6 @@ function ItemTypeBadge({ type }: { type: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Print Invoice
-// ---------------------------------------------------------------------------
-
-function printInvoice(order: OrderRecord) {
-  const html = `<!DOCTYPE html><html><head><title>Invoice ${order.orderNumber}</title>
-<style>
-  body{font-family:system-ui,-apple-system,sans-serif;margin:40px;color:#1a1a1a;font-size:14px}
-  h1{font-size:18px;margin:0 0 4px}
-  h2{font-size:14px;margin:0 0 16px;color:#666}
-  table{width:100%;border-collapse:collapse;margin:16px 0}
-  th,td{padding:8px;text-align:left;border-bottom:1px solid #eee}
-  th{font-size:12px;color:#666;text-transform:uppercase}
-  .total{font-weight:bold;font-size:16px}
-  .muted{color:#666}
-  .right{text-align:right}
-  .footer{margin-top:24px;font-size:12px;color:#999;text-align:center}
-</style></head><body>
-<h1>${SITE_NAME}</h1>
-<h2>Invoice</h2>
-<p><strong>Order:</strong> ${order.orderNumber}<br>
-<strong>Date:</strong> ${new Date(order.createdAt).toLocaleDateString()}<br>
-<strong>Type:</strong> ${order.orderType}<br>
-<strong>Customer:</strong> ${order.customerName} | ${order.customerPhone}${order.customerEmail ? ` | ${order.customerEmail}` : ""}<br>
-${order.deliveryAddress ? `<strong>Delivery:</strong> ${order.deliveryAddress}<br>` : ""}</p>
-<table><thead><tr><th>Item</th><th>Variant</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr></thead><tbody>
-${order.items.map((i) => `<tr><td>${i.name}</td><td>${i.variantName}</td><td class="right">${i.quantity}</td><td class="right">${formatCurrency(i.unitPrice)}</td><td class="right">${formatCurrency(i.totalPrice)}</td></tr>`).join("")}
-</tbody></table>
-<div style="text-align:right">
-<p>Subtotal: ${formatCurrency(order.subtotal)}</p>
-${order.discount > 0 ? `<p class="muted">Discount: -${formatCurrency(order.discount)}</p>` : ""}
-${order.deliveryFee > 0 ? `<p class="muted">Delivery: ${formatCurrency(order.deliveryFee)}</p>` : ""}
-<p>Tax: ${formatCurrency(order.tax)}</p>
-<p class="total">Total: ${formatCurrency(order.total)}</p>
-</div>
-<div class="footer">Thank you for your order!</div>
-</body></html>`;
-  const w = window.open("", "_blank");
-  if (w) { w.document.write(html); w.document.close(); w.print(); }
-}
-
-// ---------------------------------------------------------------------------
 // Main dialog
 // ---------------------------------------------------------------------------
 
@@ -130,7 +44,19 @@ interface OrderDetailDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const toOrderId = (id: string) => id as unknown as Id<"orders">;
+
 export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDialogProps) {
+  const { getSessionToken } = useAdminAuth();
+  const sessionToken = getSessionToken();
+
+  const activities = useQuery(
+    api.orderActivities.getByOrder,
+    order && sessionToken
+      ? { sessionToken, orderId: toOrderId(order.id) }
+      : "skip",
+  );
+
   if (!order) return null;
 
   const createdDate = new Date(order.createdAt);
@@ -143,15 +69,12 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
           <div className="flex items-center justify-between">
             <DialogTitle className="font-mono">{order.orderNumber}</DialogTitle>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => printInvoice(order)} className="gap-1.5">
-                <Printer className="size-3.5" /> Print
-              </Button>
+              <PrintInvoice order={order} />
+              <PrintPackingSlip order={order} />
               <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[order.status])}>
                 {STATUS_LABELS[order.status]}
               </Badge>
-              <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[order.paymentStatus])}>
-                {PAYMENT_STATUS_LABELS[order.paymentStatus]}
-              </Badge>
+              <PaymentStatusBadge status={order.paymentStatus} />
             </div>
           </div>
         </DialogHeader>
@@ -166,13 +89,13 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
               {order.customerEmail && (
                 <div><span className="text-muted-foreground">Email:</span> <span>{order.customerEmail}</span></div>
               )}
-              <div><span className="text-muted-foreground">Type:</span> <span className="capitalize">{order.orderType}</span></div>
+              <div><span className="text-muted-foreground">Type:</span> <OrderTypeBadge type={order.orderType} /></div>
             </div>
             {order.deliveryAddress && (
               <div><span className="text-muted-foreground">Address:</span> <span>{order.deliveryAddress}</span></div>
             )}
             {order.deliveryNotes && (
-              <div className="rounded-md bg-muted/50 p-2"><span className="text-muted-foreground">Notes:</span> <span>{order.deliveryNotes}</span></div>
+              <div className="rounded-md bg-muted/50 p-2"><span className="text-muted-foreground">Delivery Notes:</span> <span>{order.deliveryNotes}</span></div>
             )}
           </section>
 
@@ -233,15 +156,26 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
           <section className="space-y-2">
             <h4 className="font-medium text-foreground">Payment</h4>
             <div className="grid gap-1 sm:grid-cols-2">
-              <div><span className="text-muted-foreground">Status:</span> <span className="font-medium">{PAYMENT_STATUS_LABELS[order.paymentStatus]}</span></div>
+              <div><span className="text-muted-foreground">Status:</span> <PaymentStatusBadge status={order.paymentStatus} /></div>
               <div><span className="text-muted-foreground">Method:</span> <span>Razorpay</span></div>
             </div>
           </section>
 
           <Separator />
 
-          {/* Status Timeline */}
-          <StatusTimeline currentStatus={order.status} />
+          {/* Timeline & Notes */}
+          <Tabs defaultValue="timeline">
+            <TabsList>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="notes">Notes</TabsTrigger>
+            </TabsList>
+            <TabsContent value="timeline" className="mt-3">
+              <OrderActivityFeed activities={activities} />
+            </TabsContent>
+            <TabsContent value="notes" className="mt-3">
+              <OrderNotesPanel orderId={order.id} />
+            </TabsContent>
+          </Tabs>
 
           {/* Timestamps */}
           <div className="flex justify-between text-xs text-muted-foreground">

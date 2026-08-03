@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 // ============================================================================
 // Queries
@@ -250,6 +251,196 @@ export const getTrending = query({
     const ids = sorted.map(([id]) => id as any);
     const items = await Promise.all(ids.map(async (id) => await ctx.db.get(id)));
     return items.filter(Boolean);
+  },
+});
+
+export const getByCategoryIds = query({
+  args: {
+    businessUnitId: v.id("businessUnits"),
+    categoryIds: v.array(v.id("categories")),
+    excludeIds: v.optional(v.array(v.id("catalogItems"))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    if (args.categoryIds.length === 0) return [];
+    const excludeSet = new Set(args.excludeIds ?? []);
+
+    const sourceIds = new Set<string>();
+    for (const categoryId of args.categoryIds) {
+      const products = await ctx.db
+        .query("products")
+        .withIndex("by_category", (q) => q.eq("categoryId", categoryId))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("status"), "active"),
+            q.eq(q.field("deletedAt"), undefined)
+          )
+        )
+        .collect();
+      for (const product of products) sourceIds.add(product._id);
+    }
+    if (sourceIds.size === 0) return [];
+
+    const items = await ctx.db
+      .query("catalogItems")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined),
+          q.eq(q.field("itemType"), "product")
+        )
+      )
+      .collect();
+
+    return items
+      .filter(
+        (item) => sourceIds.has(item.sourceId) && !excludeSet.has(item._id)
+      )
+      .slice(0, limit);
+  },
+});
+
+export const getCoPurchased = query({
+  args: {
+    catalogItemId: v.id("catalogItems"),
+    businessUnitId: v.id("businessUnits"),
+    excludeIds: v.optional(v.array(v.id("catalogItems"))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 6;
+    const excludeSet = new Set(args.excludeIds ?? []);
+    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+
+    const orders = await ctx.db
+      .query("orders")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("deletedAt"), undefined),
+          q.gte(q.field("createdAt"), cutoff)
+        )
+      )
+      .collect();
+
+    const coCounts = new Map<string, number>();
+    for (const order of orders) {
+      const containsTarget = order.items.some(
+        (i) => i.catalogItemId === args.catalogItemId
+      );
+      if (!containsTarget) continue;
+      for (const item of order.items) {
+        if (item.catalogItemId === args.catalogItemId) continue;
+        const key = item.catalogItemId as string;
+        coCounts.set(key, (coCounts.get(key) ?? 0) + 1);
+      }
+    }
+
+    if (coCounts.size === 0) return [];
+
+    const sorted = [...coCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit);
+
+    const items = await Promise.all(
+      sorted.map(async ([id]) => await ctx.db.get(id as Id<"catalogItems">))
+    );
+
+    return items.filter(
+      (item): item is NonNullable<typeof item> =>
+        !!item &&
+        item.status === "active" &&
+        !item.deletedAt &&
+        !excludeSet.has(item._id)
+    );
+  },
+});
+
+export const getTrendingRanked = query({
+  args: {
+    businessUnitId: v.id("businessUnits"),
+    excludeIds: v.optional(v.array(v.id("catalogItems"))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    const excludeSet = new Set(args.excludeIds ?? []);
+    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    const viewCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+    const items = await ctx.db
+      .query("catalogItems")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    if (items.length === 0) return [];
+
+    const orderCounts = new Map<string, number>();
+    const orders = await ctx.db
+      .query("orders")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("deletedAt"), undefined),
+          q.gte(q.field("createdAt"), cutoff)
+        )
+      )
+      .collect();
+    for (const order of orders) {
+      for (const item of order.items) {
+        const key = item.catalogItemId as string;
+        orderCounts.set(key, (orderCounts.get(key) ?? 0) + item.quantity);
+      }
+    }
+
+    const viewCounts = new Map<string, number>();
+    const views = await ctx.db
+      .query("analyticsEvents")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId).gte("createdAt", viewCutoff)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("eventType"), "view"),
+          q.neq(q.field("catalogItemId"), undefined)
+        )
+      )
+      .collect();
+    for (const e of views) {
+      if (e.catalogItemId) {
+        const key = e.catalogItemId as string;
+        viewCounts.set(key, (viewCounts.get(key) ?? 0) + 1);
+      }
+    }
+
+    return items
+      .filter((item) => !excludeSet.has(item._id))
+      .map((item) => ({
+        item,
+        score:
+          (item.featured ? 1_000_000 : 0) +
+          (orderCounts.get(item._id as string) ?? 0) * 100 +
+          (viewCounts.get(item._id as string) ?? 0),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((entry) => entry.item);
   },
 });
 

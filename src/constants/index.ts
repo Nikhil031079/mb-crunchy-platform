@@ -31,6 +31,9 @@ export const ROUTES = {
     CUSTOMERS: "/admin/customers",
     SETTINGS: "/admin/settings",
     BANNERS: "/admin/banners",
+    HOMEPAGE_SECTIONS: "/admin/homepage-sections",
+    FLASH_SALES: "/admin/flash-sales",
+    HAPPY_HOUR: "/admin/happy-hour",
     LOGIN: "/admin/login",
     SETUP: "/admin/setup",
     FORGOT_PASSWORD: "/admin/forgot-password",
@@ -74,7 +77,10 @@ export type AdminNavigationIcon =
   | "Users"
   | "Image"
   | "Settings"
-  | "Warehouse";
+  | "Warehouse"
+  | "LayoutTemplate"
+  | "Zap"
+  | "Clock3";
 
 export interface AdminNavigationItem {
   label: string;
@@ -116,7 +122,10 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = [
     label: "Experience",
     icon: "Image",
     children: [
+      { label: "Homepage Sections", href: ROUTES.ADMIN.HOMEPAGE_SECTIONS, icon: "LayoutTemplate" },
       { label: "Banners", href: ROUTES.ADMIN.BANNERS, icon: "Image" },
+      { label: "Flash Sales", href: ROUTES.ADMIN.FLASH_SALES, icon: "Zap" },
+      { label: "Happy Hour", href: ROUTES.ADMIN.HAPPY_HOUR, icon: "Clock3" },
       { label: "Settings", href: ROUTES.ADMIN.SETTINGS, icon: "Settings" },
     ],
   },
@@ -208,6 +217,8 @@ export const STORAGE_KEYS = {
   CART: "mb-crunchy-cart",
   THEME: "mb-crunchy-theme",
   SETTINGS: "mb-crunchy-settings",
+  RECENTLY_VIEWED: "mb-crunchy-recently-viewed",
+  BROWSING_PREFERENCE: "mb-crunchy-browsing-preference",
 } as const;
 
 // ============================================================================

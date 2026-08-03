@@ -155,6 +155,7 @@ const combos = defineTable({
   metaDescription: v.optional(v.string()),
   metaKeywords: v.optional(v.string()),
   canonicalUrl: v.optional(v.string()),
+  settings: v.optional(v.any()),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -316,6 +317,7 @@ const offers = defineTable({
   displayOrder: v.number(),
   status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
   banner: v.optional(v.string()),
+  settings: v.optional(v.any()),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -377,6 +379,60 @@ const orders = defineTable({
   .index("by_customer", ["customerId"])
   .index("by_status", ["status"])
   .index("by_phone", ["customerPhone"]);
+
+// ============================================================================
+// ORDER ACTIVITIES (Audit timeline for the order lifecycle)
+// ============================================================================
+
+const orderActivities = defineTable({
+  orderId: v.id("orders"),
+  businessUnitId: v.id("businessUnits"),
+  action: v.union(
+    v.literal("order_created"),
+    v.literal("payment_pending"),
+    v.literal("payment_verified"),
+    v.literal("payment_failed"),
+    v.literal("payment_rejected"),
+    v.literal("order_accepted"),
+    v.literal("preparing"),
+    v.literal("ready"),
+    v.literal("out_for_delivery"),
+    v.literal("delivered"),
+    v.literal("cancelled"),
+    v.literal("refund_initiated"),
+    v.literal("refund_completed"),
+    v.literal("manual_status_change"),
+    v.literal("inventory_reserved"),
+    v.literal("inventory_released"),
+    v.literal("note_added"),
+    v.literal("note_updated"),
+    v.literal("note_deleted"),
+  ),
+  previousValue: v.optional(v.string()),
+  newValue: v.optional(v.string()),
+  actor: v.string(),
+  actorId: v.optional(v.string()),
+  visibleToCustomer: v.boolean(),
+  createdAt: v.number(),
+})
+  .index("by_order", ["orderId", "createdAt"])
+  .index("by_business_unit", ["businessUnitId", "createdAt"]);
+
+// ============================================================================
+// ORDER NOTES (Internal, admin-only)
+// ============================================================================
+
+const orderNotes = defineTable({
+  orderId: v.id("orders"),
+  businessUnitId: v.id("businessUnits"),
+  author: v.string(),
+  authorId: v.optional(v.string()),
+  note: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_order", ["orderId", "createdAt"]);
 
 // ============================================================================
 // CUSTOMERS
@@ -562,6 +618,7 @@ const content = defineTable({
   status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
   startDate: v.optional(v.number()),
   endDate: v.optional(v.number()),
+  settings: v.optional(v.any()),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -813,6 +870,8 @@ export default defineSchema({
   stockMovements,
   offers,
   orders,
+  orderActivities,
+  orderNotes,
   customers,
   addresses,
   loyaltySettings,

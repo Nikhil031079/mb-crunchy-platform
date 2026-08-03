@@ -31,6 +31,7 @@ const emptyValues: ComboFormValues = {
   status: "active",
   featured: false,
   displayOrder: 1,
+  highlightBadge: "",
 };
 
 const toFormValues = (combo?: Combo): ComboFormValues =>
@@ -51,6 +52,7 @@ const toFormValues = (combo?: Combo): ComboFormValues =>
         status: combo.status,
         featured: combo.featured,
         displayOrder: combo.displayOrder,
+        highlightBadge: typeof combo.settings?.highlightBadge === "string" ? combo.settings.highlightBadge : "",
       }
     : emptyValues;
 
@@ -462,7 +464,7 @@ function ComboForm({
           </div>
         </div>
 
-        {/* Featured toggle */}
+        {/* Featured toggle + highlight badge */}
         <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
           <div className="flex items-center justify-between">
             <div>
@@ -476,6 +478,21 @@ function ComboForm({
               checked={values.featured}
               onCheckedChange={(checked) => update("featured", checked)}
             />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`${formId}-highlight`}>
+              Highlight Badge{" "}
+              <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id={`${formId}-highlight`}
+              value={values.highlightBadge}
+              onChange={(event) => update("highlightBadge", event.target.value)}
+              placeholder="e.g. Bestseller"
+            />
+            <p className="text-xs text-muted-foreground">
+              Short label rendered as a badge on the combo card.
+            </p>
           </div>
         </div>
       </form>

@@ -24,6 +24,8 @@ export interface Offer {
   status: OfferStatus;
   displayOrder: number;
   banner?: string;
+  /** Marketing extensions stored in the offer `settings` object. */
+  settings?: Record<string, unknown>;
 }
 
 export interface OfferFormValues {
@@ -41,6 +43,13 @@ export interface OfferFormValues {
   status: OfferStatus;
   displayOrder: number;
   banner: string;
+  // Marketing extensions
+  featured: boolean;
+  homeVisible: boolean;
+  categoryVisible: boolean;
+  isFlashSale: boolean;
+  flashSalePriority: number;
+  flashSaleFeatured: boolean;
 }
 
 export type OfferSortKey = "title" | "code" | "businessUnitName" | "status" | "displayOrder" | "discountValue";

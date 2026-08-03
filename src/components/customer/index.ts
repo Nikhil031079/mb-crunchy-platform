@@ -21,6 +21,28 @@ export { ComboOffersSection } from "./ComboOffersSection";
 export { CategoryNavBar } from "./CategoryNavBar";
 export { CategoryEmptyState } from "./CategoryEmptyState";
 
+// Marketing & Dynamic Homepage (Sprint 4)
+export { PromoBannerStrip } from "./PromoBannerStrip";
+export { FeaturedOffersSection } from "./FeaturedOffersSection";
+export { PartyPacksSection } from "./PartyPacksSection";
+export { FlashSalesSection } from "./FlashSalesSection";
+export { HappyHourBanner } from "./HappyHourBanner";
+export { ContentSection } from "./ContentSection";
+export { BusinessUnitSections, BusinessUnitSectionSkeleton } from "./BusinessUnitSections";
+export { HomepageSectionRenderer } from "./HomepageSectionRenderer";
+export { CountdownTimer } from "./CountdownTimer";
+export type { CountdownParts } from "./CountdownTimer";
+
+// Merchandising & Personalization (Sprint 4, Phase 3)
+export { ProductGridSection } from "./ProductGridSection";
+export { RecentlyViewedSection } from "./RecentlyViewedSection";
+export { ContinueShoppingSection } from "./ContinueShoppingSection";
+export { RecommendedForYouSection } from "./RecommendedForYouSection";
+export { TrendingNowSection } from "./TrendingNowSection";
+export { FrequentlyBoughtTogetherSection } from "./FrequentlyBoughtTogetherSection";
+export { CrossSellSections } from "./CrossSellSections";
+export { SeasonalSection } from "./SeasonalSection";
+
 // Cards
 export { ProductCard, ProductCardSkeleton } from "./ProductCard";
 export { ComboCard, ComboCardSkeleton } from "./ComboCard";

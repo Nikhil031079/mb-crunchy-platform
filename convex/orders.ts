@@ -6,6 +6,8 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { api } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
+import { logActivity } from "./orderActivities";
+import type { ActivityAction } from "./orderActivities";
 
 // ============================================================================
 // Queries
@@ -181,6 +183,24 @@ export const create = mutation({
       updatedAt: now,
     });
 
+    await logActivity(ctx, {
+      orderId,
+      businessUnitId: args.businessUnitId,
+      action: "order_created",
+      newValue: orderNumber,
+      actor: "system",
+      visibleToCustomer: true,
+    });
+
+    await logActivity(ctx, {
+      orderId,
+      businessUnitId: args.businessUnitId,
+      action: "payment_pending",
+      newValue: paymentStatus,
+      actor: "system",
+      visibleToCustomer: true,
+    });
+
     // Reserve stock for each item
     for (const item of args.items) {
       const inventory = await findInventoryForOrderItem(
@@ -228,13 +248,15 @@ export const updateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    const { admin } = await requireAdminSession(ctx, args.sessionToken);
 
     const { sessionToken: _, ...patchArgs } = args;
     const order = await ctx.db.get(args.id);
     if (!order) throw new Error("Order not found");
 
     const now = Date.now();
+    const previousStatus = order.status;
+    const previousPayment = order.paymentStatus;
 
     // On confirm: deduct reserved stock from actual stock
     if (args.status === "confirmed" && order.status !== "confirmed") {
@@ -286,13 +308,60 @@ export const updateStatus = mutation({
     }
 
     await ctx.db.patch(args.id, { ...patchArgs, updatedAt: now });
+
+    // ------------------------------------------------------------------
+    // Audit timeline: record status / payment changes
+    // ------------------------------------------------------------------
+    if (args.status !== previousStatus) {
+      const statusActions: Record<string, ActivityAction> = {
+        confirmed: "order_accepted",
+        preparing: "preparing",
+        ready: "ready",
+        out_for_delivery: "out_for_delivery",
+        delivered: "delivered",
+        cancelled: "cancelled",
+        refunded: "refund_initiated",
+        pending: "manual_status_change",
+      };
+      await logActivity(ctx, {
+        orderId: args.id,
+        businessUnitId: order.businessUnitId,
+        action: statusActions[args.status] ?? "manual_status_change",
+        previousValue: previousStatus,
+        newValue: args.status,
+        actor: admin.username,
+        actorId: admin._id,
+        visibleToCustomer: true,
+      });
+    }
+
+    if (args.paymentStatus !== undefined && args.paymentStatus !== previousPayment) {
+      const paymentActions: Record<string, ActivityAction> = {
+        paid: "payment_verified",
+        refunded: "refund_completed",
+        failed: "payment_failed",
+        rejected: "payment_rejected",
+        pending: "payment_pending",
+        pending_verification: "payment_pending",
+      };
+      await logActivity(ctx, {
+        orderId: args.id,
+        businessUnitId: order.businessUnitId,
+        action: paymentActions[args.paymentStatus] ?? "manual_status_change",
+        previousValue: previousPayment,
+        newValue: args.paymentStatus,
+        actor: admin.username,
+        actorId: admin._id,
+        visibleToCustomer: true,
+      });
+    }
   },
 });
 
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("orders") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    const { admin } = await requireAdminSession(ctx, args.sessionToken);
 
     const order = await ctx.db.get(args.id);
     if (!order) throw new Error("Order not found");
@@ -321,6 +390,17 @@ export const softDelete = mutation({
       status: "cancelled",
       deletedAt: now,
       updatedAt: now,
+    });
+
+    await logActivity(ctx, {
+      orderId: args.id,
+      businessUnitId: order.businessUnitId,
+      action: "cancelled",
+      previousValue: order.status,
+      newValue: "cancelled",
+      actor: admin.username,
+      actorId: admin._id,
+      visibleToCustomer: true,
     });
   },
 });
