@@ -370,6 +370,7 @@ const orders = defineTable({
   paymentMethod: v.optional(v.string()),
   offerId: v.optional(v.id("offers")),
   offerCode: v.optional(v.string()),
+  idempotencyKey: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -378,7 +379,8 @@ const orders = defineTable({
   .index("by_order_number", ["orderNumber"])
   .index("by_customer", ["customerId"])
   .index("by_status", ["status"])
-  .index("by_phone", ["customerPhone"]);
+  .index("by_phone", ["customerPhone"])
+  .index("by_idempotency_key", ["idempotencyKey"]);
 
 // ============================================================================
 // ORDER ACTIVITIES (Audit timeline for the order lifecycle)

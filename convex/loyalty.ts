@@ -5,6 +5,8 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 // ============================================================================
 // Helpers
@@ -82,48 +84,63 @@ export const getTierProgress = query({
   },
 });
 
+export type MaxRedeemableResult = {
+  maxPoints: number;
+  maxValue: number;
+  reason: string | null;
+};
+
+/**
+ * Shared max-redeemable computation used by the `getMaxRedeemable` query and
+ * by the order-creation flow (server clamps any loyalty discount).
+ */
+export async function getMaxRedeemableInternal(
+  ctx: { db: QueryCtx["db"] },
+  args: { customerId: Id<"customers">; orderTotal: number },
+): Promise<MaxRedeemableResult> {
+  const account = await ctx.db
+    .query("loyaltyAccounts")
+    .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .first();
+
+  if (!account || account.pointsBalance <= 0) {
+    return { maxPoints: 0, maxValue: 0, reason: "No points available" };
+  }
+
+  const settings = await ctx.db.query("loyaltySettings").first();
+  if (!settings) {
+    return { maxPoints: 0, maxValue: 0, reason: "Loyalty not configured" };
+  }
+
+  // Cap: max % of order total redeemable
+  const maxByOrderValue = Math.floor(
+    (args.orderTotal * settings.maxRedeemPercentOfOrder) / settings.rupeesPerPointRedemption,
+  );
+
+  // Cap: customer balance
+  const maxByBalance = account.pointsBalance;
+
+  // Floor: minimum redeem
+  const effectiveMax = Math.max(
+    0,
+    Math.min(maxByOrderValue, maxByBalance),
+  );
+
+  if (effectiveMax < settings.minRedeemPoints) {
+    return { maxPoints: 0, maxValue: 0, reason: `Minimum ${settings.minRedeemPoints} points to redeem` };
+  }
+
+  return {
+    maxPoints: effectiveMax,
+    maxValue: effectiveMax * settings.rupeesPerPointRedemption,
+    reason: null,
+  };
+}
+
 export const getMaxRedeemable = query({
   args: { customerId: v.id("customers"), orderTotal: v.number() },
-  handler: async (ctx, args) => {
-    const account = await ctx.db
-      .query("loyaltyAccounts")
-      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
-      .filter((q) => q.eq(q.field("deletedAt"), undefined))
-      .first();
-
-    if (!account || account.pointsBalance <= 0) {
-      return { maxPoints: 0, maxValue: 0, reason: "No points available" };
-    }
-
-    const settings = await ctx.db.query("loyaltySettings").first();
-    if (!settings) {
-      return { maxPoints: 0, maxValue: 0, reason: "Loyalty not configured" };
-    }
-
-    // Cap: max % of order total redeemable
-    const maxByOrderValue = Math.floor(
-      (args.orderTotal * settings.maxRedeemPercentOfOrder) / settings.rupeesPerPointRedemption,
-    );
-
-    // Cap: customer balance
-    const maxByBalance = account.pointsBalance;
-
-    // Floor: minimum redeem
-    const effectiveMax = Math.max(
-      0,
-      Math.min(maxByOrderValue, maxByBalance),
-    );
-
-    if (effectiveMax < settings.minRedeemPoints) {
-      return { maxPoints: 0, maxValue: 0, reason: `Minimum ${settings.minRedeemPoints} points to redeem` };
-    }
-
-    return {
-      maxPoints: effectiveMax,
-      maxValue: effectiveMax * settings.rupeesPerPointRedemption,
-      reason: null,
-    };
-  },
+  handler: async (ctx, args) => getMaxRedeemableInternal(ctx, args),
 });
 
 // ============================================================================

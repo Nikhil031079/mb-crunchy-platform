@@ -130,7 +130,6 @@ export const bulkUpdateStatus = mutation({
           sessionToken: args.sessionToken,
           id: order._id,
           status: args.status,
-          paymentStatus: args.status === "confirmed" ? "paid" : undefined,
         }),
     );
 

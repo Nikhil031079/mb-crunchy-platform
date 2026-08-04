@@ -510,7 +510,6 @@ export default function OrdersPage() {
       await updateStatus({
         id: toOrderId(order.id),
         status: target,
-        paymentStatus: target === "confirmed" ? "paid" : undefined,
         sessionToken: getSessionToken()!,
       });
       toast.success(`${order.orderNumber} → ${STATUS_LABELS[target]}`);
@@ -532,7 +531,6 @@ export default function OrdersPage() {
       await updateStatus({
         id: toOrderId(statusTarget.id),
         status: statusGoal,
-        paymentStatus: statusGoal === "confirmed" ? "paid" : undefined,
         sessionToken: getSessionToken()!,
       });
       setStatusTarget(null);

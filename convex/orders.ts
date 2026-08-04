@@ -4,12 +4,39 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
 import { logActivity } from "./orderActivities";
 import type { ActivityAction } from "./orderActivities";
+import { logMovement } from "./inventory";
 import { ensureCustomerByPhone } from "./customers";
+import { validateCouponInternal } from "./offers";
+import { getMaxRedeemableInternal } from "./loyalty";
 import { notify } from "./notificationService";
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+// Client-submitted money values are display-only; the server recomputes every
+// value from current catalog data. These tolerances allow harmless float
+// rounding while rejecting any real mismatch (stale cart / tampered prices).
+const PRICE_TOLERANCE = 0.01;
+
+// Server-side mirror of the admin status workflow. Keeps the backend
+// authoritative about which transitions are allowed regardless of the client.
+const ORDER_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["preparing", "cancelled"],
+  preparing: ["ready", "cancelled"],
+  ready: ["out_for_delivery", "cancelled"],
+  out_for_delivery: ["delivered"],
+  delivered: ["refunded"],
+  cancelled: [],
+  refunded: [],
+};
 
 // ============================================================================
 // Queries
@@ -123,6 +150,196 @@ async function findInventoryForOrderItem(
 }
 
 // ============================================================================
+// Server-side order pricing validation
+// ============================================================================
+
+type ProductVariantLike = {
+  optionName: string;
+  optionValue: string;
+  price: number;
+  active: boolean;
+};
+
+type ResolvableDoc = {
+  name?: string;
+  businessUnitId?: string;
+  sourceId?: string;
+  itemType?: "product" | "combo" | "partyPack";
+  status?: string;
+  deletedAt?: number;
+  price?: number;
+  variants?: ProductVariantLike[];
+};
+
+type OrderLine = {
+  catalogItemId: Id<"catalogItems">;
+  itemType: "product" | "combo" | "partyPack";
+  name: string;
+  variantName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  image?: string;
+};
+
+/**
+ * Resolve an order line against the current catalog and recompute its price.
+ * The `catalogItemId` normally points at a catalogItems doc whose `sourceId`
+ * references the underlying product / combo / party pack. Legacy carts may
+ * store the source document id directly, so we accept either form.
+ */
+async function resolveOrderLine(
+  ctx: MutationCtx,
+  item: {
+    catalogItemId: Id<"catalogItems">;
+    itemType: "product" | "combo" | "partyPack";
+    variantName: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    image?: string;
+  },
+  businessUnitId: Id<"businessUnits">,
+): Promise<OrderLine> {
+  if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+    throw new Error("Invalid quantity");
+  }
+
+  const doc = (await ctx.db.get(
+    item.catalogItemId as Id<"catalogItems">,
+  )) as unknown as ResolvableDoc | null;
+
+  if (!doc) {
+    throw new Error("Item not found in catalog");
+  }
+  if (doc.businessUnitId !== businessUnitId) {
+    throw new Error("Item does not belong to this store");
+  }
+  if (doc.itemType && doc.itemType !== item.itemType) {
+    throw new Error("Item type mismatch");
+  }
+
+  const source =
+    typeof doc.sourceId === "string"
+      ? ((await ctx.db.get(doc.sourceId as any)) as unknown as ResolvableDoc | null)
+      : doc;
+
+  if (!source) {
+    throw new Error("Item source not found");
+  }
+  if (source.businessUnitId !== businessUnitId) {
+    throw new Error("Item does not belong to this store");
+  }
+  if (doc.status !== "active" || doc.deletedAt) {
+    throw new Error(`"${doc.name ?? "Item"}" is no longer available`);
+  }
+  if (source.status !== "active" || source.deletedAt) {
+    throw new Error(`"${source.name ?? "Item"}" is no longer available`);
+  }
+
+  let unitPrice: number;
+  if (item.itemType === "product") {
+    const variant = (source.variants ?? []).find(
+      (v) => v.active && v.optionValue === item.variantName,
+    );
+    if (!variant) {
+      throw new Error(`Variant "${item.variantName}" not found`);
+    }
+    unitPrice = variant.price;
+  } else {
+    unitPrice = source.price ?? 0;
+  }
+
+  const totalPrice = unitPrice * item.quantity;
+
+  if (Math.abs(item.unitPrice - unitPrice) > PRICE_TOLERANCE) {
+    throw new Error(
+      `Price for "${source.name ?? item.itemType}" has changed. Please review your cart.`,
+    );
+  }
+  if (Math.abs(item.totalPrice - totalPrice) > PRICE_TOLERANCE) {
+    throw new Error(
+      `Total for "${source.name ?? item.itemType}" is out of date. Please review your cart.`,
+    );
+  }
+
+  return {
+    catalogItemId: item.catalogItemId,
+    itemType: item.itemType,
+    name: source.name ?? item.itemType,
+    variantName: item.variantName,
+    quantity: item.quantity,
+    unitPrice,
+    totalPrice,
+    image: item.image,
+  };
+}
+
+type DeliveryZoneSettings = {
+  deliveryFee?: number;
+  freeDeliveryThreshold?: number;
+};
+
+/**
+ * Recompute the delivery fee from current settings / zones. Pickup is free.
+ * When a deliveryZoneId is provided it is validated and used; otherwise the
+ * first active zone is assumed (matching the checkout default).
+ */
+async function computeDeliveryFee(
+  ctx: MutationCtx,
+  args: {
+    businessUnitId: Id<"businessUnits">;
+    orderType: "delivery" | "pickup";
+    deliveryZoneId?: Id<"deliveryZones">;
+    afterDiscount: number;
+    settings?: DeliveryZoneSettings | null;
+  },
+): Promise<number> {
+  if (args.orderType !== "delivery") return 0;
+
+  const settings = args.settings;
+
+  const feeForZone = (zone: {
+    charge?: number;
+    freeDeliveryThreshold?: number;
+  }): number => {
+    const threshold = zone.freeDeliveryThreshold ?? settings?.freeDeliveryThreshold;
+    if (threshold && args.afterDiscount >= threshold) return 0;
+    return zone.charge ?? settings?.deliveryFee ?? 0;
+  };
+
+  if (args.deliveryZoneId) {
+    const zone = await ctx.db.get(args.deliveryZoneId);
+    if (
+      !zone ||
+      zone.businessUnitId !== args.businessUnitId ||
+      zone.status !== "active" ||
+      zone.deletedAt
+    ) {
+      throw new Error("Delivery zone is not valid for this store");
+    }
+    return feeForZone(zone);
+  }
+
+  const zones = await ctx.db
+    .query("deliveryZones")
+    .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
+    .filter((q) =>
+      q.and(
+        q.eq(q.field("status"), "active"),
+        q.eq(q.field("deletedAt"), undefined),
+      )
+    )
+    .collect();
+
+  if (zones.length > 0) {
+    return feeForZone(zones[0]);
+  }
+
+  return settings?.deliveryFee ?? 0;
+}
+
+// ============================================================================
 // Mutations
 // ============================================================================
 
@@ -156,21 +373,151 @@ export const create = mutation({
     total: v.number(),
     orderType: v.union(v.literal("delivery"), v.literal("pickup")),
     deliveryAddress: v.optional(v.string()),
+    deliveryZoneId: v.optional(v.id("deliveryZones")),
     deliveryNotes: v.optional(v.string()),
     offerId: v.optional(v.id("offers")),
     offerCode: v.optional(v.string()),
     paymentMethod: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Authentication required");
 
+    // ----------------------------------------------------------------------
+    // 0. Idempotency — reject duplicate submissions (network retry, browser
+    //    refresh, double-click, repeated submit). If an order already exists
+    //    for this request key, return it instead of creating a new order and
+    //    re-running side effects (inventory / loyalty / notifications).
+    // ----------------------------------------------------------------------
+    if (args.idempotencyKey) {
+      const existingOrder = await ctx.db
+        .query("orders")
+        .withIndex("by_idempotency_key", (q) =>
+          q.eq("idempotencyKey", args.idempotencyKey),
+        )
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .first();
+
+      if (existingOrder) {
+        if (
+          existingOrder.customerPhone !== args.customerPhone ||
+          Math.abs(existingOrder.total - args.total) > PRICE_TOLERANCE
+        ) {
+          throw new Error("This request key has already been used for a different order");
+        }
+        return {
+          orderId: existingOrder._id,
+          orderNumber: existingOrder.orderNumber,
+          existing: true,
+        };
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // 1. Items — resolve each line against current catalog data and recompute
+    //    the authoritative unit price / line total from the active variant.
+    // ----------------------------------------------------------------------
+    const items: OrderLine[] = [];
+    let subtotal = 0;
+    for (const item of args.items) {
+      const line = await resolveOrderLine(ctx, item, args.businessUnitId);
+      items.push(line);
+      subtotal += line.totalPrice;
+    }
+    if (items.length === 0) {
+      throw new Error("Order must contain at least one item");
+    }
+    if (Math.abs(args.subtotal - subtotal) > PRICE_TOLERANCE) {
+      throw new Error("Cart subtotal is out of date. Please review your cart.");
+    }
+
+    // ----------------------------------------------------------------------
+    // 2. Coupon discount — validated & recomputed server-side.
+    // ----------------------------------------------------------------------
+    let couponDiscount = 0;
+    let offerId: Id<"offers"> | undefined;
+    if (args.offerCode) {
+      const coupon = await validateCouponInternal(ctx, {
+        code: args.offerCode,
+        businessUnitId: args.businessUnitId,
+        subtotal,
+      });
+      if (!coupon.valid) {
+        throw new Error(
+          `Coupon is no longer valid: ${coupon.error ?? "please review your cart"}`,
+        );
+      }
+      couponDiscount = coupon.discount ?? 0;
+      offerId = coupon.offerId;
+    }
+    if (args.offerId && offerId && args.offerId !== offerId) {
+      throw new Error("Coupon mismatch");
+    }
+
+    // ----------------------------------------------------------------------
+    // 3. Discount — the portion beyond the coupon can only come from loyalty
+    //    points, capped at the customer's maximum redeemable value.
+    // ----------------------------------------------------------------------
     const customerId = await ensureCustomerByPhone(ctx, {
       name: args.customerName,
       phone: args.customerPhone,
       email: args.customerEmail,
     });
 
+    const submittedLoyalty = args.discount - couponDiscount;
+    if (submittedLoyalty < -PRICE_TOLERANCE) {
+      throw new Error("Discount is out of date. Please review your cart.");
+    }
+    const redeemable = await getMaxRedeemableInternal(ctx, {
+      customerId,
+      orderTotal: subtotal,
+    });
+    if (submittedLoyalty > redeemable.maxValue + PRICE_TOLERANCE) {
+      throw new Error("Loyalty discount exceeds your available points");
+    }
+    const discount =
+      couponDiscount + Math.min(Math.max(submittedLoyalty, 0), redeemable.maxValue);
+    if (Math.abs(args.discount - discount) > PRICE_TOLERANCE) {
+      throw new Error("Discount is out of date. Please review your cart.");
+    }
+
+    // ----------------------------------------------------------------------
+    // 4. Delivery fee, tax and grand total — recomputed server-side.
+    // ----------------------------------------------------------------------
+    const buSettings = await ctx.db
+      .query("settings")
+      .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .first();
+
+    const afterDiscount = Math.max(0, subtotal - discount);
+
+    const deliveryFee = await computeDeliveryFee(ctx, {
+      businessUnitId: args.businessUnitId,
+      orderType: args.orderType,
+      deliveryZoneId: args.deliveryZoneId,
+      afterDiscount,
+      settings: buSettings,
+    });
+    if (Math.abs(args.deliveryFee - deliveryFee) > PRICE_TOLERANCE) {
+      throw new Error("Delivery fee is out of date. Please review your cart.");
+    }
+
+    const taxRate = buSettings?.taxRate ?? 0;
+    const tax = Math.round(afterDiscount * taxRate * 100) / 100;
+    if (Math.abs(args.tax - tax) > PRICE_TOLERANCE) {
+      throw new Error("Tax is out of date. Please review your cart.");
+    }
+
+    const total = afterDiscount + deliveryFee + tax;
+    if (Math.abs(args.total - total) > PRICE_TOLERANCE) {
+      throw new Error("Order total is out of date. Please review your cart.");
+    }
+
+    // ----------------------------------------------------------------------
+    // 5. Create the order with server-computed values.
+    // ----------------------------------------------------------------------
     const prefix = "MB";
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -179,15 +526,29 @@ export const create = mutation({
 
     const paymentStatus = args.paymentMethod === "upi_qr" ? "pending_verification" as const : "pending" as const;
 
-    const { paymentMethod: _pm, ...restArgs } = args;
-
     const orderId = await ctx.db.insert("orders", {
-      ...restArgs,
-      customerId,
+      businessUnitId: args.businessUnitId,
       orderNumber,
+      customerId,
+      customerName: args.customerName,
+      customerPhone: args.customerPhone,
+      customerEmail: args.customerEmail,
+      items,
+      subtotal,
+      discount,
+      deliveryFee,
+      tax,
+      total,
+      orderType: args.orderType,
+      deliveryAddress: args.deliveryAddress,
+      deliveryZoneId: args.deliveryZoneId,
+      deliveryNotes: args.deliveryNotes,
       status: "pending",
       paymentStatus,
       paymentMethod: args.paymentMethod,
+      offerId,
+      offerCode: args.offerCode,
+      idempotencyKey: args.idempotencyKey,
       createdAt: now,
       updatedAt: now,
     });
@@ -210,21 +571,55 @@ export const create = mutation({
       visibleToCustomer: true,
     });
 
-    // Reserve stock for each item
-    for (const item of args.items) {
+    // Reserve stock for each item. Done inline in the create transaction so
+    // the reservation and order insert are atomic — a failed reservation rolls
+    // the whole order back instead of leaving an order with no stock held.
+    for (const item of items) {
       const inventory = await findInventoryForOrderItem(
         ctx,
         item.catalogItemId,
         item.variantName,
       );
 
-      if (inventory) {
-        await ctx.runMutation(api.inventory.reserveStock, {
-          inventoryId: inventory._id,
-          quantity: item.quantity,
-          orderId,
-        });
+      if (!inventory) continue;
+
+      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+        throw new Error(`Invalid quantity for "${inventory.variantName}"`);
       }
+
+      const reserved = inventory.reservedStock ?? 0;
+      const avail = inventory.stockQuantity - reserved;
+      if (avail < item.quantity) {
+        throw new Error(
+          `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
+        );
+      }
+
+      const newReserved = reserved + item.quantity;
+      await ctx.db.patch(inventory._id, {
+        reservedStock: newReserved,
+        available: (inventory.stockQuantity - newReserved) > 0,
+        updatedAt: now,
+      });
+
+      await logMovement(ctx, {
+        inventoryId: inventory._id,
+        businessUnitId: inventory.businessUnitId,
+        type: "reservation",
+        quantity: item.quantity,
+        previousStock: inventory.stockQuantity,
+        newStock: inventory.stockQuantity,
+        orderId,
+      });
+
+      await logActivity(ctx, {
+        orderId,
+        businessUnitId: inventory.businessUnitId,
+        action: "inventory_reserved",
+        newValue: `${item.quantity} × ${inventory.variantName}`,
+        actor: "system",
+        visibleToCustomer: true,
+      });
     }
 
     const businessUnit = await ctx.db.get(args.businessUnitId);
@@ -233,12 +628,12 @@ export const create = mutation({
       orderNumber,
       businessUnitName: businessUnit?.name ?? "",
       orderType: args.orderType,
-      total: args.total,
-      itemCount: args.items.reduce((sum, item) => sum + item.quantity, 0),
+      total,
+      itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
       customerName: args.customerName,
     });
 
-    return { orderId, orderNumber };
+    return { orderId, orderNumber, existing: false };
   },
 });
 
@@ -278,6 +673,31 @@ export const updateStatus = mutation({
     const previousStatus = order.status;
     const previousPayment = order.paymentStatus;
 
+    // Reject invalid status transitions. Terminal states (cancelled/refunded)
+    // have no outgoing transitions; skipping steps (e.g. pending -> delivered)
+    // is also rejected.
+    if (args.status !== previousStatus) {
+      const allowed = ORDER_STATUS_TRANSITIONS[previousStatus] ?? [];
+      if (!allowed.includes(args.status)) {
+        throw new Error(
+          `Order cannot move from ${previousStatus} to ${args.status}`,
+        );
+      }
+    }
+
+    // Payment status must be independent of order status. An order may only
+    // become "paid" through an explicit, separate payment confirmation; it
+    // must never flip to paid as a side effect of a status change.
+    if (
+      args.paymentStatus === "paid" &&
+      args.paymentStatus !== previousPayment &&
+      args.status !== previousStatus
+    ) {
+      throw new Error(
+        "Payment must be confirmed explicitly and independently of order status",
+      );
+    }
+
     // On confirm: deduct reserved stock from actual stock
     if (args.status === "confirmed" && order.status !== "confirmed") {
       for (const item of order.items) {
@@ -296,12 +716,15 @@ export const updateStatus = mutation({
       }
     }
 
-    // On cancel/refund: release reserved stock
+    // On cancel/refund: release reserved stock. If the order had already been
+    // confirmed, its stock was deducted from on-hand inventory and must be
+    // added back; otherwise only the reservation needs to be released.
     if (
       (args.status === "cancelled" || args.status === "refunded") &&
       order.status !== "cancelled" &&
       order.status !== "refunded"
     ) {
+      const deducted = order.status !== "pending";
       for (const item of order.items) {
         const inventory = await findInventoryForOrderItem(
           ctx,
@@ -313,6 +736,7 @@ export const updateStatus = mutation({
             inventoryId: inventory._id,
             quantity: item.quantity,
             orderId: args.id,
+            deducted,
           });
         }
       }
@@ -388,8 +812,10 @@ export const softDelete = mutation({
 
     const now = Date.now();
 
-    // Release reserved stock if order hasn't been confirmed yet
+    // Release reserved stock if order hasn't been confirmed yet; if it had
+    // been confirmed, restore the deducted stock to on-hand inventory.
     if (order.status !== "cancelled" && order.status !== "refunded") {
+      const deducted = order.status !== "pending";
       for (const item of order.items) {
         const inventory = await findInventoryForOrderItem(
           ctx,
@@ -401,6 +827,7 @@ export const softDelete = mutation({
             inventoryId: inventory._id,
             quantity: item.quantity,
             orderId: args.id,
+            deducted,
           });
         }
       }

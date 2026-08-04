@@ -4,6 +4,8 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
@@ -164,74 +166,96 @@ export const getAll = query({
 // Validate Coupon Code
 // ============================================================================
 
+export type CouponValidationResult =
+  | { valid: false; error?: string }
+  | {
+      valid: true;
+      offerId: Id<"offers">;
+      title: string;
+      code?: string;
+      discountType: "percentage" | "fixed";
+      discountValue: number;
+      discount: number;
+      maxDiscount?: number;
+    };
+
+/**
+ * Shared coupon validation used by the `validateCoupon` query and by the
+ * order-creation flow (server recomputes the coupon discount at order time).
+ */
+export async function validateCouponInternal(
+  ctx: { db: QueryCtx["db"] },
+  args: { code: string; businessUnitId: Id<"businessUnits">; subtotal: number },
+): Promise<CouponValidationResult> {
+  const now = Date.now();
+
+  const offer = await ctx.db
+    .query("offers")
+    .withIndex("by_code", (q) => q.eq("code", args.code.toUpperCase()))
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .first();
+
+  if (!offer) {
+    return { valid: false, error: "Invalid coupon code" };
+  }
+
+  if (offer.businessUnitId !== args.businessUnitId) {
+    return { valid: false, error: "This coupon is not valid for this store" };
+  }
+
+  if (offer.status !== "active") {
+    return { valid: false, error: "This coupon is no longer active" };
+  }
+
+  if (now < offer.startsAt) {
+    return { valid: false, error: "This coupon is not yet active" };
+  }
+
+  if (now > offer.endsAt) {
+    return { valid: false, error: "This coupon has expired" };
+  }
+
+  if (offer.usageLimit && offer.usedCount >= offer.usageLimit) {
+    return { valid: false, error: "This coupon has reached its usage limit" };
+  }
+
+  if (offer.minOrderValue && args.subtotal < offer.minOrderValue) {
+    return {
+      valid: false,
+      error: `Minimum order value of ${offer.minOrderValue} required`,
+    };
+  }
+
+  // Calculate discount
+  let discount = 0;
+  if (offer.discountType === "percentage") {
+    discount = (args.subtotal * offer.discountValue) / 100;
+    if (offer.maxDiscount) {
+      discount = Math.min(discount, offer.maxDiscount);
+    }
+  } else {
+    discount = Math.min(offer.discountValue, args.subtotal);
+  }
+
+  return {
+    valid: true,
+    offerId: offer._id,
+    title: offer.title,
+    code: offer.code,
+    discountType: offer.discountType,
+    discountValue: offer.discountValue,
+    discount: Math.round(discount * 100) / 100,
+    maxDiscount: offer.maxDiscount,
+  };
+}
+
 export const validateCoupon = query({
   args: {
     code: v.string(),
     businessUnitId: v.id("businessUnits"),
     subtotal: v.number(),
   },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-
-    const offer = await ctx.db
-      .query("offers")
-      .withIndex("by_code", (q) => q.eq("code", args.code.toUpperCase()))
-      .filter((q) => q.eq(q.field("deletedAt"), undefined))
-      .first();
-
-    if (!offer) {
-      return { valid: false, error: "Invalid coupon code" };
-    }
-
-    if (offer.businessUnitId !== args.businessUnitId) {
-      return { valid: false, error: "This coupon is not valid for this store" };
-    }
-
-    if (offer.status !== "active") {
-      return { valid: false, error: "This coupon is no longer active" };
-    }
-
-    if (now < offer.startsAt) {
-      return { valid: false, error: "This coupon is not yet active" };
-    }
-
-    if (now > offer.endsAt) {
-      return { valid: false, error: "This coupon has expired" };
-    }
-
-    if (offer.usageLimit && offer.usedCount >= offer.usageLimit) {
-      return { valid: false, error: "This coupon has reached its usage limit" };
-    }
-
-    if (offer.minOrderValue && args.subtotal < offer.minOrderValue) {
-      return {
-        valid: false,
-        error: `Minimum order value of ${offer.minOrderValue} required`,
-      };
-    }
-
-    // Calculate discount
-    let discount = 0;
-    if (offer.discountType === "percentage") {
-      discount = (args.subtotal * offer.discountValue) / 100;
-      if (offer.maxDiscount) {
-        discount = Math.min(discount, offer.maxDiscount);
-      }
-    } else {
-      discount = Math.min(offer.discountValue, args.subtotal);
-    }
-
-    return {
-      valid: true,
-      offerId: offer._id,
-      title: offer.title,
-      code: offer.code,
-      discountType: offer.discountType,
-      discountValue: offer.discountValue,
-      discount: Math.round(discount * 100) / 100,
-      maxDiscount: offer.maxDiscount,
-    };
-  },
+  handler: async (ctx, args) => validateCouponInternal(ctx, args),
 });
 
 /**

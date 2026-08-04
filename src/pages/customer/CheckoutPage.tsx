@@ -82,6 +82,30 @@ const INITIAL_FORM: CheckoutForm = {
   couponCode: "",
 };
 
+// ============================================================================
+// Idempotency key — stable per order intent, reused across retries so a
+// double-click, network retry or browser refresh can never create a duplicate
+// order. Persisted in sessionStorage so it survives a refresh mid-submit; it
+// is cleared only after the order is successfully created.
+// ============================================================================
+
+const IDEMPOTENCY_KEY_STORAGE = "mb_checkout_idempotency_key";
+
+function getOrCreateIdempotencyKey(): string {
+  const existing = sessionStorage.getItem(IDEMPOTENCY_KEY_STORAGE);
+  if (existing) return existing;
+  const key =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  sessionStorage.setItem(IDEMPOTENCY_KEY_STORAGE, key);
+  return key;
+}
+
+function clearIdempotencyKey() {
+  sessionStorage.removeItem(IDEMPOTENCY_KEY_STORAGE);
+}
+
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { cart, clearCart, itemCount } = useCart();
@@ -421,12 +445,19 @@ export default function CheckoutPage() {
             form.orderType === "delivery"
               ? form.deliveryAddress.trim()
               : undefined,
+          deliveryZoneId:
+            form.orderType === "delivery" && form.selectedZoneId
+              ? (form.selectedZoneId as Id<"deliveryZones">)
+              : undefined,
           deliveryNotes: form.deliveryNotes.trim() || undefined,
           offerCode: couponApplied?.valid ? form.couponCode.trim() : undefined,
           paymentMethod: "upi_qr",
+          idempotencyKey: getOrCreateIdempotencyKey(),
         });
 
         const { orderId: newOrderId, orderNumber: newOrderNumber } = orderResult as { orderId: string; orderNumber: string };
+
+        clearIdempotencyKey();
 
         if (redeemPoints > 0 && customer?._id) {
           redeemPointsMutation({

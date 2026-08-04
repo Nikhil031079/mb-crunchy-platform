@@ -17,7 +17,7 @@ function availableStock(doc: { stockQuantity: number; reservedStock?: number }) 
 }
 
 /** Log a stock movement to the audit trail. */
-async function logMovement(
+export async function logMovement(
   ctx: any,
   args: {
     inventoryId: any;
@@ -237,6 +237,10 @@ export const upsert = mutation({
       await requireAdminSession(ctx, args.sessionToken);
     }
 
+    if (args.stockQuantity < 0) {
+      throw new Error("Stock quantity cannot be negative");
+    }
+
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
@@ -278,6 +282,10 @@ export const updateStock = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+
+    if (args.stockQuantity < 0) {
+      throw new Error("Stock quantity cannot be negative");
+    }
 
     const now = Date.now();
     const doc = await ctx.db.get(args.id);
@@ -344,6 +352,10 @@ export const reserveStock = mutation({
     const doc = await ctx.db.get(args.inventoryId);
     if (!doc) throw new Error("Inventory item not found");
 
+    if (!Number.isInteger(args.quantity) || args.quantity <= 0) {
+      throw new Error("Reservation quantity must be a positive integer");
+    }
+
     const reserved = doc.reservedStock ?? 0;
     const avail = doc.stockQuantity - reserved;
 
@@ -392,9 +404,29 @@ export const confirmReservation = mutation({
     const doc = await ctx.db.get(args.inventoryId);
     if (!doc) throw new Error("Inventory item not found");
 
+    if (!Number.isInteger(args.quantity) || args.quantity <= 0) {
+      throw new Error("Confirmation quantity must be a positive integer");
+    }
+
     const reserved = doc.reservedStock ?? 0;
+
+    // A confirmation may only consume an existing reservation — confirming
+    // more than is reserved is an invalid transition and would corrupt the
+    // ledger (e.g. confirming an order twice).
+    if (reserved < args.quantity) {
+      throw new Error(
+        `Cannot confirm more than is reserved for "${doc.variantName}"`,
+      );
+    }
+    // Never deduct more than is actually on hand.
+    if (doc.stockQuantity < args.quantity) {
+      throw new Error(
+        `Insufficient stock to confirm "${doc.variantName}"`,
+      );
+    }
+
     const newStock = doc.stockQuantity - args.quantity;
-    const newReserved = Math.max(0, reserved - args.quantity);
+    const newReserved = reserved - args.quantity;
 
     await ctx.db.patch(args.inventoryId, {
       stockQuantity: newStock,
@@ -420,30 +452,69 @@ export const restoreStock = mutation({
     inventoryId: v.id("inventory"),
     quantity: v.number(),
     orderId: v.id("orders"),
+    deducted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     const doc = await ctx.db.get(args.inventoryId);
     if (!doc) throw new Error("Inventory item not found");
 
+    if (!Number.isInteger(args.quantity) || args.quantity <= 0) {
+      throw new Error("Restore quantity must be a positive integer");
+    }
+
     const reserved = doc.reservedStock ?? 0;
-    const newReserved = Math.max(0, reserved - args.quantity);
 
-    await ctx.db.patch(args.inventoryId, {
-      reservedStock: newReserved,
-      available: (doc.stockQuantity - newReserved) > 0,
-      updatedAt: now,
-    });
+    // Nothing was reserved for this order — already released or never
+    // reserved. Tolerate as a no-op so repeated cancellations cannot
+    // double-restore.
+    if (reserved <= 0 && !args.deducted) {
+      return;
+    }
 
-    await logMovement(ctx, {
-      inventoryId: args.inventoryId,
-      businessUnitId: doc.businessUnitId,
-      type: "reservation_release",
-      quantity: -args.quantity,
-      previousStock: doc.stockQuantity,
-      newStock: doc.stockQuantity,
-      orderId: args.orderId,
-    });
+    if (args.deducted) {
+      // The reservation was already confirmed, so the stock was deducted
+      // from on-hand stock. Restoring adds it back; reservedStock was already
+      // reduced at confirmation time and must not be touched again.
+      const newStock = doc.stockQuantity + args.quantity;
+
+      await ctx.db.patch(args.inventoryId, {
+        stockQuantity: newStock,
+        reservedStock: reserved,
+        available: (newStock - reserved) > 0,
+        updatedAt: now,
+      });
+
+      await logMovement(ctx, {
+        inventoryId: args.inventoryId,
+        businessUnitId: doc.businessUnitId,
+        type: "restoration",
+        quantity: args.quantity,
+        previousStock: doc.stockQuantity,
+        newStock,
+        orderId: args.orderId,
+      });
+    } else {
+      // Still reserved: release the reservation without touching on-hand
+      // stock. Clamped so it can never release more than is reserved.
+      const newReserved = Math.max(0, reserved - args.quantity);
+
+      await ctx.db.patch(args.inventoryId, {
+        reservedStock: newReserved,
+        available: (doc.stockQuantity - newReserved) > 0,
+        updatedAt: now,
+      });
+
+      await logMovement(ctx, {
+        inventoryId: args.inventoryId,
+        businessUnitId: doc.businessUnitId,
+        type: "reservation_release",
+        quantity: -args.quantity,
+        previousStock: doc.stockQuantity,
+        newStock: doc.stockQuantity,
+        orderId: args.orderId,
+      });
+    }
 
     await logActivity(ctx, {
       orderId: args.orderId,
@@ -473,6 +544,10 @@ export const bulkUpdateStock = mutation({
     const now = Date.now();
 
     for (const update of args.updates) {
+      if (update.stockQuantity < 0) {
+        throw new Error("Stock quantity cannot be negative");
+      }
+
       const doc = await ctx.db.get(update.inventoryId);
       if (!doc) continue;
 
