@@ -13,7 +13,9 @@ import {
   MapPin,
   Phone,
   ChevronRight,
-  Loader2,
+  CalendarClock,
+  Store,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,25 +24,30 @@ import { api } from "@convex/_generated/api";
 import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatDate } from "@/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/utils";
 
 // UI components
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import type { Order, OrderStatus, OrderType } from "@/types";
 
 // ============================================================================
 // Order Tracking Page — phone lookup → order list → status timeline
 // ============================================================================
 
 const ORDER_STATUS_STEPS = [
-  { key: "pending", label: "Order Placed", icon: Clock },
-  { key: "confirmed", label: "Confirmed", icon: CheckCircle2 },
-  { key: "preparing", label: "Preparing", icon: Package },
-  { key: "ready", label: "Ready", icon: CheckCircle2 },
-  { key: "out_for_delivery", label: "Out for Delivery", icon: Truck },
-  { key: "delivered", label: "Delivered", icon: CheckCircle2 },
+  { key: "pending", label: "Order Placed", icon: Clock, color: "bg-blue-500" },
+  { key: "confirmed", label: "Confirmed", icon: CheckCircle2, color: "bg-amber-500" },
+  { key: "preparing", label: "Preparing", icon: Package, color: "bg-orange-500" },
+  { key: "ready", label: "Ready", icon: CheckCircle2, color: "bg-emerald-500" },
+  { key: "out_for_delivery", label: "Out for Delivery", icon: Truck, color: "bg-purple-500" },
+  { key: "delivered", label: "Delivered", icon: CheckCircle2, color: "bg-emerald-600" },
 ] as const;
 
 const STATUS_LABELS: Record<string, string> = {
@@ -65,6 +72,185 @@ const STATUS_COLORS: Record<string, string> = {
   refunded: "bg-gray-500/10 text-gray-600 border-gray-200",
 };
 
+// ============================================================================
+// Tracking helpers
+// ============================================================================
+
+function getTrackingSteps(orderType: OrderType) {
+  return orderType === "pickup"
+    ? ORDER_STATUS_STEPS.filter((s) => s.key !== "out_for_delivery")
+    : ORDER_STATUS_STEPS;
+}
+
+function StatusProgressFlow({
+  status,
+  orderType,
+}: {
+  status: OrderStatus;
+  orderType: OrderType;
+}) {
+  const isCancelled = status === "cancelled" || status === "refunded";
+
+  if (isCancelled) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-red-200/60 bg-red-50/50 p-4 dark:bg-red-900/20">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/30">
+          <XCircle className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="font-medium text-red-600">
+            {status === "cancelled" ? "Order Cancelled" : "Order Refunded"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            This order was {status === "cancelled" ? "cancelled" : "refunded"}.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const steps = getTrackingSteps(orderType);
+  const currentStepIndex = steps.findIndex((s) => s.key === status);
+  const isDelivered = status === "delivered";
+
+  return (
+    <ol>
+      {steps.map((step, index) => {
+        const isCompleted = index < currentStepIndex || isDelivered;
+        const isCurrent = index === currentStepIndex && !isDelivered;
+        const isFuture = !isCompleted && !isCurrent;
+        const Icon = step.icon;
+
+        return (
+          <li key={step.key} className="relative flex items-start gap-3 pb-4 last:pb-0">
+            {index < steps.length - 1 && (
+              <div
+                aria-hidden="true"
+                className={cn(
+                  "absolute left-[15px] top-8 h-[calc(100%-2rem)] w-0.5",
+                  isCompleted ? "bg-emerald-500/60" : "bg-border"
+                )}
+              />
+            )}
+            <div
+              className={cn(
+                "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+                isCompleted && cn("text-white", step.color),
+                isCurrent && cn("text-white", step.color, "ring-4 ring-primary/15 animate-pulse"),
+                isFuture && "border-2 border-border bg-background text-muted-foreground/40"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1 pt-1">
+              <p
+                className={cn(
+                  "text-sm",
+                  isCompleted && "font-medium text-foreground",
+                  isCurrent && "font-semibold text-foreground",
+                  isFuture && "text-muted-foreground/50"
+                )}
+              >
+                {step.label}
+              </p>
+              {isCurrent && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Current status
+                </p>
+              )}
+            </div>
+            {isCompleted && (
+              <CheckCircle2 className="h-4 w-4 shrink-0 self-center text-emerald-500" />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function TrackingSummary({
+  order,
+  businessUnitName,
+}: {
+  order: Order;
+  businessUnitName?: string;
+}) {
+  const isCancelled = order.status === "cancelled" || order.status === "refunded";
+  const steps = getTrackingSteps(order.orderType);
+  const currentStepIndex = steps.findIndex((s) => s.key === order.status);
+  const completedSteps =
+    order.status === "delivered"
+      ? steps.length
+      : currentStepIndex >= 0
+        ? currentStepIndex + 1
+        : 0;
+  const progressPct =
+    steps.length > 0 ? Math.round((completedSteps / steps.length) * 100) : 0;
+  const lastUpdated = order.updatedAt ?? order.createdAt;
+
+  return (
+    <Card className="border-border/60">
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Current Status
+            </p>
+            <Badge
+              variant="outline"
+              className={cn(
+                "mt-1.5 capitalize",
+                STATUS_COLORS[order.status] ?? ""
+              )}
+            >
+              {STATUS_LABELS[order.status] ?? order.status}
+            </Badge>
+          </div>
+          {!isCancelled && steps.length > 0 && (
+            <div className="text-right">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Estimated Progress
+              </p>
+              <p className="mt-1.5 text-sm font-semibold">
+                {completedSteps} of {steps.length} steps · {progressPct}%
+              </p>
+            </div>
+          )}
+        </div>
+
+        {!isCancelled && steps.length > 0 && (
+          <Progress value={progressPct} className="mt-3 h-2" />
+        )}
+
+        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+          <div className="flex items-start gap-2">
+            <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Last Updated</p>
+              <p className="truncate font-medium">{formatDateTime(lastUpdated)}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <Store className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Business Unit</p>
+              <p className="truncate font-medium">{businessUnitName ?? "—"}</p>
+            </div>
+          </div>
+          <div className="col-span-2 flex items-start gap-2 sm:col-span-1">
+            <Tag className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Order Type</p>
+              <p className="capitalize font-medium">{order.orderType}</p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function OrderTrackingPage() {
   const [phone, setPhone] = useState("");
   const [searchedPhone, setSearchedPhone] = useState<string | null>(null);
@@ -73,6 +259,11 @@ export default function OrderTrackingPage() {
   const orders = useQuery(
     api.orders.getByPhone,
     searchedPhone ? { phone: searchedPhone } : "skip"
+  );
+
+  const businessUnits = useQuery(
+    api.businessUnits.getAll,
+    selectedOrderId ? {} : "skip"
   );
 
   useEffect(() => {
@@ -99,75 +290,6 @@ export default function OrderTrackingPage() {
     api.orderActivities.getByOrderForCustomer,
     selectedOrder ? { orderId: selectedOrder._id } : "skip"
   );
-
-  // ==========================================================================
-  // Status Timeline
-  // ==========================================================================
-
-  function StatusTimeline({ status }: { status: string }) {
-    const isCancelled = status === "cancelled" || status === "refunded";
-    const currentStepIndex = ORDER_STATUS_STEPS.findIndex((s) => s.key === status);
-    const isDelivered = status === "delivered";
-
-    if (isCancelled) {
-      return (
-        <div className="flex items-center gap-3 py-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-            <XCircle className="h-5 w-5 text-red-600" />
-          </div>
-          <div>
-            <p className="font-medium text-red-600">
-              {status === "cancelled" ? "Order Cancelled" : "Order Refunded"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              This order was {status === "cancelled" ? "cancelled" : "refunded"}.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-1">
-        {ORDER_STATUS_STEPS.map((step, index) => {
-          const isCompleted = index < currentStepIndex || isDelivered;
-          const isCurrent = index === currentStepIndex && !isDelivered;
-          const isFuture = index > currentStepIndex && !isDelivered;
-          const Icon = step.icon;
-
-          return (
-            <div key={step.key} className="flex items-center gap-3">
-              <div
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                  isCompleted && "border-emerald-500 bg-emerald-500 text-white",
-                  isCurrent && "border-primary bg-primary text-primary-foreground animate-pulse",
-                  isFuture && "border-border bg-background text-muted-foreground/40"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-                    isCompleted && "text-emerald-600",
-                    isCurrent && "text-primary",
-                    isFuture && "text-muted-foreground/40"
-                  )}
-                >
-                  {step.label}
-                </p>
-              </div>
-              {isCompleted && !isFuture && (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
 
   // ==========================================================================
   // Render
@@ -235,11 +357,15 @@ export default function OrderTrackingPage() {
             transition={{ duration: 0.3, delay: 0.15 }}
           >
             {orders === undefined ? (
-              <div className="rounded-xl border border-border/60 bg-card p-8 text-center">
-                <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="mt-3 text-sm text-muted-foreground">
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
                   Searching orders...
                 </p>
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                  ))}
+                </div>
               </div>
             ) : orders.length === 0 ? (
               <div className="rounded-xl border border-border/60 bg-card p-12 text-center space-y-3">
@@ -260,7 +386,11 @@ export default function OrderTrackingPage() {
 
                 {/* Order List */}
                 <div className="space-y-3">
-                  {orders.map((order) => (
+                  {orders.map((order) => {
+                    const businessUnitName = businessUnits?.find(
+                      (bu) => bu._id === order.businessUnitId
+                    )?.name;
+                    return (
                     <button
                       key={order._id}
                       onClick={() =>
@@ -317,28 +447,31 @@ export default function OrderTrackingPage() {
                           transition={{ duration: 0.2 }}
                           className="mt-4 pt-4 border-t border-border/60"
                         >
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            {/* Status Timeline */}
-                            <div>
-                              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
-                                Order Status
-                              </p>
-                              <StatusTimeline status={order.status} />
-                            </div>
+                          {/* Tracking Summary */}
+                          <TrackingSummary
+                            order={order}
+                            businessUnitName={businessUnitName}
+                          />
 
-                            {/* Order Details */}
-                            <div className="space-y-3">
+                          {/* Progress Flow */}
+                          <div className="mt-5">
+                            <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
+                              Order Progress
+                            </p>
+                            <StatusProgressFlow
+                              status={order.status}
+                              orderType={order.orderType}
+                            />
+                          </div>
+
+                          {/* Details */}
+                          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                            <div className="space-y-4">
                               <div>
                                 <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
                                   Details
                                 </p>
                                 <div className="space-y-1.5 text-sm">
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Type</span>
-                                    <span className="font-medium capitalize">
-                                      {order.orderType}
-                                    </span>
-                                  </div>
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Payment</span>
                                     <span
@@ -382,8 +515,9 @@ export default function OrderTrackingPage() {
                                   ))}
                                 </div>
                               </div>
+                            </div>
 
-                              {/* Delivery Address */}
+                            <div>
                               {order.deliveryAddress && (
                                 <div>
                                   <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
@@ -399,7 +533,7 @@ export default function OrderTrackingPage() {
                           </div>
 
                           {/* Activity Timeline */}
-                          <div className="mt-4 pt-4 border-t border-border/60">
+                          <div className="mt-5 pt-5 border-t border-border/60">
                             <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
                               Activity Timeline
                             </p>
@@ -408,7 +542,8 @@ export default function OrderTrackingPage() {
                         </motion.div>
                       )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

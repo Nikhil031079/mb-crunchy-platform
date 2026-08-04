@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "convex/react";
-import { Package, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { Package, ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
+import { getStockStatus } from "@/components/customer/StockBadge";
 import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 import { formatCurrency } from "@/utils";
 import { useCart } from "@/stores/cart";
@@ -58,6 +59,28 @@ export default function OrderHistoryPage() {
 
   const { addItem } = useCart();
 
+  const expandedOrder =
+    orders?.find((o) => o._id === expandedOrderId) ?? null;
+
+  const reorderBusinessUnitId =
+    expandedOrder && expandedOrder.status === "delivered"
+      ? (expandedOrder.businessUnitId as Id<"businessUnits">)
+      : undefined;
+
+  const reorderCatalogItems = useQuery(
+    api.catalogItems.getByBusinessUnit,
+    reorderBusinessUnitId ? { businessUnitId: reorderBusinessUnitId } : "skip",
+  );
+
+  const reorderInventoryItems = useQuery(
+    api.inventory.getByBusinessUnit,
+    reorderBusinessUnitId ? { businessUnitId: reorderBusinessUnitId } : "skip",
+  );
+
+  const reorderAvailabilityLoading =
+    reorderBusinessUnitId !== undefined &&
+    (reorderCatalogItems === undefined || reorderInventoryItems === undefined);
+
   const filteredOrders =
     orders?.filter(
       (o) => statusFilter === "all" || o.status === statusFilter,
@@ -69,8 +92,28 @@ export default function OrderHistoryPage() {
 
   const handleReorder = useCallback(
     (order: Order) => {
-      let addedCount = 0;
-      for (const item of order.items) {
+      const availableItems = order.items.filter((item) => {
+        const catalogItem = reorderCatalogItems?.find(
+          (c) => c._id === item.catalogItemId,
+        );
+        if (!catalogItem) return false;
+
+        const itemInventory = reorderInventoryItems?.filter(
+          (inv) => inv.catalogItemId === item.catalogItemId,
+        );
+
+        return (
+          getStockStatus(itemInventory, item.variantName).status !==
+          "out_of_stock"
+        );
+      });
+
+      if (availableItems.length === 0) {
+        toast.info("No items are currently available to reorder.");
+        return;
+      }
+
+      for (const item of availableItems) {
         addItem({
           catalogItemId: item.catalogItemId,
           itemType: item.itemType,
@@ -81,13 +124,11 @@ export default function OrderHistoryPage() {
           unitPrice: item.unitPrice,
           image: item.image,
         });
-        addedCount++;
       }
-      toast.success("Items added to cart", {
-        description: `${addedCount} item(s) from order ${order.orderNumber}.`,
-      });
+
+      toast.success("Items added to your cart.");
     },
-    [addItem],
+    [addItem, reorderCatalogItems, reorderInventoryItems],
   );
 
   return (
@@ -236,10 +277,11 @@ export default function OrderHistoryPage() {
                             variant="outline"
                             size="sm"
                             className="gap-1.5"
+                            disabled={reorderAvailabilityLoading}
                             onClick={() => handleReorder(order)}
                           >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            Reorder
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                            Buy Again
                           </Button>
                         )}
 

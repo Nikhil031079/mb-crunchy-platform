@@ -1,4 +1,4 @@
-import type { Order, OrderItem, OrderStatus, PaymentStatus, OrderType } from "@/types";
+import type { OrderItem, OrderStatus, PaymentStatus, OrderType } from "@/types";
 
 export type { OrderStatus, PaymentStatus, OrderType };
 
@@ -85,8 +85,10 @@ export type SortDirection = "asc" | "desc";
 export interface OrderFilters {
   query: string;
   status: OrderStatus | "all";
+  paymentStatus: PaymentStatus | "all";
   businessUnitId: string | "all";
   orderType: OrderType | "all";
+  dateRange: { from: string; to: string } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,4 +119,8 @@ export function getNextStatus(current: OrderStatus): OrderStatus | null {
 
 export function canCancel(order: OrderRecord): boolean {
   return STATUS_TRANSITIONS[order.status].includes("cancelled");
+}
+
+export function canBulkRefund(order: OrderRecord): boolean {
+  return order.status === "delivered" && order.paymentStatus === "paid";
 }

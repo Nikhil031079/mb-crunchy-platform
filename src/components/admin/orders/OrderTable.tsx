@@ -3,13 +3,13 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Clock, Eye, ChevronRight } from "lucid
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { STATUS_COLORS } from "@/constants";
 import { cn } from "@/lib/utils";
 
-import { OrderRowActions } from "./OrderRowActions";
-import type { OrderRecord, OrderSortKey, OrderStatus, PaymentStatus, SortDirection } from "./types";
+import type { OrderRecord, OrderSortKey, PaymentStatus, SortDirection } from "./types";
 import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -56,23 +56,6 @@ function SortButton({ column, label, sortKey, sortDirection, onSort }: { column:
 }
 
 // ---------------------------------------------------------------------------
-// Status badge tone
-// ---------------------------------------------------------------------------
-
-function statusTone(status: OrderStatus): "success" | "warning" | "danger" | "neutral" {
-  switch (status) {
-    case "delivered": return "success";
-    case "confirmed":
-    case "preparing":
-    case "ready":
-    case "out_for_delivery": return "warning";
-    case "cancelled":
-    case "refunded": return "danger";
-    default: return "neutral";
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Table props
 // ---------------------------------------------------------------------------
 
@@ -86,17 +69,36 @@ interface OrderTableProps {
   onQuickStatus: (order: OrderRecord) => void;
   onCancel: (order: OrderRecord) => void;
   onUpdatePaymentStatus: (order: OrderRecord, paymentStatus: PaymentStatus) => void;
+  selectedIds?: ReadonlySet<string>;
+  onToggleSelect?: (orderId: string) => void;
+  onToggleSelectAll?: () => void;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onUpdatePaymentStatus }: OrderTableProps) {
+export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onUpdatePaymentStatus, selectedIds, onToggleSelect, onToggleSelectAll }: OrderTableProps) {
+  const hasSelection = Boolean(onToggleSelect);
+  const skeletonCols = hasSelection ? 10 : 9;
+
+  const allVisibleSelected = orders.length > 0 && orders.every((o) => selectedIds?.has(o.id));
+  const someVisibleSelected = orders.some((o) => selectedIds?.has(o.id));
+  const headerChecked: boolean | "indeterminate" = allVisibleSelected || (someVisibleSelected ? "indeterminate" : false);
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
+          {hasSelection && (
+            <TableHead className="w-10">
+              <Checkbox
+                aria-label="Select all orders"
+                checked={headerChecked}
+                onCheckedChange={() => onToggleSelectAll?.()}
+              />
+            </TableHead>
+          )}
           <TableHead><SortButton column="orderNumber" label="Order #" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead>
           <TableHead><SortButton column="customerName" label="Customer" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead>
           <TableHead>Items</TableHead>
@@ -112,13 +114,23 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
         {isLoading
           ? Array.from({ length: 6 }, (_, i) => (
             <TableRow key={i}>
-              {Array.from({ length: 9 }, (_, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
+              {Array.from({ length: skeletonCols }, (_, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
             </TableRow>
           ))
           : orders.map((order) => {
             const nextStatus = getNextStatus(order.status);
+            const isSelected = Boolean(selectedIds?.has(order.id));
             return (
-              <TableRow key={order.id} className="cursor-pointer" onClick={() => onViewDetail(order)}>
+              <TableRow key={order.id} className={cn("cursor-pointer", isSelected && "bg-muted/40")} onClick={() => onViewDetail(order)}>
+                {hasSelection && (
+                  <TableCell onClick={(e) => e.stopPropagation()} className="w-10">
+                    <Checkbox
+                      aria-label={`Select order ${order.orderNumber}`}
+                      checked={isSelected}
+                      onCheckedChange={() => onToggleSelect?.(order.id)}
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="font-mono text-xs font-medium">{order.orderNumber}</TableCell>
                 <TableCell>
                   <div className="min-w-0">

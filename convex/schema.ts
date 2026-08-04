@@ -445,6 +445,7 @@ const customers = defineTable({
   phone: v.optional(v.string()),
   totalOrders: v.number(),
   totalSpent: v.number(),
+  lastOrderAt: v.optional(v.number()),
   notes: v.optional(v.string()),
   status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
   createdAt: v.number(),

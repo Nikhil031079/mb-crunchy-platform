@@ -66,6 +66,13 @@ export function formatDate(timestamp: number, format: "short" | "long" | "relati
 }
 
 /**
+ * Format a timestamp as a date and time string
+ */
+export function formatDateTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleString();
+}
+
+/**
  * Truncate text with ellipsis
  */
 export function truncate(text: string, maxLength: number): string {

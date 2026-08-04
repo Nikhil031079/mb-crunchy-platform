@@ -43,6 +43,7 @@ const CombosPage = lazy(() => import("@/pages/admin/CombosPage"));
 const PartyPacksPage = lazy(() => import("@/pages/admin/PartyPacksPage"));
 const OffersPage = lazy(() => import("@/pages/admin/OffersPage"));
 const OrdersPage = lazy(() => import("@/pages/admin/OrdersPage"));
+const ReportsPage = lazy(() => import("@/pages/admin/ReportsPage"));
 const InventoryPage = lazy(() => import("@/pages/admin/InventoryPage"));
 const CustomersPage = lazy(() => import("@/pages/admin/CustomersPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
@@ -208,6 +209,7 @@ function AppRoutes() {
           <Route path="party-packs" element={<PartyPacksPage />} />
           <Route path="offers" element={<OffersPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="customers" element={<CustomersPage />} />
           <Route path="settings" element={<SettingsPage />} />

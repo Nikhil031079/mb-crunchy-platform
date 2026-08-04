@@ -1,6 +1,7 @@
 import { useState, type ComponentType } from "react";
 import { Link } from "react-router";
 import {
+  BarChart3,
   Building2,
   ChevronDown,
   Clock3,
@@ -43,6 +44,7 @@ const iconMap: Record<AdminNavigationIcon, ComponentType<{ className?: string }>
   LayoutTemplate,
   Zap,
   Clock3,
+  BarChart3,
 };
 
 interface AdminNavigationProps {

@@ -8,6 +8,8 @@ import { api } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
 import { logActivity } from "./orderActivities";
 import type { ActivityAction } from "./orderActivities";
+import { ensureCustomerByPhone } from "./customers";
+import { notify } from "./notificationService";
 
 // ============================================================================
 // Queries
@@ -163,6 +165,12 @@ export const create = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Authentication required");
 
+    const customerId = await ensureCustomerByPhone(ctx, {
+      name: args.customerName,
+      phone: args.customerPhone,
+      email: args.customerEmail,
+    });
+
     const prefix = "MB";
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -175,6 +183,7 @@ export const create = mutation({
 
     const orderId = await ctx.db.insert("orders", {
       ...restArgs,
+      customerId,
       orderNumber,
       status: "pending",
       paymentStatus,
@@ -217,6 +226,17 @@ export const create = mutation({
         });
       }
     }
+
+    const businessUnit = await ctx.db.get(args.businessUnitId);
+    await notify("NEW_ORDER", {
+      orderId,
+      orderNumber,
+      businessUnitName: businessUnit?.name ?? "",
+      orderType: args.orderType,
+      total: args.total,
+      itemCount: args.items.reduce((sum, item) => sum + item.quantity, 0),
+      customerName: args.customerName,
+    });
 
     return { orderId, orderNumber };
   },

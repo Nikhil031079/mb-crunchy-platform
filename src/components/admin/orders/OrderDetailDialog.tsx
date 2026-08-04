@@ -13,7 +13,7 @@ import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 import type { OrderRecord } from "./types";
 import { STATUS_LABELS } from "./types";
-import { PaymentStatusBadge, OrderTypeBadge, PrintInvoice, PrintPackingSlip } from "./shared";
+import { PaymentStatusBadge, OrderTypeBadge, PrintInvoice, PrintPackingSlip, PrintKitchenTicket } from "./shared";
 import { OrderNotesPanel } from "./OrderNotesPanel";
 import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 
@@ -71,6 +71,7 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
             <div className="flex gap-2">
               <PrintInvoice order={order} />
               <PrintPackingSlip order={order} />
+              <PrintKitchenTicket order={order} />
               <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[order.status])}>
                 {STATUS_LABELS[order.status]}
               </Badge>

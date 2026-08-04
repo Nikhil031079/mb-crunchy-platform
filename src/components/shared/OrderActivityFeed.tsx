@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrderActivity, OrderActivityAction } from "@/types";
+import { formatDateTime } from "@/utils";
 
 // ============================================================================
 // Order Activity Feed — shared presentational timeline used by admins and
@@ -111,7 +112,7 @@ export function OrderActivityFeed({
         const next = formatValue(activity.newValue);
 
         return (
-          <div key={activity._id} className="relative flex items-start gap-3 pb-4">
+          <div key={activity._id} className="relative flex items-start gap-3 pb-5">
             {index < activities.length - 1 && (
               <div className="absolute left-[15px] top-9 h-[calc(100%-2rem)] w-px bg-border" aria-hidden="true" />
             )}
@@ -122,7 +123,7 @@ export function OrderActivityFeed({
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                 <p className="text-sm font-medium capitalize">{meta.label}</p>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {new Date(activity.createdAt).toLocaleString()}
+                  {formatDateTime(activity.createdAt)}
                 </span>
               </div>
               {(previous || next) && (

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
+import { toast } from "sonner";
 import {
   BarChart3,
   IndianRupee,
@@ -15,6 +16,10 @@ import {
   PackageCheck,
   Warehouse,
   XCircle,
+  Store,
+  ListChecks,
+  Users,
+  Download,
 } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
@@ -23,6 +28,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -33,12 +40,15 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/utils";
+import { formatCurrency, downloadCSV } from "@/utils";
+
+import type { OrderStatus } from "@/components/admin/orders/types";
+import { STATUS_LABELS } from "@/components/admin/orders/types";
+import { STATUS_COLORS } from "@/constants";
 
 import type {
   Order,
   OrderItem,
-  BusinessUnit,
   InventoryItem,
   CatalogItem,
   Product,
@@ -46,10 +56,13 @@ import type {
 } from "@/types";
 
 // ============================================================================
-// Report Periods
+// Report Ranges & Buckets
 // ============================================================================
 
-type Period = "daily" | "weekly" | "monthly";
+type RangeKey = "today" | "week" | "month" | "custom";
+
+const HOUR_MS = 3600000;
+const DAY_MS = 86400000;
 
 interface Bucket {
   key: string;
@@ -58,48 +71,123 @@ interface Bucket {
   end: number;
 }
 
-function buildBuckets(period: Period): Bucket[] {
+interface ActiveRange {
+  key: RangeKey;
+  start: number;
+  end: number;
+  label: string;
+}
+
+function buildActiveRange(
+  key: RangeKey,
+  customFrom: string,
+  customTo: string,
+): ActiveRange {
   const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+
+  if (key === "today") {
+    return { key, start: startOfToday, end: now.getTime(), label: "Today" };
+  }
+
+  if (key === "week") {
+    const day = now.getDay();
+    const diff = day === 0 ? 6 : day - 1;
+    const monday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - diff,
+    ).getTime();
+    return { key, start: monday, end: now.getTime(), label: "This Week" };
+  }
+
+  if (key === "month") {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return { key, start: monthStart, end: now.getTime(), label: "This Month" };
+  }
+
+  const from = customFrom
+    ? new Date(`${customFrom}T00:00:00`).getTime()
+    : startOfToday;
+  const to = customTo ? new Date(`${customTo}T23:59:59.999`).getTime() : from;
+  return {
+    key,
+    start: from,
+    end: to > from ? to : from + DAY_MS,
+    label: "Custom Range",
+  };
+}
+
+function buildBuckets(start: number, end: number): Bucket[] {
   const buckets: Bucket[] = [];
+  const span = end - start;
 
-  if (period === "daily") {
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+  if (span <= 2 * DAY_MS) {
+    const startHour = Math.floor(start / HOUR_MS);
+    const endHour = Math.ceil(end / HOUR_MS);
+    for (let i = startHour; i < endHour; i++) {
+      const bStart = i * HOUR_MS;
       buckets.push({
-        key: d.toISOString().slice(0, 10),
+        key: `h-${i}`,
+        label: new Date(bStart).toLocaleTimeString("en-US", { hour: "numeric" }),
+        start: Math.max(bStart, start),
+        end: Math.min(bStart + HOUR_MS, end),
+      });
+    }
+    return buckets;
+  }
+
+  if (span <= 60 * DAY_MS) {
+    for (let i = 0; i < 60; i++) {
+      const bStart = start + i * DAY_MS;
+      if (bStart >= end) break;
+      const d = new Date(bStart);
+      buckets.push({
+        key: `d-${d.toISOString().slice(0, 10)}`,
         label: d.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
-        start: d.getTime(),
-        end: d.getTime() + 86400000,
+        start: Math.max(bStart, start),
+        end: Math.min(bStart + DAY_MS, end),
       });
     }
     return buckets;
   }
 
-  if (period === "weekly") {
-    for (let i = 7; i >= 0; i--) {
-      const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const day = monday.getDay();
-      monday.setDate(monday.getDate() - day + (day === 0 ? -6 : 1) - i * 7);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 7);
+  if (span <= 400 * DAY_MS) {
+    const mondayOf = (ts: number) => {
+      const d = new Date(ts);
+      const day = d.getDay();
+      d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+      return d;
+    };
+    let cursor = mondayOf(start).getTime();
+    while (cursor < end) {
+      const d = new Date(cursor);
       buckets.push({
-        key: `w-${monday.toISOString().slice(0, 10)}`,
-        label: monday.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
-        start: monday.getTime(),
-        end: sunday.getTime(),
+        key: `w-${d.toISOString().slice(0, 10)}`,
+        label: d.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
+        start: Math.max(cursor, start),
+        end: Math.min(cursor + 7 * DAY_MS, end),
       });
+      cursor += 7 * DAY_MS;
     }
     return buckets;
   }
 
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(start);
+    d.setMonth(d.getMonth() + i);
+    if (d.getTime() >= end) break;
+    const next = new Date(d);
+    next.setMonth(d.getMonth() + 1);
     buckets.push({
-      key: `${d.getFullYear()}-${d.getMonth()}`,
+      key: `m-${d.getFullYear()}-${d.getMonth()}`,
       label: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-      start: d.getTime(),
-      end: next.getTime(),
+      start: Math.max(d.getTime(), start),
+      end: Math.min(next.getTime(), end),
     });
   }
   return buckets;
@@ -124,7 +212,10 @@ export default function ReportsPage() {
   const products = useQuery(api.products.getAll);
   const categories = useQuery(api.categories.getAll);
 
-  const [period, setPeriod] = useState<Period>("daily");
+  const [rangeKey, setRangeKey] = useState<RangeKey>("today");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [nowTimestamp] = useState(() => Date.now());
 
   const isLoading =
     orders === undefined ||
@@ -159,9 +250,122 @@ export default function ReportsPage() {
     return map;
   }, [categories]);
 
-  // ---- Sales buckets --------------------------------------------------------
-  const buckets = useMemo(() => buildBuckets(period), [period]);
+  // ---- Active range & buckets ----------------------------------------------
+  const activeRange = useMemo(
+    () => buildActiveRange(rangeKey, customFrom, customTo),
+    [rangeKey, customFrom, customTo],
+  );
 
+  const buckets = useMemo(
+    () => buildBuckets(activeRange.start, activeRange.end),
+    [activeRange],
+  );
+
+  const windowOrders = useMemo(
+    () =>
+      (orders ?? []).filter(
+        (o) => o.createdAt >= activeRange.start && o.createdAt < activeRange.end,
+      ),
+    [orders, activeRange],
+  );
+
+  // ---- Sales aggregates for the active range --------------------------------
+  const sales = useMemo(() => {
+    let revenue = 0;
+    let netCount = 0;
+    let grossCount = 0;
+    const revenueByBu = new Map<string, number>();
+    const orderCountByBu = new Map<string, number>();
+    for (const o of windowOrders) {
+      grossCount += 1;
+      if (!isNetOrder(o)) continue;
+      netCount += 1;
+      revenue += o.total;
+      revenueByBu.set(o.businessUnitId, (revenueByBu.get(o.businessUnitId) ?? 0) + o.total);
+      orderCountByBu.set(o.businessUnitId, (orderCountByBu.get(o.businessUnitId) ?? 0) + 1);
+    }
+    const buRows = [...revenueByBu.entries()]
+      .map(([id, value]) => ({
+        id,
+        name: buNameById.get(id) ?? "Unknown",
+        revenue: value,
+        orders: orderCountByBu.get(id) ?? 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+    const topBu = buRows[0] ?? null;
+    return {
+      revenue,
+      netCount,
+      grossCount,
+      averageOrderValue: netCount > 0 ? revenue / netCount : 0,
+      topBu,
+      buRows,
+    };
+  }, [windowOrders, buNameById]);
+
+  const statusSummary = useMemo(() => {
+    const counts = new Map<OrderStatus, { count: number; revenue: number }>();
+    for (const o of windowOrders) {
+      const entry = counts.get(o.status) ?? { count: 0, revenue: 0 };
+      entry.count += 1;
+      if (isNetOrder(o)) entry.revenue += o.total;
+      counts.set(o.status, entry);
+    }
+    return (Object.keys(STATUS_LABELS) as OrderStatus[]).map((status) => ({
+      status,
+      count: counts.get(status)?.count ?? 0,
+      revenue: counts.get(status)?.revenue ?? 0,
+    }));
+  }, [windowOrders]);
+
+  const topCustomers = useMemo(() => {
+    const map = new Map<string, { name: string; phone: string; orders: number; total: number }>();
+    for (const o of windowOrders) {
+      if (!isNetOrder(o)) continue;
+      const key = o.customerPhone || o.customerName;
+      const entry = map.get(key) ?? {
+        name: o.customerName,
+        phone: o.customerPhone,
+        orders: 0,
+        total: 0,
+      };
+      entry.orders += 1;
+      entry.total += o.total;
+      map.set(key, entry);
+    }
+    return [...map.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [windowOrders]);
+
+  const bestSellers = useMemo(() => {
+    const counts = new Map<string, { name: string; qty: number; revenue: number }>();
+    for (const o of windowOrders) {
+      if (!isNetOrder(o)) continue;
+      for (const item of o.items ?? []) {
+        const entry = counts.get(item.name) ?? { name: item.name, qty: 0, revenue: 0 };
+        entry.qty += item.quantity;
+        entry.revenue += item.unitPrice * item.quantity;
+        counts.set(item.name, entry);
+      }
+    }
+    return [...counts.values()].sort((a, b) => b.qty - a.qty).slice(0, 10);
+  }, [windowOrders]);
+
+  const topCategories = useMemo(() => {
+    const counts = new Map<string, { name: string; qty: number; revenue: number }>();
+    for (const o of windowOrders) {
+      if (!isNetOrder(o)) continue;
+      for (const item of o.items ?? []) {
+        const category = resolveCategory(item, catalogById, productById, categoryById);
+        const entry = counts.get(category) ?? { name: category, qty: 0, revenue: 0 };
+        entry.qty += item.quantity;
+        entry.revenue += item.unitPrice * item.quantity;
+        counts.set(category, entry);
+      }
+    }
+    return [...counts.values()].sort((a, b) => b.qty - a.qty).slice(0, 10);
+  }, [windowOrders, catalogById, productById, categoryById]);
+
+  // ---- Bucket chart data -----------------------------------------------------
   const bucketStats = useMemo(() => {
     if (!orders) return [];
     return buckets.map((bucket) => {
@@ -175,63 +379,6 @@ export default function ReportsPage() {
       return { bucket, revenue, orderCount };
     });
   }, [orders, buckets]);
-
-  const range = useMemo(() => {
-    if (!orders) return null;
-    let revenue = 0;
-    let netCount = 0;
-    let grossCount = 0;
-    const revenueByBu = new Map<string, number>();
-    for (const o of orders) {
-      if (o.createdAt < buckets[0].start || o.createdAt >= buckets[buckets.length - 1].end) continue;
-      grossCount += 1;
-      if (!isNetOrder(o)) continue;
-      netCount += 1;
-      revenue += o.total;
-      revenueByBu.set(o.businessUnitId, (revenueByBu.get(o.businessUnitId) ?? 0) + o.total);
-    }
-    const topBu = [...revenueByBu.entries()]
-      .map(([id, value]) => ({ id, value }))
-      .sort((a, b) => b.value - a.value)[0];
-    return {
-      revenue,
-      netCount,
-      grossCount,
-      averageOrderValue: netCount > 0 ? revenue / netCount : 0,
-      topBu: topBu ? { name: buNameById.get(topBu.id) ?? "Unknown", value: topBu.value } : null,
-    };
-  }, [orders, buckets, buNameById]);
-
-  const bestSellers = useMemo(() => {
-    if (!orders) return [];
-    const counts = new Map<string, { name: string; qty: number; revenue: number }>();
-    for (const o of orders) {
-      if (!isNetOrder(o)) continue;
-      for (const item of o.items ?? []) {
-        const entry = counts.get(item.name) ?? { name: item.name, qty: 0, revenue: 0 };
-        entry.qty += item.quantity;
-        entry.revenue += item.unitPrice * item.quantity;
-        counts.set(item.name, entry);
-      }
-    }
-    return [...counts.values()].sort((a, b) => b.qty - a.qty).slice(0, 10);
-  }, [orders]);
-
-  const topCategories = useMemo(() => {
-    if (!orders) return [];
-    const counts = new Map<string, { name: string; qty: number; revenue: number }>();
-    for (const o of orders) {
-      if (!isNetOrder(o)) continue;
-      for (const item of o.items ?? []) {
-        const category = resolveCategory(item, catalogById, productById, categoryById);
-        const entry = counts.get(category) ?? { name: category, qty: 0, revenue: 0 };
-        entry.qty += item.quantity;
-        entry.revenue += item.unitPrice * item.quantity;
-        counts.set(category, entry);
-      }
-    }
-    return [...counts.values()].sort((a, b) => b.qty - a.qty).slice(0, 10);
-  }, [orders, catalogById, productById, categoryById]);
 
   // ---- Inventory analysis ---------------------------------------------------
   const inventoryValue = useMemo(() => {
@@ -260,8 +407,7 @@ export default function ReportsPage() {
 
   const movement = useMemo<Movement[]>(() => {
     if (!orders || !inventory) return [];
-    const now = Date.now();
-    const windowStart = now - 90 * 86400000;
+    const windowStart = nowTimestamp - 90 * DAY_MS;
     const sold = new Map<string, number>();
     for (const o of orders) {
       if (o.createdAt < windowStart || !isNetOrder(o)) continue;
@@ -274,7 +420,7 @@ export default function ReportsPage() {
       item,
       soldQty: sold.get(`${item.catalogItemId}::${item.variantName}`) ?? 0,
     }));
-  }, [orders, inventory]);
+  }, [orders, inventory, nowTimestamp]);
 
   const fastMoving = useMemo(
     () =>
@@ -321,6 +467,46 @@ export default function ReportsPage() {
     [bucketStats],
   );
 
+  // ---- CSV exports ----------------------------------------------------------
+  const exportSalesCSV = () => {
+    const rows = windowOrders.map((o) => ({
+      "Order #": o.orderNumber,
+      "Date": new Date(o.createdAt).toLocaleString(),
+      "Business Unit": buNameById.get(o.businessUnitId) ?? "Unknown",
+      "Customer": o.customerName,
+      "Phone": o.customerPhone,
+      "Email": o.customerEmail ?? "",
+      "Type": o.orderType,
+      "Status": STATUS_LABELS[o.status],
+      "Items": (o.items ?? []).reduce((sum, item) => sum + item.quantity, 0),
+      "Subtotal": o.subtotal,
+      "Discount": o.discount,
+      "Delivery Fee": o.deliveryFee,
+      "Tax": o.tax,
+      "Total": o.total,
+    }));
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadCSV(`sales-report-${stamp}.csv`, rows);
+    toast.success(`Exported ${rows.length} order${rows.length === 1 ? "" : "s"}`);
+  };
+
+  const exportInventoryCSV = () => {
+    const rows = (inventory ?? []).map((item) => ({
+      "Variant": item.variantName,
+      "SKU": item.sku ?? "",
+      "Business Unit": buNameById.get(item.businessUnitId) ?? "Unknown",
+      "Stock": item.stockQuantity,
+      "Reserved": item.reservedStock ?? 0,
+      "Available": item.available ? "Yes" : "No",
+      "Low Stock Alert": item.lowStockAlert ?? "",
+      "Cost Price": item.costPrice ?? 0,
+      "Inventory Value": (item.stockQuantity * (item.costPrice ?? 0)).toFixed(2),
+    }));
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadCSV(`inventory-report-${stamp}.csv`, rows);
+    toast.success(`Exported ${rows.length} inventory item${rows.length === 1 ? "" : "s"}`);
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -335,11 +521,12 @@ export default function ReportsPage() {
     );
   }
 
-  const periodLabels: Record<Period, string> = {
-    daily: "Daily · Last 14 days",
-    weekly: "Weekly · Last 8 weeks",
-    monthly: "Monthly · Last 12 months",
-  };
+  const rangeOptions: { key: RangeKey; label: string }[] = [
+    { key: "today", label: "Today" },
+    { key: "week", label: "This Week" },
+    { key: "month", label: "This Month" },
+    { key: "custom", label: "Custom" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -364,48 +551,71 @@ export default function ReportsPage() {
         <TabsContent value="sales" className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-card p-1">
-              {(["daily", "weekly", "monthly"] as const).map((p) => (
+              {rangeOptions.map((option) => (
                 <button
-                  key={p}
+                  key={option.key}
                   type="button"
-                  onClick={() => setPeriod(p)}
+                  onClick={() => setRangeKey(option.key)}
                   className={cn(
                     "rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors",
-                    period === p
+                    rangeKey === option.key
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {p}
+                  {option.label}
                 </button>
               ))}
             </div>
-            <span className="text-sm text-muted-foreground">{periodLabels[period]}</span>
+            <Button size="sm" variant="outline" onClick={exportSalesCSV} className="gap-1.5">
+              <Download className="size-3.5" /> Export CSV
+            </Button>
           </div>
+
+          {rangeKey === "custom" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                aria-label="From date"
+                className="w-auto"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                aria-label="To date"
+                className="w-auto"
+              />
+              <span className="text-sm text-muted-foreground">{activeRange.label}</span>
+            </div>
+          )}
 
           {/* Summary cards */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               icon={IndianRupee}
-              label="Revenue"
-              value={formatCurrency(range?.revenue ?? 0)}
+              label={`Revenue · ${activeRange.label}`}
+              value={formatCurrency(sales.revenue)}
             />
             <SummaryCard
               icon={ShoppingCart}
               label="Orders"
-              value={`${range?.netCount ?? 0}`}
-              sub={`${range?.grossCount ?? 0} incl. cancelled`}
+              value={`${sales.netCount}`}
+              sub={`${sales.grossCount} incl. cancelled/refunded`}
             />
             <SummaryCard
               icon={Receipt}
               label="Avg Order Value"
-              value={formatCurrency(range?.averageOrderValue ?? 0)}
+              value={formatCurrency(sales.averageOrderValue)}
             />
             <SummaryCard
               icon={Building2}
               label="Top Business Unit"
-              value={range?.topBu?.name ?? "—"}
-              sub={range?.topBu ? formatCurrency(range.topBu.value) : undefined}
+              value={sales.topBu?.name ?? "—"}
+              sub={sales.topBu ? formatCurrency(sales.topBu.revenue) : undefined}
             />
           </div>
 
@@ -441,6 +651,12 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
+          {/* Kitchen vs Mart + status summary */}
+          <div className="grid gap-6 xl:grid-cols-2">
+            <BusinessUnitSplit rows={sales.buRows} total={sales.revenue} />
+            <StatusSummary rows={statusSummary} />
+          </div>
+
           {/* Best sellers + top categories */}
           <div className="grid gap-6 xl:grid-cols-2">
             <RankTable
@@ -456,12 +672,21 @@ export default function ReportsPage() {
               rows={topCategories}
             />
           </div>
+
+          {/* Top customers */}
+          <TopCustomers rows={topCustomers} />
         </TabsContent>
 
         {/* ================================================================ */}
         {/* INVENTORY TAB                                                      */}
         {/* ================================================================ */}
         <TabsContent value="inventory" className="space-y-6">
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" onClick={exportInventoryCSV} className="gap-1.5">
+              <Download className="size-3.5" /> Export CSV
+            </Button>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard icon={Warehouse} label="Inventory Value (at cost)" value={formatCurrency(inventoryValue)} />
             <SummaryCard icon={PackageCheck} label="Total Variants" value={(inventory ?? []).length} />
@@ -531,7 +756,7 @@ export default function ReportsPage() {
 }
 
 // ============================================================================
-// Small presentational helpers
+// Presentational helpers
 // ============================================================================
 
 interface SummaryCardProps {
@@ -551,6 +776,133 @@ function SummaryCard({ icon: Icon, label, value, sub }: SummaryCardProps) {
           {sub && <p className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</p>}
         </div>
         <Icon className="size-5 shrink-0 text-muted-foreground/60" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function BusinessUnitSplit({
+  rows,
+  total,
+}: {
+  rows: { id: string; name: string; revenue: number; orders: number }[];
+  total: number;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Store className="size-4 text-muted-foreground" /> Kitchen vs Mart Sales
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Net revenue split across business units</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {rows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No sales in this period.</p>
+        ) : (
+          rows.map((row) => {
+            const pct = total > 0 ? (row.revenue / total) * 100 : 0;
+            return (
+              <div key={row.id} className="space-y-1.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">{row.name}</span>
+                  <span className="text-muted-foreground">
+                    {formatCurrency(row.revenue)} · {row.orders} order{row.orders === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusSummary({
+  rows,
+}: {
+  rows: { status: OrderStatus; count: number; revenue: number }[];
+}) {
+  const hasData = rows.some((r) => r.count > 0);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ListChecks className="size-4 text-muted-foreground" /> Order Status Summary
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Orders and revenue by current status</p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {!hasData ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No orders in this period.</p>
+        ) : (
+          rows.map((row) => (
+            <div
+              key={row.status}
+              className="flex items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2"
+            >
+              <Badge variant="outline" className={cn("text-xs capitalize", STATUS_COLORS[row.status])}>
+                {STATUS_LABELS[row.status]}
+              </Badge>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="tabular-nums">{row.count} order{row.count === 1 ? "" : "s"}</span>
+                <span className="w-24 text-right tabular-nums text-muted-foreground">
+                  {formatCurrency(row.revenue)}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TopCustomers({
+  rows,
+}: {
+  rows: { name: string; phone: string; orders: number; total: number }[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Users className="size-4 text-muted-foreground" /> Top Customers
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">By total spend in the selected period</p>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No customers in this period.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">#</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead className="text-right">Orders</TableHead>
+                <TableHead className="text-right">Total Spent</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row, i) => (
+                <TableRow key={`${row.phone}-${i}`}>
+                  <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="max-w-[260px]">
+                    <p className="truncate font-medium">{row.name}</p>
+                    <p className="text-xs text-muted-foreground">{row.phone || "No phone"}</p>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{row.orders}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCurrency(row.total)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   );

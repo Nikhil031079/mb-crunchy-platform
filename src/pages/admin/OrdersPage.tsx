@@ -1,16 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { AlertCircle, RefreshCw, ShoppingCart, LayoutGrid, Table2, Printer, Clock } from "lucide-react";
+import { AlertCircle, RefreshCw, ShoppingCart, LayoutGrid, Table2, Clock } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { toast } from "sonner";
 
 import { OrderDetailDialog } from "@/components/admin/orders/OrderDetailDialog";
 import { OrderTable } from "@/components/admin/orders/OrderTable";
 import { OrderToolbar } from "@/components/admin/orders/OrderToolbar";
 import { StatusUpdateDialog } from "@/components/admin/orders/StatusUpdateDialog";
+import { BulkOperationsBar } from "@/components/admin/orders/BulkOperationsBar";
+import { BulkStatusUpdateDialog } from "@/components/admin/orders/BulkStatusUpdateDialog";
+import { BulkCancelDialog } from "@/components/admin/orders/BulkCancelDialog";
+import { BulkRefundDialog } from "@/components/admin/orders/BulkRefundDialog";
 import type { OrderFilters, OrderRecord, OrderSortKey, OrderStatus, PaymentStatus, SortDirection } from "@/components/admin/orders/types";
-import { getNextStatus } from "@/components/admin/orders/types";
+import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS } from "@/components/admin/orders/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
@@ -18,9 +25,20 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EMPTY_MESSAGES, STATUS_COLORS } from "@/constants";
 import { cn } from "@/lib/utils";
+import { downloadCSV } from "@/utils";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 20;
+const DEFAULT_FILTERS: OrderFilters = {
+  query: "",
+  status: "all",
+  paymentStatus: "all",
+  businessUnitId: "all",
+  orderType: "all",
+  dateRange: null,
+};
+
+const toOrderId = (id: string) => id as unknown as Id<"orders">;
 
 // ---------------------------------------------------------------------------
 // Mapping helpers
@@ -76,6 +94,159 @@ function SummaryCard({ title, value, icon: Icon, className }: { title: string; v
 }
 
 // ---------------------------------------------------------------------------
+// Shared live clock (single interval for the whole kitchen view)
+// ---------------------------------------------------------------------------
+
+function useLiveClock(intervalMs = 60_000): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+
+  return now;
+}
+
+function formatElapsed(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} hr`;
+  return `${hours} hr ${minutes} min`;
+}
+
+// ---------------------------------------------------------------------------
+// Kitchen view
+// ---------------------------------------------------------------------------
+
+const KITCHEN_GROUPS: { key: "pending" | "preparing" | "ready"; label: string; borderColor: string; statuses: OrderStatus[] }[] = [
+  { key: "pending", label: "New Orders", borderColor: "border-l-blue-500", statuses: ["pending", "confirmed"] },
+  { key: "preparing", label: "Preparing", borderColor: "border-l-amber-500", statuses: ["preparing"] },
+  { key: "ready", label: "Ready", borderColor: "border-l-emerald-500", statuses: ["ready"] },
+];
+
+// Priority weights (minutes-equivalent). Tune here to adjust the queue.
+const KITCHEN_PRIORITY = {
+  deliveryBonus: 3, // delivery orders edge ahead of takeaway at similar wait times
+  confirmedBoost: 1, // confirmed slightly ahead of pending within New Orders
+  preparingBoost: 2, // preparing orders stay ahead once work has started
+};
+
+function kitchenPriorityScore(order: OrderRecord, now: number): number {
+  const elapsed = Math.max(0, Math.floor((now - order.createdAt) / 60_000));
+  let score = elapsed;
+  if (order.orderType === "delivery") score += KITCHEN_PRIORITY.deliveryBonus;
+  if (order.status === "confirmed") score += KITCHEN_PRIORITY.confirmedBoost;
+  if (order.status === "preparing") score += KITCHEN_PRIORITY.preparingBoost;
+  return score;
+}
+
+// Primary action for each kitchen status. All targets reuse existing statuses.
+const KITCHEN_ACTIONS: Partial<Record<OrderStatus, { label: string; target: OrderStatus; className: string }>> = {
+  pending: { label: "Accept Order", target: "confirmed", className: "bg-blue-600 text-white hover:bg-blue-700" },
+  confirmed: { label: "Start Preparing", target: "preparing", className: "bg-primary text-primary-foreground hover:bg-primary/90" },
+  preparing: { label: "Mark Ready", target: "ready", className: "bg-emerald-600 text-white hover:bg-emerald-700" },
+  ready: { label: "Complete Order", target: "delivered", className: "bg-emerald-700 text-white hover:bg-emerald-800" },
+};
+
+function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: { orders: OrderRecord[]; onOpenOrder: (order: OrderRecord) => void; onAdvanceStatus: (order: OrderRecord, target: OrderStatus) => void; pendingOrderId: string | null }) {
+  const now = useLiveClock();
+  const hasActive = orders.some((r) => ["pending", "confirmed", "preparing", "ready"].includes(r.status));
+
+  const groupedOrders = useMemo(() => {
+    const scored = orders
+      .map((order) => ({ order, score: kitchenPriorityScore(order, now) }))
+      .sort((a, b) => b.score - a.score);
+    return KITCHEN_GROUPS.map((group) => ({
+      ...group,
+      orders: scored.filter((s) => group.statuses.includes(s.order.status)).map((s) => s.order),
+    }));
+  }, [orders, now]);
+
+  return (
+    <section className="space-y-6" aria-label="Kitchen view">
+      {groupedOrders.map((group) => {
+        const groupOrders = group.orders;
+        if (groupOrders.length === 0) return null;
+        return (
+          <div key={group.key}>
+            <h3 className="mb-3 text-sm font-semibold text-muted-foreground">{group.label} ({groupOrders.length})</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {groupOrders.map((order) => {
+                const elapsedMinutes = Math.max(0, Math.floor((now - order.createdAt) / 60_000));
+                const priority = elapsedMinutes >= 21 ? "critical" : elapsedMinutes >= 11 ? "warning" : "normal";
+                const ring = priority === "critical"
+                  ? "ring-2 ring-red-200 dark:ring-red-800"
+                  : priority === "warning"
+                    ? "ring-2 ring-amber-200 dark:ring-amber-800"
+                    : "";
+                const elapsedColor = priority === "critical" ? "text-red-600" : priority === "warning" ? "text-amber-600" : "text-muted-foreground";
+                const action = KITCHEN_ACTIONS[order.status];
+                return (
+                  <div
+                    key={order.id}
+                    className={`rounded-xl border-l-4 bg-card p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${group.borderColor} ${ring}`}
+                    onClick={() => onOpenOrder(order)}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
+                      <span className={`flex items-center gap-1 text-xs font-medium ${elapsedColor}`}>
+                        <Clock className="size-3" />
+                        {formatElapsed(elapsedMinutes)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                      <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[order.status])}>
+                        {STATUS_LABELS[order.status]}
+                      </Badge>
+                      <Badge variant="outline" className={cn("text-xs", order.orderType === "delivery" ? "border-purple-200 bg-purple-500/10 text-purple-700" : "border-sky-200 bg-sky-500/10 text-sky-700")}>
+                        {order.orderType === "delivery" ? "Delivery" : "Takeaway"}
+                      </Badge>
+                    </div>
+                    <div className="mb-2 flex items-center justify-between text-xs">
+                      <span className="font-medium text-foreground">{order.businessUnitName}</span>
+                      <span className="text-muted-foreground">{order.itemCount} item{order.itemCount === 1 ? "" : "s"}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">{order.customerName}</p>
+                    <div className="space-y-1">
+                      {order.items.slice(0, 3).map((item, i) => (
+                        <p key={i} className="text-xs">
+                          <span className="font-medium">{item.quantity}×</span> {item.name}
+                        </p>
+                      ))}
+                      {order.items.length > 3 && (
+                        <p className="text-[10px] text-muted-foreground">+{order.items.length - 3} more</p>
+                      )}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">₹{order.total.toLocaleString()}</span>
+                      {action && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onAdvanceStatus(order, action.target); }}
+                          disabled={pendingOrderId === order.id}
+                          className={cn("rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60", action.className)}
+                        >
+                          {pendingOrderId === order.id ? "Updating…" : action.label}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {!hasActive && (
+        <EmptyState icon={ShoppingCart} title="No active orders" description="All caught up! New orders will appear here." />
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -85,11 +256,14 @@ export default function OrdersPage() {
   const allOrders = useQuery(api.orders.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const updateStatus = useMutation(api.orders.updateStatus);
+  const bulkUpdateStatus = useMutation(api.orderBulk.bulkUpdateStatus);
+  const bulkCancel = useMutation(api.orderBulk.bulkCancel);
+  const bulkRefund = useMutation(api.orderBulk.bulkRefund);
 
   const isLoading = allOrders === undefined || allBUs === undefined;
   const [error, setError] = useState<string | null>(null);
 
-  const [filters, setFilters] = useState<OrderFilters>({ query: "", status: "all", businessUnitId: "all", orderType: "all" });
+  const [filters, setFilters] = useState<OrderFilters>(DEFAULT_FILTERS);
   const [sortKey, setSortKey] = useState<OrderSortKey>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
@@ -98,6 +272,12 @@ export default function OrdersPage() {
   const [statusTarget, setStatusTarget] = useState<OrderRecord | null>(null);
   const [statusGoal, setStatusGoal] = useState<OrderStatus | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "kitchen">("table");
+  const [kitchenPendingId, setKitchenPendingId] = useState<string | null>(null);
+
+  // --- Bulk selection ---
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDialog, setBulkDialog] = useState<"status" | "cancel" | "refund" | null>(null);
+  const [isBulkPending, setIsBulkPending] = useState(false);
 
   // --- Maps ---
   const buMap = useMemo(() => {
@@ -116,7 +296,6 @@ export default function OrdersPage() {
 
   // --- Summary ---
   const summary = useMemo(() => {
-    const now = Date.now();
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayMs = todayStart.getTime();
@@ -128,7 +307,6 @@ export default function OrdersPage() {
     let deliveredCount = 0;
     let cancelledCount = 0;
     let todayRevenue = 0;
-    let totalRevenue = 0;
     let deliveredTotal = 0;
 
     for (const r of records) {
@@ -141,7 +319,6 @@ export default function OrdersPage() {
         deliveredTotal += r.total;
       }
       if (r.status === "cancelled" || r.status === "refunded") cancelledCount++;
-      totalRevenue += r.total;
       if (r.createdAt >= todayMs) todayRevenue += r.total;
     }
 
@@ -153,10 +330,15 @@ export default function OrdersPage() {
   // --- Filtering ---
   const filtered = useMemo(() => {
     const q = filters.query.trim().toLowerCase();
+    const fromMs = filters.dateRange?.from ? new Date(`${filters.dateRange.from}T00:00:00`).getTime() : null;
+    const toMs = filters.dateRange?.to ? new Date(`${filters.dateRange.to}T23:59:59.999`).getTime() : null;
     return records.filter((r) => {
       if (filters.status !== "all" && r.status !== filters.status) return false;
+      if (filters.paymentStatus !== "all" && r.paymentStatus !== filters.paymentStatus) return false;
       if (filters.businessUnitId !== "all" && r.businessUnitId !== filters.businessUnitId) return false;
       if (filters.orderType !== "all" && r.orderType !== filters.orderType) return false;
+      if (fromMs !== null && r.createdAt < fromMs) return false;
+      if (toMs !== null && r.createdAt > toMs) return false;
       if (q) {
         const matchesOrder = r.orderNumber.toLowerCase().includes(q);
         const matchesName = r.customerName.toLowerCase().includes(q);
@@ -193,6 +375,10 @@ export default function OrdersPage() {
   const currentPage = Math.min(page, pageCount);
   const visible = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
+  // --- Bulk selection derived state ---
+  const selectedOrders = useMemo(() => records.filter((r) => selectedIds.has(r.id)), [records, selectedIds]);
+  const allMatchingSelected = filtered.length > 0 && filtered.every((o) => selectedIds.has(o.id));
+
   // --- Handlers ---
   const resetPageAndSetFilters = (f: OrderFilters) => { setFilters(f); setPage(1); };
   const handleSort = (key: OrderSortKey) => {
@@ -200,11 +386,139 @@ export default function OrdersPage() {
     else { setSortKey(key); setSortDirection("asc"); }
   };
 
+  const toggleSelect = (orderId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = visible.length > 0 && visible.every((o) => next.has(o.id));
+      for (const o of visible) {
+        if (allSelected) next.delete(o.id);
+        else next.add(o.id);
+      }
+      return next;
+    });
+  };
+
+  const selectAllMatching = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const o of filtered) next.add(o.id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const exportOrdersCSV = () => {
+    const rows = sorted.map((o) => ({
+      "Order #": o.orderNumber,
+      "Date": new Date(o.createdAt).toLocaleString(),
+      "Business Unit": o.businessUnitName,
+      "Customer": o.customerName,
+      "Phone": o.customerPhone,
+      "Email": o.customerEmail ?? "",
+      "Type": o.orderType,
+      "Status": STATUS_LABELS[o.status],
+      "Payment": PAYMENT_STATUS_LABELS[o.paymentStatus],
+      "Items": o.itemCount,
+      "Subtotal": o.subtotal,
+      "Discount": o.discount,
+      "Delivery Fee": o.deliveryFee,
+      "Tax": o.tax,
+      "Total": o.total,
+    }));
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadCSV(`orders-${stamp}.csv`, rows);
+    toast.success(`Exported ${rows.length} order${rows.length === 1 ? "" : "s"}`);
+  };
+
+  const reportBulkResult = (action: string, res: { total: number; results: { success: boolean; skipped?: boolean }[] }) => {
+    const done = res.results.filter((r) => r.success && !r.skipped).length;
+    const skipped = res.results.filter((r) => r.skipped).length;
+    const failed = res.results.filter((r) => !r.success).length;
+    const summary = `${done} of ${res.total} orders ${action}`;
+    if (failed === 0) toast.success(skipped > 0 ? `${summary}, ${skipped} skipped` : summary);
+    else toast.error(`${summary}${skipped > 0 ? `, ${skipped} skipped` : ""}, ${failed} failed`);
+  };
+
+  const handleBulkStatus = async (status: OrderStatus) => {
+    const ids = selectedOrders.map((o) => toOrderId(o.id));
+    if (ids.length === 0) return;
+    setBulkDialog(null);
+    setIsBulkPending(true);
+    try {
+      const res = await bulkUpdateStatus({ sessionToken: getSessionToken()!, orderIds: ids, status });
+      reportBulkResult("updated", res);
+      clearSelection();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update order statuses");
+    } finally {
+      setIsBulkPending(false);
+    }
+  };
+
+  const handleBulkCancel = async () => {
+    const ids = selectedOrders.map((o) => toOrderId(o.id));
+    if (ids.length === 0) return;
+    setBulkDialog(null);
+    setIsBulkPending(true);
+    try {
+      const res = await bulkCancel({ sessionToken: getSessionToken()!, orderIds: ids });
+      reportBulkResult("cancelled", res);
+      clearSelection();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel orders");
+    } finally {
+      setIsBulkPending(false);
+    }
+  };
+
+  const handleBulkRefund = async () => {
+    const ids = selectedOrders.map((o) => toOrderId(o.id));
+    if (ids.length === 0) return;
+    setBulkDialog(null);
+    setIsBulkPending(true);
+    try {
+      const res = await bulkRefund({ sessionToken: getSessionToken()!, orderIds: ids });
+      reportBulkResult("refunded", res);
+      clearSelection();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to refund orders");
+    } finally {
+      setIsBulkPending(false);
+    }
+  };
+
   const handleQuickStatus = (order: OrderRecord) => {
     const next = getNextStatus(order.status);
     if (!next) return;
     setStatusTarget(order);
     setStatusGoal(next);
+  };
+
+  const handleKitchenAdvance = async (order: OrderRecord, target: OrderStatus) => {
+    setKitchenPendingId(order.id);
+    try {
+      await updateStatus({
+        id: toOrderId(order.id),
+        status: target,
+        paymentStatus: target === "confirmed" ? "paid" : undefined,
+        sessionToken: getSessionToken()!,
+      });
+      toast.success(`${order.orderNumber} → ${STATUS_LABELS[target]}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update order status");
+    } finally {
+      setKitchenPendingId(null);
+    }
   };
 
   const handleCancel = (order: OrderRecord) => {
@@ -216,7 +530,7 @@ export default function OrdersPage() {
     if (!statusTarget || !statusGoal) return;
     try {
       await updateStatus({
-        id: statusTarget.id as any,
+        id: toOrderId(statusTarget.id),
         status: statusGoal,
         paymentStatus: statusGoal === "confirmed" ? "paid" : undefined,
         sessionToken: getSessionToken()!,
@@ -233,7 +547,7 @@ export default function OrdersPage() {
   const handlePaymentStatusUpdate = async (order: OrderRecord, paymentStatus: PaymentStatus) => {
     try {
       await updateStatus({
-        id: order.id as any,
+        id: toOrderId(order.id),
         status: order.status,
         paymentStatus,
         sessionToken: getSessionToken()!,
@@ -291,10 +605,22 @@ export default function OrdersPage() {
             filters={filters}
             businessUnits={buOptions}
             onFiltersChange={resetPageAndSetFilters}
-            onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all", orderType: "all" })}
+            onClear={() => resetPageAndSetFilters({ ...DEFAULT_FILTERS })}
+          />
+          <BulkOperationsBar
+            selectedOrders={selectedOrders}
+            matchingCount={filtered.length}
+            allMatchingSelected={allMatchingSelected}
+            onSelectAllMatching={selectAllMatching}
+            onClearSelection={clearSelection}
+            onExportCSV={exportOrdersCSV}
+            onUpdateStatus={() => setBulkDialog("status")}
+            onCancel={() => setBulkDialog("cancel")}
+            onRefund={() => setBulkDialog("refund")}
+            isBusy={isBulkPending}
           />
           {isLoading ? (
-            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} />
+            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAllVisible} />
           ) : visible.length === 0 ? (
             <EmptyState
               icon={ShoppingCart}
@@ -302,77 +628,7 @@ export default function OrdersPage() {
               description={filtered.length === 0 && records.length > 0 ? "Try adjusting your search or filters." : EMPTY_MESSAGES.ORDERS}
             />
       ) : viewMode === "kitchen" ? (
-        /* KITCHEN VIEW */
-        <section className="space-y-6" aria-label="Kitchen view">
-          {(["pending", "preparing", "ready"] as const).map((status) => {
-            const ordersForStatus = filtered.filter((r) => {
-              if (status === "pending") return r.status === "pending" || r.status === "confirmed";
-              if (status === "preparing") return r.status === "preparing";
-              return r.status === "ready" || r.status === "out_for_delivery";
-            });
-            if (ordersForStatus.length === 0) return null;
-            const label = status === "pending" ? "New Orders" : status === "preparing" ? "Preparing" : "Ready";
-            const borderColor = status === "pending" ? "border-l-blue-500" : status === "preparing" ? "border-l-amber-500" : "border-l-emerald-500";
-            return (
-              <div key={status}>
-                <h3 className="mb-3 text-sm font-semibold text-muted-foreground">{label} ({ordersForStatus.length})</h3>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {ordersForStatus.map((order) => {
-                    const urgent = order.elapsedMinutes > 30;
-                    return (
-                      <div
-                        key={order.id}
-                        className={`rounded-xl border-l-4 bg-card p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${borderColor} ${urgent ? "ring-2 ring-red-200 dark:ring-red-800" : ""}`}
-                        onClick={() => setDetailTarget(order)}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
-                          <span className={`flex items-center gap-1 text-xs font-medium ${urgent ? "text-red-600" : "text-muted-foreground"}`}>
-                            <Clock className="size-3" />
-                            {order.elapsedMinutes}m
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-2">{order.customerName} · {order.orderType}</p>
-                        <div className="space-y-1">
-                          {order.items.slice(0, 3).map((item, i) => (
-                            <p key={i} className="text-xs">
-                              <span className="font-medium">{item.quantity}×</span> {item.name}
-                            </p>
-                          ))}
-                          {order.items.length > 3 && (
-                            <p className="text-[10px] text-muted-foreground">+{order.items.length - 3} more</p>
-                          )}
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="text-sm font-semibold">₹{order.total.toLocaleString()}</span>
-                          {status === "pending" && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleQuickStatus(order); }}
-                              className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                            >
-                              Start Preparing
-                            </button>
-                          )}
-                          {status === "preparing" && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleQuickStatus(order); }}
-                              className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700"
-                            >
-                              Mark Ready
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-          {filtered.filter((r) => ["pending", "confirmed", "preparing", "ready", "out_for_delivery"].includes(r.status)).length === 0 && (
-            <EmptyState icon={ShoppingCart} title="No active orders" description="All caught up! New orders will appear here." />
-          )}
-        </section>
+        <KitchenView orders={filtered} onOpenOrder={setDetailTarget} onAdvanceStatus={handleKitchenAdvance} pendingOrderId={kitchenPendingId} />
       ) : (
             <>
               <OrderTable
@@ -384,6 +640,9 @@ export default function OrdersPage() {
                 onQuickStatus={handleQuickStatus}
                 onCancel={handleCancel}
                 onUpdatePaymentStatus={handlePaymentStatusUpdate}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+                onToggleSelectAll={toggleSelectAllVisible}
               />
               <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sorted.length)} of {sorted.length}</p>
@@ -412,6 +671,24 @@ export default function OrdersPage() {
         targetStatus={statusGoal}
         onOpenChange={(o) => { if (!o) { setStatusTarget(null); setStatusGoal(null); } }}
         onConfirm={confirmStatusUpdate}
+      />
+      <BulkStatusUpdateDialog
+        open={bulkDialog === "status"}
+        orderCount={selectedOrders.length}
+        onOpenChange={(o) => { if (!o) setBulkDialog(null); }}
+        onConfirm={handleBulkStatus}
+      />
+      <BulkCancelDialog
+        open={bulkDialog === "cancel"}
+        orderCount={selectedOrders.length}
+        onOpenChange={(o) => { if (!o) setBulkDialog(null); }}
+        onConfirm={handleBulkCancel}
+      />
+      <BulkRefundDialog
+        open={bulkDialog === "refund"}
+        orderCount={selectedOrders.length}
+        onOpenChange={(o) => { if (!o) setBulkDialog(null); }}
+        onConfirm={handleBulkRefund}
       />
     </div>
   );

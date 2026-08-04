@@ -3,6 +3,67 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { OrderRecord } from "./types";
+import { PAYMENT_STATUS_LABELS, STATUS_LABELS } from "./types";
+
+// ============================================================================
+// Shared print helpers
+// ============================================================================
+
+const PRINT_STYLES = `
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 40px; color: #1a1a1a; font-size: 14px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 0 0 16px; color: #666; }
+  h3 { font-size: 14px; margin: 16px 0 8px; color: #333; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+  th { font-size: 12px; color: #666; text-transform: uppercase; }
+  .total { font-weight: bold; font-size: 16px; }
+  .muted { color: #666; }
+  .right { text-align: right; }
+  .footer { margin-top: 24px; font-size: 12px; color: #999; text-align: center; }
+  .box { border: 2px dashed #999; padding: 16px; margin: 16px 0; }
+  .masthead { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.04em; }
+  .value { font-size: 14px; margin-top: 2px; }
+  @media print {
+    .print-only { display: block; }
+  }
+`;
+
+const PRINT_ICON = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+    <rect x="6" y="14" width="12" height="8"></rect>
+  </svg>
+);
+
+function openPrintWindow(title: string, html: string): void {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(html);
+  w.document.close();
+  w.print();
+}
+
+function printBase(title: string, body: string): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${title}</title>
+      <style>${PRINT_STYLES}</style>
+    </head>
+    <body>
+      ${body}
+    </body>
+    </html>
+  `;
+}
+
+const orderTypeLabel = (type: string) => (type === "pickup" ? "Pickup" : "Delivery");
 
 // ============================================================================
 // Print Invoice Component
@@ -16,39 +77,42 @@ export function PrintInvoice({ order }: PrintInvoiceProps) {
   const createdDate = new Date(order.createdAt);
   const updatedDate = new Date(order.updatedAt);
 
-  const printContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Invoice ${order.orderNumber}</title>
-      <style>
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 40px; color: #1a1a1a; font-size: 14px; }
-        h1 { font-size: 24px; margin: 0 0 4px; }
-        h2 { font-size: 18px; margin: 0 0 16px; color: #666; }
-        h3 { font-size: 14px; margin: 16px 0 8px; color: #333; }
-        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
-        th { font-size: 12px; color: #666; text-transform: uppercase; }
-        .total { font-weight: bold; font-size: 16px; }
-        .muted { color: #666; }
-        .right { text-align: right; }
-        .footer { margin-top: 24px; font-size: 12px; color: #999; text-align: center; }
-        .print-only { display: block; }
-        @media print {
-          .print-only { display: block; }
-        }
-      </style>
-    </head>
-    <body>
-      <h1>MB Crunchy</h1>
-      <h2>Invoice</h2>
-      <p><strong>Order:</strong> ${order.orderNumber}<br>
-      <strong>Date:</strong> ${createdDate.toLocaleDateString()}<br>
-      <strong>Type:</strong> ${order.orderType}<br>
-      <strong>Customer:</strong> ${order.customerName} | ${order.customerPhone}${order.customerEmail ? ` | ${order.customerEmail}` : ""}<br>
-      ${order.deliveryAddress ? `<strong>Delivery:</strong> ${order.deliveryAddress}<br>` : ""}</p>
+  const printContent = printBase(
+    `Invoice ${order.orderNumber}`,
+    `
+      <div class="masthead">
+        <div>
+          <h1>MB Crunchy</h1>
+          <p class="muted">${order.businessUnitName}</p>
+        </div>
+        <div class="right">
+          <h2>Invoice</h2>
+          <p class="muted">${order.orderNumber}</p>
+        </div>
+      </div>
 
-      <h3>Ordered Items (${order.itemCount})</h3>
+      <div class="meta">
+        <p><strong>Status:</strong> ${STATUS_LABELS[order.status]}<br>
+        <strong>Payment:</strong> ${PAYMENT_STATUS_LABELS[order.paymentStatus]}</p>
+        <p class="right"><strong>Date:</strong> ${createdDate.toLocaleDateString()}<br>
+        <strong>Type:</strong> ${orderTypeLabel(order.orderType)}</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="box">
+          <p class="label">Billed To</p>
+          <p class="value"><strong>${order.customerName}</strong></p>
+          <p class="value">${order.customerPhone}${order.customerEmail ? `<br>${order.customerEmail}` : ""}</p>
+        </div>
+        <div class="box">
+          <p class="label">Order Details</p>
+          <p class="value"><strong>${order.orderNumber}</strong></p>
+          <p class="value">${order.itemCount} item${order.itemCount === 1 ? "" : "s"}</p>
+          ${order.deliveryAddress ? `<p class="value">${order.deliveryAddress}</p>` : ""}
+        </div>
+      </div>
+
+      <h3>Ordered Items</h3>
       <table>
         <thead>
           <tr>
@@ -84,26 +148,12 @@ export function PrintInvoice({ order }: PrintInvoiceProps) {
         <p>Thank you for your order!</p>
         <p>Order created: ${createdDate.toLocaleString()} | Updated: ${updatedDate.toLocaleString()}</p>
       </div>
-    </body>
-    </html>
-  `;
-
-  const handlePrint = () => {
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(printContent);
-      w.document.close();
-      w.print();
-    }
-  };
+    `,
+  );
 
   return (
-    <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="6 9 6 2 18 2 18 9"></polyline>
-        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-        <rect x="6" y="14" width="12" height="8"></rect>
-      </svg>
+    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Invoice ${order.orderNumber}`, printContent)} className="gap-1.5">
+      {PRINT_ICON}
       Print Invoice
     </Button>
   );
@@ -116,31 +166,10 @@ export function PrintInvoice({ order }: PrintInvoiceProps) {
 export function PrintPackingSlip({ order }: PrintInvoiceProps) {
   const createdDate = new Date(order.createdAt);
 
-  const printContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Packing Slip ${order.orderNumber}</title>
-      <style>
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 40px; color: #1a1a1a; font-size: 14px; }
-        h1 { font-size: 24px; margin: 0 0 4px; }
-        h2 { font-size: 18px; margin: 0 0 16px; color: #666; }
-        h3 { font-size: 14px; margin: 16px 0 8px; color: #333; }
-        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
-        th { font-size: 12px; color: #666; text-transform: uppercase; }
-        .muted { color: #666; }
-        .right { text-align: right; }
-        .footer { margin-top: 24px; font-size: 12px; color: #999; text-align: center; }
-        .box { border: 2px dashed #999; padding: 16px; margin: 16px 0; }
-        .print-only { display: block; }
-        @media print {
-          .print-only { display: block; }
-        }
-      </style>
-    </head>
-    <body>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  const printContent = printBase(
+    `Packing Slip ${order.orderNumber}`,
+    `
+      <div class="masthead">
         <h1>MB Crunchy</h1>
         <h2>Packing Slip</h2>
       </div>
@@ -150,7 +179,7 @@ export function PrintPackingSlip({ order }: PrintInvoiceProps) {
         <p><strong>Customer:</strong> ${order.customerName}</p>
         <p><strong>Phone:</strong> ${order.customerPhone}</p>
         ${order.customerEmail ? `<p><strong>Email:</strong> ${order.customerEmail}</p>` : ""}
-        <p><strong>Type:</strong> ${order.orderType.toUpperCase()}</p>
+        <p><strong>Type:</strong> ${orderTypeLabel(order.orderType).toUpperCase()}</p>
       </div>
 
       ${order.deliveryAddress ? `
@@ -191,28 +220,88 @@ export function PrintPackingSlip({ order }: PrintInvoiceProps) {
         <p>Packing Slip generated: ${createdDate.toLocaleString()}</p>
         <p>Quantity shown is what to pack. Do not include pricing.</p>
       </div>
-    </body>
-    </html>
-  `;
-
-  const handlePrint = () => {
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(printContent);
-      w.document.close();
-      w.print();
-    }
-  };
+    `,
+  );
 
   return (
-    <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 2H4a2 2 0 0 0-2 2v13.5c0 .3.1.5.2.7L8.6 17.5a2 2 0 0 0 1.7.9H16"></path>
-        <path d="M12 12h.01"></path>
-        <path d="M17 12h.01"></path>
-        <path d="M7 12h.01"></path>
-      </svg>
+    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Packing Slip ${order.orderNumber}`, printContent)} className="gap-1.5">
+      {PRINT_ICON}
       Print Packing Slip
+    </Button>
+  );
+}
+
+// ============================================================================
+// Print Kitchen Order Ticket Component
+// ============================================================================
+
+export function PrintKitchenTicket({ order }: PrintInvoiceProps) {
+  const createdDate = new Date(order.createdAt);
+  const elapsedMinutes = Math.max(0, order.elapsedMinutes);
+
+  const printContent = printBase(
+    `Kitchen Ticket ${order.orderNumber}`,
+    `
+      <div class="masthead">
+        <div>
+          <h1>MB Crunchy</h1>
+          <p class="muted">${order.businessUnitName}</p>
+        </div>
+        <div class="right">
+          <h2>Kitchen Order Ticket</h2>
+          <p class="muted">${order.orderNumber}</p>
+        </div>
+      </div>
+
+      <div class="meta">
+        <p><strong>Placed:</strong> ${createdDate.toLocaleString()}<br>
+        <strong>Age:</strong> ${elapsedMinutes}m</p>
+        <p class="right"><strong>Customer:</strong> ${order.customerName}<br>
+        <strong>Phone:</strong> ${order.customerPhone}<br>
+        <strong>Type:</strong> ${orderTypeLabel(order.orderType).toUpperCase()}</p>
+      </div>
+
+      ${order.deliveryNotes ? `
+        <h3>Special Instructions</h3>
+        <div class="box">
+          ${order.deliveryNotes}
+        </div>
+      ` : ""}
+
+      <h3>Items (${order.itemCount})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Variant</th>
+            <th class="right">Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${order.items.map((i) => `
+            <tr>
+              <td>${i.name}</td>
+              <td>${i.variantName}</td>
+              <td class="right"><strong>${i.quantity}</strong></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+
+      <div class="footer">
+        <p>Fire ticket. Kitchen copy only — do not share pricing with customers.</p>
+      </div>
+    `,
+  );
+
+  return (
+    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Kitchen Ticket ${order.orderNumber}`, printContent)} className="gap-1.5">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path>
+        <path d="M7 2v20"></path>
+        <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>
+      </svg>
+      Print Kitchen Ticket
     </Button>
   );
 }

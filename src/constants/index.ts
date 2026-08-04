@@ -27,6 +27,7 @@ export const ROUTES = {
     PARTY_PACKS: "/admin/party-packs",
     OFFERS: "/admin/offers",
     ORDERS: "/admin/orders",
+    REPORTS: "/admin/reports",
     INVENTORY: "/admin/inventory",
     CUSTOMERS: "/admin/customers",
     SETTINGS: "/admin/settings",
@@ -80,7 +81,8 @@ export type AdminNavigationIcon =
   | "Warehouse"
   | "LayoutTemplate"
   | "Zap"
-  | "Clock3";
+  | "Clock3"
+  | "BarChart3";
 
 export interface AdminNavigationItem {
   label: string;
@@ -115,6 +117,7 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = [
     children: [
       { label: "Offers", href: ROUTES.ADMIN.OFFERS, icon: "Tag" },
       { label: "Orders", href: ROUTES.ADMIN.ORDERS, icon: "ShoppingCart" },
+      { label: "Reports", href: ROUTES.ADMIN.REPORTS, icon: "BarChart3" },
       { label: "Customers", href: ROUTES.ADMIN.CUSTOMERS, icon: "Users" },
     ],
   },
