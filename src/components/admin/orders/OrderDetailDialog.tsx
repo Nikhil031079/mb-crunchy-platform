@@ -13,6 +13,7 @@ import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 import type { OrderRecord } from "./types";
 import { STATUS_LABELS } from "./types";
+import { getPaymentMethodLabel } from "@/lib/payment";
 import { PaymentStatusBadge, OrderTypeBadge, PrintInvoice, PrintPackingSlip, PrintKitchenTicket } from "./shared";
 import { OrderNotesPanel } from "./OrderNotesPanel";
 import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
@@ -158,7 +159,10 @@ export function OrderDetailDialog({ open, order, onOpenChange }: OrderDetailDial
             <h4 className="font-medium text-foreground">Payment</h4>
             <div className="grid gap-1 sm:grid-cols-2">
               <div><span className="text-muted-foreground">Status:</span> <PaymentStatusBadge status={order.paymentStatus} /></div>
-              <div><span className="text-muted-foreground">Method:</span> <span>Razorpay</span></div>
+              <div><span className="text-muted-foreground">Method:</span> <span>{getPaymentMethodLabel(order.paymentMethod)}</span></div>
+              {order.paymentReference && (
+                <div><span className="text-muted-foreground">UPI Reference:</span> <span className="font-mono">{order.paymentReference}</span></div>
+              )}
             </div>
           </section>
 

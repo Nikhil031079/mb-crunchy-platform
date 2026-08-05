@@ -17,6 +17,18 @@ export const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   refunded: [],
 };
 
+// Mirrors the server workflow (convex/orderWorkflow.ts): pickup orders complete
+// at the Ready node (Ready → Delivered) because there is no delivery leg.
+export function getAllowedTransitions(
+  status: OrderStatus,
+  orderType?: OrderType,
+): OrderStatus[] {
+  if (orderType === "pickup" && status === "ready") {
+    return ["delivered", "cancelled"];
+  }
+  return STATUS_TRANSITIONS[status];
+}
+
 export const STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "Pending",
   confirmed: "Accepted",
@@ -61,6 +73,8 @@ export interface OrderRecord {
   deliveryNotes?: string;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  paymentMethod?: string;
+  paymentReference?: string;
   offerCode?: string;
   createdAt: number;
   updatedAt: number;
@@ -110,15 +124,15 @@ export interface OrderSummary {
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function getNextStatus(current: OrderStatus): OrderStatus | null {
-  const transitions = STATUS_TRANSITIONS[current];
+export function getNextStatus(current: OrderStatus, orderType?: OrderType): OrderStatus | null {
+  const transitions = getAllowedTransitions(current, orderType);
   // Filter out cancel - that's a separate action
   const forward = transitions.filter((s) => s !== "cancelled" && s !== "refunded");
   return forward[0] ?? null;
 }
 
 export function canCancel(order: OrderRecord): boolean {
-  return STATUS_TRANSITIONS[order.status].includes("cancelled");
+  return getAllowedTransitions(order.status, order.orderType).includes("cancelled");
 }
 
 export function canBulkRefund(order: OrderRecord): boolean {

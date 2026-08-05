@@ -118,7 +118,7 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
             </TableRow>
           ))
           : orders.map((order) => {
-            const nextStatus = getNextStatus(order.status);
+            const nextStatus = getNextStatus(order.status, order.orderType);
             const isSelected = Boolean(selectedIds?.has(order.id));
             return (
               <TableRow key={order.id} className={cn("cursor-pointer", isSelected && "bg-muted/40")} onClick={() => onViewDetail(order)}>

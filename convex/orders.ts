@@ -15,6 +15,8 @@ import { ensureCustomerByPhone } from "./customers";
 import { validateCouponInternal } from "./offers";
 import { getMaxRedeemableInternal } from "./loyalty";
 import { notify } from "./notificationService";
+import { getAllowedTransitions } from "./orderWorkflow";
+import { isStoreCurrentlyOpen } from "./utils/storeHours";
 
 // ============================================================================
 // Constants
@@ -25,18 +27,9 @@ import { notify } from "./notificationService";
 // rounding while rejecting any real mismatch (stale cart / tampered prices).
 const PRICE_TOLERANCE = 0.01;
 
-// Server-side mirror of the admin status workflow. Keeps the backend
-// authoritative about which transitions are allowed regardless of the client.
-const ORDER_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
-  pending: ["confirmed", "cancelled"],
-  confirmed: ["preparing", "cancelled"],
-  preparing: ["ready", "cancelled"],
-  ready: ["out_for_delivery", "cancelled"],
-  out_for_delivery: ["delivered"],
-  delivered: ["refunded"],
-  cancelled: [],
-  refunded: [],
-};
+// Minimum gap between two customer payment claims on the same order. Keeps
+// claim logging idempotent so a double-tap never produces duplicate activities.
+const CLAIM_COOLDOWN_MS = 2 * 60 * 1000;
 
 // ============================================================================
 // Queries
@@ -318,6 +311,14 @@ async function computeDeliveryFee(
     ) {
       throw new Error("Delivery zone is not valid for this store");
     }
+    // Operating rule: the zone's minimum order must be met on the discounted
+    // subtotal (the amount the customer actually pays for goods). Enforced
+    // server-side so a stale or tampered checkout can't bypass the rule.
+    if (zone.minOrder && args.afterDiscount < zone.minOrder) {
+      throw new Error(
+        `Delivery to "${zone.name}" requires a minimum order of ₹${zone.minOrder}`,
+      );
+    }
     return feeForZone(zone);
   }
 
@@ -491,6 +492,20 @@ export const create = mutation({
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .first();
 
+    // Operating rule: reject orders while the store is closed. Mirrors the
+    // client-side gate so a stale checkout or a direct API call can't slip an
+    // order through outside business hours.
+    if (!isStoreCurrentlyOpen(buSettings)) {
+      throw new Error(
+        "The store is currently closed. Please try again during business hours.",
+      );
+    }
+
+    // Delivery orders must always carry a destination address.
+    if (args.orderType === "delivery" && !args.deliveryAddress?.trim()) {
+      throw new Error("Delivery address is required");
+    }
+
     const afterDiscount = Math.max(0, subtotal - discount);
 
     const deliveryFee = await computeDeliveryFee(ctx, {
@@ -570,6 +585,14 @@ export const create = mutation({
       actor: "system",
       visibleToCustomer: true,
     });
+
+    // Coupon usage — incremented exactly once per successfully created order.
+    // `create` is idempotency-keyed (a retry returns the existing order above),
+    // so a network retry or double submit can never double-count a redemption.
+    // Failed/cancelled orders never reach this point and never consume usage.
+    if (offerId) {
+      await ctx.runMutation(internal.offers.incrementUsage, { id: offerId });
+    }
 
     // Reserve stock for each item. Done inline in the create transaction so
     // the reservation and order insert are atomic — a failed reservation rolls
@@ -677,7 +700,7 @@ export const updateStatus = mutation({
     // have no outgoing transitions; skipping steps (e.g. pending -> delivered)
     // is also rejected.
     if (args.status !== previousStatus) {
-      const allowed = ORDER_STATUS_TRANSITIONS[previousStatus] ?? [];
+      const allowed = getAllowedTransitions(previousStatus, order.orderType);
       if (!allowed.includes(args.status)) {
         throw new Error(
           `Order cannot move from ${previousStatus} to ${args.status}`,
@@ -696,6 +719,19 @@ export const updateStatus = mutation({
       throw new Error(
         "Payment must be confirmed explicitly and independently of order status",
       );
+    }
+
+    // Operating rule: preparation must never begin before payment verification.
+    // The order can only move to "preparing" once it is actually paid. This
+    // also blocks combined updates that would smuggle an unpaid order into
+    // preparation, and never blocks already-paid orders already in progress.
+    const resultingPayment = args.paymentStatus ?? order.paymentStatus;
+    if (
+      args.status === "preparing" &&
+      args.status !== previousStatus &&
+      resultingPayment !== "paid"
+    ) {
+      throw new Error("Payment must be verified before preparation can begin");
     }
 
     // On confirm: deduct reserved stock from actual stock
@@ -799,6 +835,99 @@ export const updateStatus = mutation({
         visibleToCustomer: true,
       });
     }
+  },
+});
+
+// ============================================================================
+// Customer payment claim
+// ============================================================================
+
+/**
+ * Records a customer's "I've Paid" claim so the kitchen/owner can see that the
+ * customer says the transfer is done. This is deliberately a light operation:
+ * it never creates an order, never touches inventory or loyalty, and never
+ * changes payment/order status. Payment is only confirmed by an admin through
+ * updateStatus (Mark Paid / Reject), which preserves the audit trail.
+ *
+ * The customer may optionally attach their UPI transaction reference (UTR);
+ * it is stored once on the order for admin verification and never shown in
+ * customer-facing views.
+ */
+export const claimPayment = mutation({
+  args: {
+    orderId: v.id("orders"),
+    phone: v.string(),
+    reference: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order || order.deletedAt) throw new Error("Order not found");
+    if (order.customerPhone !== args.phone) {
+      throw new Error("Order not found for this phone number");
+    }
+
+    // Reservation already ended — there is nothing left to claim.
+    if (order.status === "cancelled" || order.status === "refunded") {
+      return { outcome: "expired" as const };
+    }
+
+    // Already verified — idempotent no-op.
+    if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
+      return { outcome: "already_paid" as const };
+    }
+
+    // Only unpaid orders awaiting verification can be claimed.
+    if (order.paymentStatus !== "pending_verification") {
+      return { outcome: "not_pending" as const };
+    }
+
+    // Optionally record the customer's UPI transaction reference (UTR) so the
+    // admin can match the transfer while verifying. The first reference wins
+    // so a retry or later edit never overwrites what the customer submitted
+    // closest to the actual payment.
+    if (args.reference && args.reference.trim()) {
+      const reference = args.reference.trim().slice(0, 100);
+      if (!order.paymentReference) {
+        await ctx.db.patch(order._id, {
+          paymentReference: reference,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    // Idempotent claim logging: skip when the most recent activity for this
+    // order is already a recent customer claim, so double-taps and retries
+    // never produce duplicate activities.
+    const recent = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .order("desc")
+      .first();
+
+    const claimActor = order.customerName || order.customerPhone;
+
+    const alreadyClaimed =
+      recent?.action === "payment_pending" &&
+      recent.actor === claimActor &&
+      Date.now() - recent.createdAt < CLAIM_COOLDOWN_MS;
+
+    if (!alreadyClaimed) {
+      await logActivity(ctx, {
+        orderId: order._id,
+        businessUnitId: order.businessUnitId,
+        action: "payment_pending",
+        newValue: order.paymentStatus,
+        actor: claimActor,
+        visibleToCustomer: true,
+      });
+    }
+
+    return {
+      outcome: alreadyClaimed ? ("already_claimed" as const) : ("claimed" as const),
+    };
   },
 });
 

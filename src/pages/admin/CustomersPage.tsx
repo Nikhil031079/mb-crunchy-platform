@@ -117,6 +117,7 @@ type SortDir = "asc" | "desc";
 
 export default function CustomersPage() {
   const customers = useQuery(api.customers.getAll);
+  const orders = useQuery(api.orders.getAll);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -125,7 +126,20 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const isLoading = customers === undefined;
+  const isLoading = customers === undefined || orders === undefined;
+
+  // Money actually collected per customer — only verified payments count so
+  // pending/unpaid/cancelled/refunded orders never overstate the total.
+  const paidSpentByCustomer = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const o of (orders ?? []) as Order[]) {
+      if (o.paymentStatus !== "paid") continue;
+      if (o.customerId) {
+        map.set(o.customerId, (map.get(o.customerId) ?? 0) + (o.total ?? 0));
+      }
+    }
+    return map;
+  }, [orders]);
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return [];
@@ -147,6 +161,11 @@ export default function CustomersPage() {
     }
 
     list.sort((a, b) => {
+      if (sortField === "totalSpent") {
+        const aVal = paidSpentByCustomer.get(a._id) ?? 0;
+        const bVal = paidSpentByCustomer.get(b._id) ?? 0;
+        return sortDir === "asc" ? aVal - bVal : bVal - aVal;
+      }
       const aVal = a[sortField];
       const bVal = b[sortField];
       if (typeof aVal === "string" && typeof bVal === "string") {
@@ -158,17 +177,18 @@ export default function CustomersPage() {
     });
 
     return list;
-  }, [customers, search, statusFilter, sortField, sortDir]);
+  }, [customers, search, statusFilter, sortField, sortDir, paidSpentByCustomer]);
 
   const summaryStats = useMemo(() => {
     if (!customers) return null;
     const list = customers as Customer[];
     const totalCustomers = list.length;
     const activeCustomers = list.filter((c) => c.status === "active").length;
-    const totalRevenue = list.reduce((sum, c) => sum + c.totalSpent, 0);
+    let totalRevenue = 0;
+    for (const value of paidSpentByCustomer.values()) totalRevenue += value;
     const avgLtv = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
     return { totalCustomers, activeCustomers, totalRevenue, avgLtv };
-  }, [customers]);
+  }, [customers, paidSpentByCustomer]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -212,7 +232,7 @@ export default function CustomersPage() {
           <>
             <StatCard label="Total Customers" value={summaryStats.totalCustomers} />
             <StatCard label="Active Customers" value={summaryStats.activeCustomers} />
-            <StatCard label="Total Revenue" value={formatCurrency(summaryStats.totalRevenue)} />
+            <StatCard label="Collected Revenue" value={formatCurrency(summaryStats.totalRevenue)} />
             <StatCard label="Average LTV" value={formatCurrency(summaryStats.avgLtv)} />
           </>
         ) : null}
@@ -258,7 +278,7 @@ export default function CustomersPage() {
                     Orders <SortIcon field="totalOrders" />
                   </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("totalSpent")}>
-                    Total Spent <SortIcon field="totalSpent" />
+                    Total Paid <SortIcon field="totalSpent" />
                   </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("createdAt")}>
@@ -300,7 +320,7 @@ export default function CustomersPage() {
                       <TableCell className="text-muted-foreground">{customer.email ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{customer.phone ?? "—"}</TableCell>
                       <TableCell>{customer.totalOrders}</TableCell>
-                      <TableCell className="font-medium">{formatCurrency(customer.totalSpent)}</TableCell>
+                      <TableCell className="font-medium">{formatCurrency(paidSpentByCustomer.get(customer._id) ?? 0)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={cn("capitalize", STATUS_STYLES[customer.status])}>
                           {customer.status}

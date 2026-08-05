@@ -8,8 +8,10 @@ import type { Id } from "@convex/_generated/dataModel";
 
 import { getStockStatus } from "@/components/customer/StockBadge";
 import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
+import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 import { formatCurrency } from "@/utils";
 import { useCart } from "@/stores/cart";
+import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,9 +26,18 @@ const STATUS_FILTERS = [
   "pending",
   "confirmed",
   "preparing",
+  "ready",
   "out_for_delivery",
   "delivered",
   "cancelled",
+] as const;
+
+const PAYMENT_FILTERS = [
+  "all",
+  "pending_verification",
+  "paid",
+  "failed",
+  "refunded",
 ] as const;
 
 const STATUS_COLORS: Record<string, string> = {
@@ -40,6 +51,24 @@ const STATUS_COLORS: Record<string, string> = {
   refunded: "bg-gray-100 text-gray-800",
 };
 
+const PAYMENT_LABELS: Record<string, string> = {
+  pending: "Payment pending",
+  pending_verification: "Awaiting payment verification",
+  paid: "Payment verified",
+  failed: "Payment failed",
+  refunded: "Refunded",
+  rejected: "Payment not confirmed",
+};
+
+const PAYMENT_COLORS: Record<string, string> = {
+  pending: "text-amber-600",
+  pending_verification: "text-amber-600",
+  paid: "text-emerald-600",
+  failed: "text-red-600",
+  rejected: "text-red-600",
+  refunded: "text-gray-500",
+};
+
 export default function OrderHistoryPage() {
   const customer = useQuery(api.customers.getByAuthUser, {});
   const orders = useQuery(
@@ -48,6 +77,7 @@ export default function OrderHistoryPage() {
   ) as Order[] | undefined;
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
   const activities = useQuery(
@@ -83,7 +113,9 @@ export default function OrderHistoryPage() {
 
   const filteredOrders =
     orders?.filter(
-      (o) => statusFilter === "all" || o.status === statusFilter,
+      (o) =>
+        (statusFilter === "all" || o.status === statusFilter) &&
+        (paymentFilter === "all" || o.paymentStatus === paymentFilter),
     ) ?? [];
 
   const toggleExpand = (orderId: string) => {
@@ -131,6 +163,29 @@ export default function OrderHistoryPage() {
     [addItem, reorderCatalogItems, reorderInventoryItems],
   );
 
+  // "Order Again" for cancelled / expired reservations — same cart restore,
+  // without availability checks (stock is re-validated at checkout).
+  const handleOrderAgain = useCallback(
+    (order: Order) => {
+      for (const item of order.items) {
+        addItem({
+          catalogItemId: item.catalogItemId,
+          itemType: item.itemType,
+          businessUnitId: order.businessUnitId,
+          name: item.name,
+          variantName: item.variantName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          image: item.image,
+        });
+      }
+      toast.success("Items added to your cart.", {
+        description: `${order.orderNumber} — ready to check out.`,
+      });
+    },
+    [addItem],
+  );
+
   return (
     <div className="space-y-6">
       <Card>
@@ -152,6 +207,21 @@ export default function OrderHistoryPage() {
                 className="capitalize text-xs"
               >
                 {status === "all" ? "All" : status.replace(/_/g, " ")}
+              </Button>
+            ))}
+          </div>
+
+          {/* Payment Filters */}
+          <div className="flex flex-wrap gap-2">
+            {PAYMENT_FILTERS.map((payment) => (
+              <Button
+                key={payment}
+                variant={paymentFilter === payment ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPaymentFilter(payment)}
+                className="capitalize text-xs"
+              >
+                {payment === "all" ? "All payments" : payment.replace(/_/g, " ")}
               </Button>
             ))}
           </div>
@@ -210,6 +280,15 @@ export default function OrderHistoryPage() {
                         >
                           {order.status.replace(/_/g, " ")}
                         </Badge>
+                        <span
+                          className={cn(
+                            "text-xs font-medium",
+                            PAYMENT_COLORS[order.paymentStatus] ?? "",
+                          )}
+                        >
+                          {PAYMENT_LABELS[order.paymentStatus] ??
+                            order.paymentStatus}
+                        </span>
                         <span className="text-sm font-medium">
                           {formatCurrency(order.total)}
                         </span>
@@ -283,6 +362,18 @@ export default function OrderHistoryPage() {
                             <ShoppingCart className="h-3.5 w-3.5" />
                             Buy Again
                           </Button>
+                        )}
+
+                        {/* Payment pending / continuation */}
+                        {(order.paymentStatus === "pending_verification" ||
+                          order.paymentStatus === "failed" ||
+                          order.paymentStatus === "rejected" ||
+                          order.status === "cancelled" ||
+                          order.status === "refunded") && (
+                          <PaymentPendingCard
+                            order={order}
+                            onOrderAgain={handleOrderAgain}
+                          />
                         )}
 
                         <Separator />

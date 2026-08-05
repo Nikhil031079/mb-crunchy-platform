@@ -368,6 +368,7 @@ const orders = defineTable({
     v.literal("pending"), v.literal("pending_verification"), v.literal("paid"), v.literal("failed"), v.literal("refunded"), v.literal("rejected")
   ),
   paymentMethod: v.optional(v.string()),
+  paymentReference: v.optional(v.string()),
   offerId: v.optional(v.id("offers")),
   offerCode: v.optional(v.string()),
   idempotencyKey: v.optional(v.string()),

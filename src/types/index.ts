@@ -421,6 +421,8 @@ export interface Order extends Timestamps {
   deliveryNotes?: string;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  paymentMethod?: string;
+  paymentReference?: string;
   offerId?: string;
   offerCode?: string;
   deletedAt?: number;

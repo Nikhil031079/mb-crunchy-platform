@@ -16,15 +16,19 @@ import {
   CalendarClock,
   Store,
   Tag,
+  CreditCard,
+  BadgeCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
 import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
+import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate, formatDateTime } from "@/utils";
+import { useCart } from "@/stores/cart";
 
 // UI components
 import { Button } from "@/components/ui/button";
@@ -72,22 +76,75 @@ const STATUS_COLORS: Record<string, string> = {
   refunded: "bg-gray-500/10 text-gray-600 border-gray-200",
 };
 
+const PAYMENT_LABELS: Record<string, string> = {
+  pending: "Pending",
+  pending_verification: "Pending Verification",
+  paid: "Paid",
+  failed: "Failed",
+  refunded: "Refunded",
+  rejected: "Rejected",
+};
+
+const PAYMENT_COLORS: Record<string, string> = {
+  pending: "text-amber-600",
+  pending_verification: "text-amber-600",
+  paid: "text-emerald-600",
+  failed: "text-red-600",
+  rejected: "text-red-600",
+  refunded: "text-gray-500",
+};
+
 // ============================================================================
 // Tracking helpers
 // ============================================================================
 
-function getTrackingSteps(orderType: OrderType) {
-  return orderType === "pickup"
-    ? ORDER_STATUS_STEPS.filter((s) => s.key !== "out_for_delivery")
-    : ORDER_STATUS_STEPS;
+// Plain-language status label. Pickup orders skip the delivery leg, so "Ready"
+// becomes "Ready for Pickup" and "Delivered" becomes "Collected".
+function getStatusLabel(status: string, orderType: OrderType): string {
+  if (orderType === "pickup") {
+    if (status === "ready") return "Ready for Pickup";
+    if (status === "delivered") return "Collected";
+  }
+  return STATUS_LABELS[status] ?? status;
+}
+
+// Step map for the order progress flow. When payment is still unverified the
+// "Order Placed / Confirmed" milestones are replaced with an honest payment
+// map — Payment Pending → Payment Verification — so the customer always sees
+// exactly where they are and what's left to do.
+function getTrackingSteps(orderType: OrderType, paymentStatus?: string) {
+  const base =
+    orderType === "pickup"
+      ? ORDER_STATUS_STEPS.filter((s) => s.key !== "out_for_delivery").map((s) =>
+          s.key === "ready"
+            ? { ...s, label: "Ready for Pickup" }
+            : s.key === "delivered"
+              ? { ...s, label: "Collected" }
+              : s,
+        )
+      : ORDER_STATUS_STEPS;
+
+  const unpaid =
+    paymentStatus === "pending_verification" || paymentStatus === "pending";
+
+  if (!unpaid) return base;
+
+  const paymentSteps = [
+    { key: "payment_pending", label: "Payment Pending", icon: CreditCard, color: "bg-amber-500" },
+    { key: "payment_verification", label: "Payment Verification", icon: BadgeCheck, color: "bg-emerald-500" },
+  ] as const;
+
+  return [...paymentSteps, ...base.filter((s) => s.key !== "pending" && s.key !== "confirmed")];
 }
 
 function StatusProgressFlow({
   status,
   orderType,
+  paymentStatus,
 }: {
   status: OrderStatus;
   orderType: OrderType;
+  paymentStatus?: string;
 }) {
   const isCancelled = status === "cancelled" || status === "refunded";
 
@@ -109,8 +166,13 @@ function StatusProgressFlow({
     );
   }
 
-  const steps = getTrackingSteps(orderType);
-  const currentStepIndex = steps.findIndex((s) => s.key === status);
+  const steps = getTrackingSteps(orderType, paymentStatus);
+  const unpaid =
+    paymentStatus === "pending_verification" || paymentStatus === "pending";
+  // While payment is unverified the current step is "Payment Pending" (the
+  // customer's action). Once verified, progress flows by order status.
+  const currentKey = unpaid ? "payment_pending" : status;
+  const currentStepIndex = steps.findIndex((s) => s.key === currentKey);
   const isDelivered = status === "delivered";
 
   return (
@@ -155,7 +217,9 @@ function StatusProgressFlow({
               </p>
               {isCurrent && (
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Current status
+                  {step.key === "ready" && orderType === "pickup"
+                    ? "Waiting for customer"
+                    : "Current status"}
                 </p>
               )}
             </div>
@@ -177,8 +241,11 @@ function TrackingSummary({
   businessUnitName?: string;
 }) {
   const isCancelled = order.status === "cancelled" || order.status === "refunded";
-  const steps = getTrackingSteps(order.orderType);
-  const currentStepIndex = steps.findIndex((s) => s.key === order.status);
+  const steps = getTrackingSteps(order.orderType, order.paymentStatus);
+  const unpaid =
+    order.paymentStatus === "pending_verification" || order.paymentStatus === "pending";
+  const currentKey = unpaid ? "payment_pending" : order.status;
+  const currentStepIndex = steps.findIndex((s) => s.key === currentKey);
   const completedSteps =
     order.status === "delivered"
       ? steps.length
@@ -204,7 +271,7 @@ function TrackingSummary({
                 STATUS_COLORS[order.status] ?? ""
               )}
             >
-              {STATUS_LABELS[order.status] ?? order.status}
+              {getStatusLabel(order.status, order.orderType)}
             </Badge>
           </div>
           {!isCancelled && steps.length > 0 && (
@@ -256,6 +323,8 @@ export default function OrderTrackingPage() {
   const [searchedPhone, setSearchedPhone] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
+  const { addItem } = useCart();
+
   const orders = useQuery(
     api.orders.getByPhone,
     searchedPhone ? { phone: searchedPhone } : "skip"
@@ -289,6 +358,29 @@ export default function OrderTrackingPage() {
   const activities = useQuery(
     api.orderActivities.getByOrderForCustomer,
     selectedOrder ? { orderId: selectedOrder._id } : "skip"
+  );
+
+  // Re-add a previous order's items to the cart so the customer can order again
+  // (e.g. after a reservation expired). Stock is validated again at checkout.
+  const handleOrderAgain = useCallback(
+    (order: Order) => {
+      for (const item of order.items) {
+        addItem({
+          catalogItemId: item.catalogItemId,
+          itemType: item.itemType,
+          businessUnitId: order.businessUnitId,
+          name: item.name,
+          variantName: item.variantName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          image: item.image,
+        });
+      }
+      toast.success("Items added to your cart", {
+        description: `${order.orderNumber} — ready to check out.`,
+      });
+    },
+    [addItem]
   );
 
   // ==========================================================================
@@ -418,7 +510,7 @@ export default function OrderTrackingPage() {
                                 STATUS_COLORS[order.status] ?? ""
                               )}
                             >
-                              {STATUS_LABELS[order.status] ?? order.status}
+                              {getStatusLabel(order.status, order.orderType)}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">
@@ -447,6 +539,20 @@ export default function OrderTrackingPage() {
                           transition={{ duration: 0.2 }}
                           className="mt-4 pt-4 border-t border-border/60"
                         >
+                          {/* Payment pending / continuation */}
+                          {(order.paymentStatus === "pending_verification" ||
+                            order.paymentStatus === "failed" ||
+                            order.paymentStatus === "rejected" ||
+                            order.status === "cancelled" ||
+                            order.status === "refunded") && (
+                            <div className="mb-5">
+                              <PaymentPendingCard
+                                order={order}
+                                onOrderAgain={handleOrderAgain}
+                              />
+                            </div>
+                          )}
+
                           {/* Tracking Summary */}
                           <TrackingSummary
                             order={order}
@@ -461,6 +567,7 @@ export default function OrderTrackingPage() {
                             <StatusProgressFlow
                               status={order.status}
                               orderType={order.orderType}
+                              paymentStatus={order.paymentStatus}
                             />
                           </div>
 
@@ -477,12 +584,10 @@ export default function OrderTrackingPage() {
                                     <span
                                       className={cn(
                                         "font-medium capitalize",
-                                        order.paymentStatus === "paid" && "text-emerald-600",
-                                        order.paymentStatus === "pending" && "text-amber-600",
-                                        order.paymentStatus === "failed" && "text-red-600"
+                                        PAYMENT_COLORS[order.paymentStatus] ?? ""
                                       )}
                                     >
-                                      {order.paymentStatus}
+                                      {PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus}
                                     </span>
                                   </div>
                                   <div className="flex justify-between">

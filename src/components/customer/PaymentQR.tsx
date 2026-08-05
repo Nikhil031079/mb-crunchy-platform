@@ -17,7 +17,8 @@ interface PaymentQRProps {
   amount: number;
   orderNumber: string;
   whatsappNumber?: string;
-  onPaid: () => void;
+  initialReference?: string;
+  onPaid: (reference?: string) => void;
   onWhatsApp?: () => void;
   onClose: () => void;
 }
@@ -40,11 +41,13 @@ export function PaymentQR({
   amount,
   orderNumber,
   whatsappNumber,
+  initialReference,
   onPaid,
   onWhatsApp,
   onClose,
 }: PaymentQRProps) {
   const [copied, setCopied] = useState(false);
+  const [reference, setReference] = useState(initialReference ?? "");
 
   const handleCopy = useCallback(async () => {
     try {
@@ -133,10 +136,33 @@ export function PaymentQR({
               </p>
             </div>
 
+            {/* Optional UPI transaction reference (UTR) */}
+            <div className="space-y-1">
+              <label
+                htmlFor="payment-reference"
+                className="block text-xs font-medium text-foreground"
+              >
+                UPI Reference (UTR) <span className="text-muted-foreground">— optional</span>
+              </label>
+              <input
+                id="payment-reference"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="e.g. 412345678901"
+                className="w-full rounded-lg border border-border/60 bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Found in your UPI app after paying. It helps us verify your payment faster.
+              </p>
+            </div>
+
             {/* Action buttons */}
             <div className="space-y-2">
               <Button
-                onClick={onPaid}
+                onClick={() => onPaid(reference.trim() || undefined)}
                 className="w-full"
                 size="lg"
               >

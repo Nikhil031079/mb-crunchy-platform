@@ -110,6 +110,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const { cart, clearCart, itemCount } = useCart();
   const createOrder = useMutation(api.orders.create);
+  const claimPayment = useMutation(api.orders.claimPayment);
   const redeemPointsMutation = useMutation(api.loyalty.redeemPoints);
 
   // ==========================================================================
@@ -128,6 +129,8 @@ export default function CheckoutPage() {
   const [pendingOrder, setPendingOrder] = useState<{
     orderId: string;
     orderNumber: string;
+    amount: number;
+    phone: string;
   } | null>(null);
   const [couponApplied, setCouponApplied] = useState<{
     valid: boolean;
@@ -469,7 +472,12 @@ export default function CheckoutPage() {
           });
         }
 
-        setPendingOrder({ orderId: newOrderId, orderNumber: newOrderNumber });
+        setPendingOrder({
+          orderId: newOrderId,
+          orderNumber: newOrderNumber,
+          amount: pricing.total,
+          phone: form.customerPhone.trim(),
+        });
         setShowPaymentQR(true);
       } catch (error) {
         const message =
@@ -487,6 +495,39 @@ export default function CheckoutPage() {
     },
     [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, customer, redeemPointsMutation]
   );
+
+  // ==========================================================================
+  // Payment Claimed — order is placed and the customer says they've paid.
+  // Show the confirmation only here; closing the QR modal without paying
+  // must never look like a successful order.
+  // ==========================================================================
+
+  const handlePaymentClaimed = useCallback(async (reference?: string) => {
+    if (!pendingOrder) return;
+    setShowPaymentQR(false);
+    setOrderSuccess({
+      orderNumber: pendingOrder.orderNumber,
+      orderId: pendingOrder.orderId,
+    });
+    clearCart();
+    clearIdempotencyKey();
+    toast.success("Order placed!", {
+      description: "Payment is under verification. We'll confirm shortly.",
+    });
+
+    // Record the "I've Paid" claim server-side so the kitchen can see it.
+    // This is a light, idempotent call — it never creates a new order and
+    // never changes payment status on its own.
+    try {
+      await claimPayment({
+        orderId: pendingOrder.orderId as Id<"orders">,
+        phone: pendingOrder.phone,
+        reference: reference?.trim() || undefined,
+      });
+    } catch {
+      // The success screen is already shown; a failed claim is non-blocking.
+    }
+  }, [pendingOrder, clearCart, claimPayment]);
 
   // ==========================================================================
   // Order Success State
@@ -521,8 +562,8 @@ export default function CheckoutPage() {
                 Order Placed Successfully!
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Thank you for your order. We&apos;ll start preparing it right
-                away.
+                Payment recorded — we&apos;ll verify it and start preparing
+                your order shortly.
               </p>
             </motion.div>
 
@@ -679,6 +720,57 @@ export default function CheckoutPage() {
                     ? `Orders can be placed starting ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
                     : "Please try again during business hours."}
                 </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Payment Pending Banner — order created but payment not confirmed */}
+        {pendingOrder && !showPaymentQR && !orderSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-medium text-amber-800 dark:text-amber-200">
+                    Payment pending for order {pendingOrder.orderNumber}
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                    Your order is reserved for{" "}
+                    {formatCurrency(pendingOrder.amount)}. Complete the UPI
+                    payment to confirm it.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setShowPaymentQR(true)}
+                  className="gap-1.5"
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Pay Now
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handlePaymentClaimed()}
+                  className="gap-1.5"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  I&apos;ve Paid
+                </Button>
+                <Link to={ROUTES.TRACK_ORDER}>
+                  <Button size="sm" variant="ghost" className="gap-1.5">
+                    <Package className="h-3.5 w-3.5" />
+                    Track Order
+                  </Button>
+                </Link>
               </div>
             </div>
           </motion.div>
@@ -1385,17 +1477,7 @@ export default function CheckoutPage() {
           amount={pricing.total}
           orderNumber={pendingOrder.orderNumber}
           whatsappNumber={buSettings?.paymentConfig?.whatsappNumber}
-          onPaid={() => {
-            setShowPaymentQR(false);
-            setOrderSuccess({
-              orderNumber: pendingOrder.orderNumber,
-              orderId: pendingOrder.orderId,
-            });
-            clearCart();
-            toast.success("Order placed!", {
-              description: "Payment is under verification. We'll confirm shortly.",
-            });
-          }}
+          onPaid={handlePaymentClaimed}
           onWhatsApp={() => {
             const phone = (buSettings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
             const msg = encodeURIComponent(
@@ -1405,11 +1487,10 @@ export default function CheckoutPage() {
           }}
           onClose={() => {
             setShowPaymentQR(false);
-            setOrderSuccess({
-              orderNumber: pendingOrder.orderNumber,
-              orderId: pendingOrder.orderId,
+            toast.info("Payment pending", {
+              description:
+                "Your order is reserved. Pay now or complete it later from Track Order.",
             });
-            clearCart();
           }}
         />
       )}

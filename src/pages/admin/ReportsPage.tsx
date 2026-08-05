@@ -20,6 +20,7 @@ import {
   ListChecks,
   Users,
   Download,
+  Wallet,
 } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
@@ -43,7 +44,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, downloadCSV } from "@/utils";
 
 import type { OrderStatus } from "@/components/admin/orders/types";
-import { STATUS_LABELS } from "@/components/admin/orders/types";
+import { STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/components/admin/orders/types";
 import { STATUS_COLORS } from "@/constants";
 
 import type {
@@ -197,7 +198,13 @@ function buildBuckets(start: number, end: number): Bucket[] {
 // Aggregation helpers
 // ============================================================================
 
-const isNetOrder = (o: Order) => o.status !== "cancelled" && o.status !== "refunded";
+// "Net" = money actually collected. Unpaid and terminal orders are never
+// counted as revenue — cancelled/refunded orders live in their own buckets.
+const isNetOrder = (o: Order) =>
+  o.status !== "cancelled" && o.status !== "refunded" && o.paymentStatus === "paid";
+
+const isPendingCollection = (o: Order) =>
+  o.status !== "cancelled" && o.status !== "refunded" && o.paymentStatus === "pending_verification";
 
 interface Movement {
   item: InventoryItem;
@@ -274,10 +281,16 @@ export default function ReportsPage() {
     let revenue = 0;
     let netCount = 0;
     let grossCount = 0;
+    let pendingRevenue = 0;
+    let pendingCount = 0;
     const revenueByBu = new Map<string, number>();
     const orderCountByBu = new Map<string, number>();
     for (const o of windowOrders) {
       grossCount += 1;
+      if (isPendingCollection(o)) {
+        pendingRevenue += o.total;
+        pendingCount += 1;
+      }
       if (!isNetOrder(o)) continue;
       netCount += 1;
       revenue += o.total;
@@ -297,6 +310,8 @@ export default function ReportsPage() {
       revenue,
       netCount,
       grossCount,
+      pendingRevenue,
+      pendingCount,
       averageOrderValue: netCount > 0 ? revenue / netCount : 0,
       topBu,
       buRows,
@@ -370,13 +385,15 @@ export default function ReportsPage() {
     if (!orders) return [];
     return buckets.map((bucket) => {
       let revenue = 0;
+      let pendingRevenue = 0;
       let orderCount = 0;
       for (const o of orders) {
         if (o.createdAt < bucket.start || o.createdAt >= bucket.end) continue;
         orderCount += 1;
         if (isNetOrder(o)) revenue += o.total;
+        else if (isPendingCollection(o)) pendingRevenue += o.total;
       }
-      return { bucket, revenue, orderCount };
+      return { bucket, revenue, pendingRevenue, orderCount };
     });
   }, [orders, buckets]);
 
@@ -463,7 +480,7 @@ export default function ReportsPage() {
   }, [inventory, buNameById]);
 
   const maxRevenue = useMemo(
-    () => Math.max(...bucketStats.map((s) => s.revenue), 1),
+    () => Math.max(...bucketStats.map((s) => s.revenue + s.pendingRevenue), 1),
     [bucketStats],
   );
 
@@ -478,6 +495,8 @@ export default function ReportsPage() {
       "Email": o.customerEmail ?? "",
       "Type": o.orderType,
       "Status": STATUS_LABELS[o.status],
+      "Payment Status": PAYMENT_STATUS_LABELS[o.paymentStatus ?? "pending"],
+      "Payment Method": o.paymentMethod ?? "",
       "Items": (o.items ?? []).reduce((sum, item) => sum + item.quantity, 0),
       "Subtotal": o.subtotal,
       "Discount": o.discount,
@@ -594,22 +613,30 @@ export default function ReportsPage() {
           )}
 
           {/* Summary cards */}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <SummaryCard
               icon={IndianRupee}
-              label={`Revenue · ${activeRange.label}`}
+              label={`Paid Revenue · ${activeRange.label}`}
               value={formatCurrency(sales.revenue)}
+              sub="collected only"
+            />
+            <SummaryCard
+              icon={Wallet}
+              label={`Pending Collection · ${activeRange.label}`}
+              value={formatCurrency(sales.pendingRevenue)}
+              sub={`${sales.pendingCount} orders awaiting verification`}
             />
             <SummaryCard
               icon={ShoppingCart}
-              label="Orders"
+              label="Paid Orders"
               value={`${sales.netCount}`}
-              sub={`${sales.grossCount} incl. cancelled/refunded`}
+              sub={`${sales.grossCount} total incl. cancelled/refunded`}
             />
             <SummaryCard
               icon={Receipt}
               label="Avg Order Value"
               value={formatCurrency(sales.averageOrderValue)}
+              sub="paid orders only"
             />
             <SummaryCard
               icon={Building2}
@@ -623,26 +650,44 @@ export default function ReportsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <BarChart3 className="size-4 text-muted-foreground" /> Revenue Trend
+                <BarChart3 className="size-4 text-muted-foreground" /> Paid Revenue Trend
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-sm bg-primary/70" /> Paid
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-sm bg-amber-400/80" /> Pending collection
+                </span>
+              </div>
               <div className="flex items-end gap-1.5 h-48">
                 {bucketStats.map((s) => {
                   const heightPercent = maxRevenue > 0 ? (s.revenue / maxRevenue) * 100 : 0;
+                  const pendingPercent = maxRevenue > 0 ? (s.pendingRevenue / maxRevenue) * 100 : 0;
                   return (
                     <div key={s.bucket.key} className="flex flex-1 flex-col items-center gap-1">
                       <span className="text-[10px] font-medium text-muted-foreground">
                         {s.revenue > 0 ? formatCurrency(s.revenue).replace(/\.00$/, "") : ""}
                       </span>
-                      <div
-                        className={cn(
-                          "w-full max-w-9 rounded-t-md transition-all",
-                          s.revenue > 0 ? "bg-primary/70" : "bg-secondary",
+                      <div className="flex w-full max-w-9 flex-col items-stretch justify-end">
+                        {pendingPercent > 0 && (
+                          <div
+                            className="w-full rounded-t-none bg-amber-400/80"
+                            style={{ height: `${Math.max(pendingPercent, 1)}%` }}
+                            title={`${s.bucket.label}: ${formatCurrency(s.pendingRevenue)} pending collection`}
+                          />
                         )}
-                        style={{ height: `${Math.max(heightPercent, 2)}%` }}
-                        title={`${s.bucket.label}: ${formatCurrency(s.revenue)} · ${s.orderCount} orders`}
-                      />
+                        <div
+                          className={cn(
+                            "w-full rounded-t-md transition-all",
+                            s.revenue > 0 ? "bg-primary/70" : "bg-secondary",
+                          )}
+                          style={{ height: `${Math.max(heightPercent, 2)}%` }}
+                          title={`${s.bucket.label}: ${formatCurrency(s.revenue)} paid · ${s.orderCount} orders`}
+                        />
+                      </div>
                       <span className="text-[10px] text-muted-foreground">{s.bucket.label}</span>
                     </div>
                   );
@@ -662,13 +707,13 @@ export default function ReportsPage() {
             <RankTable
               icon={Trophy}
               title="Best Sellers"
-              subtitle="By units sold (excludes cancelled/refunded)"
+              subtitle="By units sold (paid orders only)"
               rows={bestSellers}
             />
             <RankTable
               icon={FolderTree}
               title="Top Categories"
-              subtitle="By units sold across product items"
+              subtitle="By units sold across product items (paid orders only)"
               rows={topCategories}
             />
           </div>
@@ -834,7 +879,7 @@ function StatusSummary({
         <CardTitle className="flex items-center gap-2 text-base">
           <ListChecks className="size-4 text-muted-foreground" /> Order Status Summary
         </CardTitle>
-        <p className="text-xs text-muted-foreground">Orders and revenue by current status</p>
+        <p className="text-xs text-muted-foreground">Orders and paid revenue by current status</p>
       </CardHeader>
       <CardContent className="space-y-2">
         {!hasData ? (

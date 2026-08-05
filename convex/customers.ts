@@ -124,8 +124,12 @@ export const getCustomer360 = query({
       (o) => !NET_ORDER_STATUSES.includes(o.status)
     );
 
-    const lifetimeSpend = netOrders.reduce((sum, o) => sum + o.total, 0);
-    const averageOrderValue = netOrders.length > 0 ? lifetimeSpend / netOrders.length : 0;
+    // Money metrics reflect only collected money — unpaid/pending reservations
+    // never inflate lifetime spend.
+    const paidOrders = netOrders.filter((o) => o.paymentStatus === "paid");
+
+    const lifetimeSpend = paidOrders.reduce((sum, o) => sum + o.total, 0);
+    const averageOrderValue = paidOrders.length > 0 ? lifetimeSpend / paidOrders.length : 0;
 
     const sorted = [...orders].sort((a, b) => b.createdAt - a.createdAt);
     const firstOrderAt = sorted.length > 0 ? sorted[sorted.length - 1].createdAt : undefined;
@@ -394,7 +398,10 @@ export function computeCustomerHealth(
 }
 
 function computePurchaseMetrics(netOrders: Doc<"orders">[]) {
-  const values = netOrders.map((o) => o.total);
+  // Only verified payments count toward spend — pending/unpaid/cancelled/
+  // refunded orders never overstate what the customer actually paid.
+  const paidOrders = netOrders.filter((o) => o.paymentStatus === "paid");
+  const values = paidOrders.map((o) => o.total);
   const count = values.length;
   const lifetimeSpend = values.reduce((sum, value) => sum + value, 0);
   return {

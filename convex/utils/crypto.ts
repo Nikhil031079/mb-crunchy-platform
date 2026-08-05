@@ -3,6 +3,14 @@ const PBKDF2_ITERATIONS = 100_000;
 // The fallback only preserves local-dev behaviour before the env var is set.
 const SESSION_SECRET =
   process.env.SESSION_SECRET ?? "mb-crunchy-admin-session-key-v1";
+
+if (!process.env.SESSION_SECRET) {
+  console.warn(
+    "[mb-crunchy] SESSION_SECRET is not set — using the development fallback secret. " +
+      "Set a strong random value in production with: npx convex env set SESSION_SECRET <random-string>",
+  );
+}
+
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 function getWebCrypto(): Crypto {

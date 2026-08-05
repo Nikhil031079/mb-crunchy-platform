@@ -13,24 +13,9 @@ import type { MutationCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAdminSession } from "./utils/adminAuth";
+import { CANCELLABLE_STATUSES, getAllowedTransitions } from "./orderWorkflow";
 
-type OrderStatus = Doc<"orders">["status"];
 type OrderDoc = Doc<"orders">;
-
-// Server-side mirror of the admin status workflow. Keeps the backend
-// authoritative about which transitions are allowed regardless of the client.
-const STATUS_TRANSITIONS: Record<string, readonly OrderStatus[]> = {
-  pending: ["confirmed", "cancelled"],
-  confirmed: ["preparing", "cancelled"],
-  preparing: ["ready", "cancelled"],
-  ready: ["out_for_delivery", "cancelled"],
-  out_for_delivery: ["delivered"],
-  delivered: [],
-  cancelled: [],
-  refunded: [],
-};
-
-const CANCELLABLE_STATUSES: readonly OrderStatus[] = ["pending", "confirmed", "preparing", "ready"];
 
 interface BulkResult {
   orderId: Id<"orders">;
@@ -117,7 +102,7 @@ export const bulkUpdateStatus = mutation({
       args.orderIds,
       (order) => {
         if (order.status === args.status) return { outcome: "skip" as const };
-        if (!STATUS_TRANSITIONS[order.status]?.includes(args.status)) {
+        if (!getAllowedTransitions(order.status, order.orderType).includes(args.status)) {
           return {
             outcome: "error" as const,
             error: `Order ${order.orderNumber} cannot move from ${order.status} to ${args.status}`,

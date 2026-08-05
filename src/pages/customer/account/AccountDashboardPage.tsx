@@ -24,6 +24,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ROUTES } from "@/constants";
 import { formatCurrency, formatDate } from "@/utils";
 import { useCart } from "@/stores/cart";
+import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +66,24 @@ const STATUS_COLORS: Record<string, string> = {
   refunded: "bg-gray-100 text-gray-800",
 };
 
+const PAYMENT_LABELS: Record<string, string> = {
+  pending: "Payment pending",
+  pending_verification: "Awaiting payment verification",
+  paid: "Payment verified",
+  failed: "Payment failed",
+  refunded: "Refunded",
+  rejected: "Payment not confirmed",
+};
+
+const PAYMENT_COLORS: Record<string, string> = {
+  pending: "text-amber-600",
+  pending_verification: "text-amber-600",
+  paid: "text-emerald-600",
+  failed: "text-red-600",
+  rejected: "text-red-600",
+  refunded: "text-gray-500",
+};
+
 const LOYALTY_TYPE_LABELS: Record<string, string> = {
   earned: "Earned",
   redeemed: "Redeemed",
@@ -100,7 +119,7 @@ function QuickStatsBar({ totalOrders, totalSpent, pointsBalance, memberSince }: 
     },
     {
       icon: CreditCard,
-      label: "Total Spent",
+      label: "Total Paid",
       value: formatCurrency(totalSpent),
       color: "text-emerald-500",
     },
@@ -424,6 +443,25 @@ export default function AccountDashboardPage() {
   const recentOrders = orders?.slice(0, 3) ?? [];
   const savedAddresses = addresses?.slice(0, 3) ?? [];
 
+  // "Total Paid" = money actually collected — only verified payments count so
+  // unpaid/pending/cancelled/refunded orders never inflate the number.
+  const totalPaid = useMemo(
+    () =>
+      (orders ?? []).reduce(
+        (sum, o) => (o.paymentStatus === "paid" ? sum + (o.total ?? 0) : sum),
+        0,
+      ),
+    [orders],
+  );
+
+  // Most recent order still awaiting payment verification — surface it so the
+  // customer is never left wondering what to do next.
+  const pendingPaymentOrder = recentOrders.find(
+    (o) =>
+      o.paymentStatus === "pending_verification" &&
+      (o.status === "pending" || o.status === "confirmed"),
+  );
+
   // Quick Reorder — use the most recent delivered/completed order
   const lastOrder = useMemo(() => {
     if (!orders || orders.length === 0) return undefined;
@@ -476,7 +514,7 @@ export default function AccountDashboardPage() {
       >
         <QuickStatsBar
           totalOrders={customer?.totalOrders ?? 0}
-          totalSpent={customer?.totalSpent ?? 0}
+          totalSpent={totalPaid}
           pointsBalance={loyaltyAccount?.pointsBalance ?? 0}
           memberSince={customer?.createdAt ?? Date.now()}
         />
@@ -665,6 +703,22 @@ export default function AccountDashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {pendingPaymentOrder && (
+              <Link
+                to={ROUTES.ACCOUNT.ORDERS}
+                className="mb-3 block"
+              >
+                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    {pendingPaymentOrder.orderNumber} —{" "}
+                    {formatCurrency(pendingPaymentOrder.total)} still pending.
+                    Complete payment to get it moving.
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0" />
+                </div>
+              </Link>
+            )}
             {recentOrders.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">
                 No orders yet. Start ordering to earn loyalty points!
@@ -689,6 +743,14 @@ export default function AccountDashboardPage() {
                       >
                         {order.status.replace(/_/g, " ")}
                       </Badge>
+                      <span
+                        className={cn(
+                          "hidden text-xs font-medium sm:inline",
+                          PAYMENT_COLORS[order.paymentStatus] ?? "",
+                        )}
+                      >
+                        {PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus}
+                      </span>
                       <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
                     </div>
                   </div>

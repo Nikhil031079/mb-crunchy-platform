@@ -67,6 +67,8 @@ function enrichOrder(doc: any, buMap: Map<string, string>): OrderRecord {
     deliveryNotes: doc.deliveryNotes,
     status: doc.status,
     paymentStatus: doc.paymentStatus,
+    paymentMethod: doc.paymentMethod,
+    paymentReference: doc.paymentReference,
     offerCode: doc.offerCode,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -147,8 +149,26 @@ const KITCHEN_ACTIONS: Partial<Record<OrderStatus, { label: string; target: Orde
   pending: { label: "Accept Order", target: "confirmed", className: "bg-blue-600 text-white hover:bg-blue-700" },
   confirmed: { label: "Start Preparing", target: "preparing", className: "bg-primary text-primary-foreground hover:bg-primary/90" },
   preparing: { label: "Mark Ready", target: "ready", className: "bg-emerald-600 text-white hover:bg-emerald-700" },
-  ready: { label: "Complete Order", target: "delivered", className: "bg-emerald-700 text-white hover:bg-emerald-800" },
+  ready: { label: "Dispatch", target: "out_for_delivery", className: "bg-emerald-700 text-white hover:bg-emerald-800" },
 };
+
+// Pickup orders complete at the Ready node (Ready → Delivered) because there is
+// no delivery leg; only the action/label branch on order type.
+function kitchenActionFor(order: OrderRecord): { label: string; target: OrderStatus; className: string } | null {
+  const base = KITCHEN_ACTIONS[order.status];
+  if (!base) return null;
+  if (order.status === "ready" && order.orderType === "pickup") {
+    return { label: "Mark Collected", target: "delivered", className: base.className };
+  }
+  return base;
+}
+
+function kitchenStatusLabel(order: OrderRecord): string {
+  if (order.status === "ready") {
+    return order.orderType === "pickup" ? "Ready for Pickup" : "Ready for Delivery";
+  }
+  return STATUS_LABELS[order.status];
+}
 
 function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: { orders: OrderRecord[]; onOpenOrder: (order: OrderRecord) => void; onAdvanceStatus: (order: OrderRecord, target: OrderStatus) => void; pendingOrderId: string | null }) {
   const now = useLiveClock();
@@ -182,7 +202,8 @@ function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: {
                     ? "ring-2 ring-amber-200 dark:ring-amber-800"
                     : "";
                 const elapsedColor = priority === "critical" ? "text-red-600" : priority === "warning" ? "text-amber-600" : "text-muted-foreground";
-                const action = KITCHEN_ACTIONS[order.status];
+                const awaitingPayment = order.status === "confirmed" && order.paymentStatus !== "paid";
+                const action = awaitingPayment ? null : kitchenActionFor(order);
                 return (
                   <div
                     key={order.id}
@@ -198,7 +219,7 @@ function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: {
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mb-2">
                       <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[order.status])}>
-                        {STATUS_LABELS[order.status]}
+                        {kitchenStatusLabel(order)}
                       </Badge>
                       <Badge variant="outline" className={cn("text-xs", order.orderType === "delivery" ? "border-purple-200 bg-purple-500/10 text-purple-700" : "border-sky-200 bg-sky-500/10 text-sky-700")}>
                         {order.orderType === "delivery" ? "Delivery" : "Takeaway"}
@@ -221,7 +242,12 @@ function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: {
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold">₹{order.total.toLocaleString()}</span>
-                      {action && (
+                      {awaitingPayment ? (
+                        <span className="flex items-center gap-1 rounded-md bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                          <Clock className="size-3" />
+                          Awaiting payment
+                        </span>
+                      ) : action ? (
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); onAdvanceStatus(order, action.target); }}
@@ -230,7 +256,7 @@ function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: {
                         >
                           {pendingOrderId === order.id ? "Updating…" : action.label}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -307,6 +333,7 @@ export default function OrdersPage() {
     let deliveredCount = 0;
     let cancelledCount = 0;
     let todayRevenue = 0;
+    let todayPendingRevenue = 0;
     let deliveredTotal = 0;
 
     for (const r of records) {
@@ -319,12 +346,15 @@ export default function OrdersPage() {
         deliveredTotal += r.total;
       }
       if (r.status === "cancelled" || r.status === "refunded") cancelledCount++;
-      if (r.createdAt >= todayMs) todayRevenue += r.total;
+      if (r.createdAt >= todayMs) {
+        if (r.paymentStatus === "paid") todayRevenue += r.total;
+        else if (r.paymentStatus === "pending_verification" && r.status !== "cancelled" && r.status !== "refunded") todayPendingRevenue += r.total;
+      }
     }
 
     const averageOrderValue = deliveredCount > 0 ? deliveredTotal / deliveredCount : 0;
 
-    return { totalOrders, pendingCount, inProgressCount, outForDeliveryCount, deliveredCount, cancelledCount, todayRevenue, averageOrderValue };
+    return { totalOrders, pendingCount, inProgressCount, outForDeliveryCount, deliveredCount, cancelledCount, todayRevenue, todayPendingRevenue, averageOrderValue };
   }, [records]);
 
   // --- Filtering ---
@@ -498,13 +528,17 @@ export default function OrdersPage() {
   };
 
   const handleQuickStatus = (order: OrderRecord) => {
-    const next = getNextStatus(order.status);
+    const next = getNextStatus(order.status, order.orderType);
     if (!next) return;
     setStatusTarget(order);
     setStatusGoal(next);
   };
 
   const handleKitchenAdvance = async (order: OrderRecord, target: OrderStatus) => {
+    if (target === "preparing" && order.paymentStatus !== "paid") {
+      setError(`${order.orderNumber} — payment must be verified before preparation can begin`);
+      return;
+    }
     setKitchenPendingId(order.id);
     try {
       await updateStatus({
@@ -527,6 +561,12 @@ export default function OrdersPage() {
 
   const confirmStatusUpdate = async () => {
     if (!statusTarget || !statusGoal) return;
+    if (statusGoal === "preparing" && statusTarget.paymentStatus !== "paid") {
+      setError("Payment must be verified before preparation can begin");
+      setStatusTarget(null);
+      setStatusGoal(null);
+      return;
+    }
     try {
       await updateStatus({
         id: toOrderId(statusTarget.id),
@@ -582,7 +622,8 @@ export default function OrdersPage() {
         <SummaryCard title="Out for Delivery" value={summary.outForDeliveryCount} icon={ShoppingCart} className="text-purple-600" />
         <SummaryCard title="Delivered" value={summary.deliveredCount} icon={ShoppingCart} className="text-emerald-600" />
         <SummaryCard title="Cancelled" value={summary.cancelledCount} icon={ShoppingCart} className="text-red-600" />
-        <SummaryCard title="Today's Revenue" value={`₹${summary.todayRevenue.toLocaleString()}`} icon={ShoppingCart} className="text-emerald-600" />
+        <SummaryCard title="Today's Paid Revenue" value={`₹${summary.todayRevenue.toLocaleString()}`} icon={ShoppingCart} className="text-emerald-600" />
+        <SummaryCard title="Pending Collection Today" value={`₹${summary.todayPendingRevenue.toLocaleString()}`} icon={ShoppingCart} className="text-amber-600" />
         <SummaryCard title="Avg Order Value" value={`₹${Math.round(summary.averageOrderValue).toLocaleString()}`} icon={ShoppingCart} />
       </div>
 

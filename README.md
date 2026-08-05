@@ -29,6 +29,18 @@ The convex server has a separate set of environment variables that are accessibl
 
 Currently, these variables include auth-specific keys: JWKS, JWT_PRIVATE_KEY, and SITE_URL.
 
+# Production Readiness
+
+Required server-side environment variables (set with `npx convex env set <NAME> <value>`):
+
+- `SESSION_SECRET` — signs & verifies admin session JWTs. **Must be set** in every non-local environment; otherwise a hard-coded development fallback is used. Generate with e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — outbound Telegram order notifications (optional; skipped when unset).
+- `RESERVATION_TIMEOUT_MINUTES` — minutes an unpaid order may sit in `pending` before the maintenance cron cancels it and releases its reserved stock (default `60`; set `0` to disable).
+
+Scheduled jobs (`convex/crons.ts`):
+- `cleanup-expired-reservations` — runs every 15 minutes and reclaims stock reserved by abandoned checkouts so the storefront never reports "insufficient stock" for items that are actually on hand. Paid/refunded orders are never auto-cancelled.
+
+
 
 # Using Authentication (Important!)
 

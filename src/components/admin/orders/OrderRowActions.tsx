@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 import type { OrderRecord, OrderStatus, PaymentStatus } from "./types";
-import { canCancel, getNextStatus, STATUS_LABELS, STATUS_TRANSITIONS } from "./types";
+import { canCancel, getAllowedTransitions, getNextStatus, STATUS_LABELS } from "./types";
 
 interface OrderRowActionsProps {
   order: OrderRecord;
@@ -15,10 +15,12 @@ interface OrderRowActionsProps {
 }
 
 export function OrderRowActions({ order, onAdvanceStatus, onSetStatus, onUpdatePaymentStatus, onViewDetail }: OrderRowActionsProps) {
-  const nextStatus = getNextStatus(order.status);
-  const transitions = STATUS_TRANSITIONS[order.status].filter((s) => s !== "cancelled" && s !== "refunded" && s !== nextStatus);
+  const nextStatus = getNextStatus(order.status, order.orderType);
+  const transitions = getAllowedTransitions(order.status, order.orderType).filter((s) => s !== "cancelled" && s !== "refunded" && s !== nextStatus);
   const cancellable = canCancel(order);
   const needsPaymentVerification = order.paymentStatus === "pending_verification";
+  // Preparation must never begin before payment verification (enforced server-side).
+  const awaitingPaymentBeforePrepare = nextStatus === "preparing" && order.paymentStatus !== "paid";
 
   return (
     <DropdownMenu>
@@ -32,12 +34,20 @@ export function OrderRowActions({ order, onAdvanceStatus, onSetStatus, onUpdateP
         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewDetail(order); }}>
           View details
         </DropdownMenuItem>
-        {nextStatus && (
+        {nextStatus && !awaitingPaymentBeforePrepare && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAdvanceStatus(order); }}>
               <ChevronRight aria-hidden="true" className="size-4" />
               Move to {STATUS_LABELS[nextStatus]}
+            </DropdownMenuItem>
+          </>
+        )}
+        {awaitingPaymentBeforePrepare && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled>
+              Awaiting payment verification
             </DropdownMenuItem>
           </>
         )}

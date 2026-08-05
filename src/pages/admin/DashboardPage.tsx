@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/utils";
+import { computeRevenueMetrics, isPaid as isPaidRevenueOrder } from "@/lib/finance";
 import type { Order, InventoryItem, Customer } from "@/types";
 import {
   TrendingUp,
@@ -23,6 +24,7 @@ import {
   Truck,
   Trophy,
   ChefHat,
+  Wallet,
 } from "lucide-react";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -77,8 +79,13 @@ export default function DashboardPage() {
       (o: Order) => o.createdAt >= yesterdayStart && o.createdAt < todayStart,
     );
 
-    const todayRevenue = todayOrders.reduce((sum, o) => sum + (o.total ?? 0), 0);
-    const yesterdayRevenue = yesterdayOrders.reduce((sum, o) => sum + (o.total ?? 0), 0);
+    // Revenue = PAID money only. Unpaid reservations are reported separately as
+    // pending collection and never counted as revenue.
+    const todayMetrics = computeRevenueMetrics(todayOrders);
+    const yesterdayMetrics = computeRevenueMetrics(yesterdayOrders);
+    const todayRevenue = todayMetrics.paidRevenue;
+    const todayPendingRevenue = todayMetrics.pendingRevenue;
+    const yesterdayRevenue = yesterdayMetrics.paidRevenue;
 
     const revenueChange =
       yesterdayRevenue > 0
@@ -98,6 +105,7 @@ export default function DashboardPage() {
 
     return {
       todayRevenue,
+      todayPendingRevenue,
       revenueChange,
       todayOrderCount: todayOrders.length,
       totalOrders: orders.length,
@@ -121,10 +129,12 @@ export default function DashboardPage() {
       const dayOrders = orders.filter(
         (o: Order) => o.createdAt >= dayStart && o.createdAt < dayEnd,
       );
+      const metrics = computeRevenueMetrics(dayOrders);
       days.push({
         date: d,
         label: DAY_NAMES[d.getDay()],
-        revenue: dayOrders.reduce((sum, o) => sum + (o.total ?? 0), 0),
+        // Paid revenue only — pending/unpaid money is never charted as revenue.
+        revenue: metrics.paidRevenue,
         orders: dayOrders.length,
       });
     }
@@ -152,6 +162,9 @@ export default function DashboardPage() {
     if (!orders) return [];
     const productCounts: Record<string, { name: string; count: number; revenue: number }> = {};
     for (const o of orders) {
+      // Best sellers reflect PAID demand — unpaid/cancelled/refunded orders are
+      // excluded so the value column never overstates money collected.
+      if (!isPaidRevenueOrder(o)) continue;
       for (const item of o.items ?? []) {
         if (!productCounts[item.name]) {
           productCounts[item.name] = { name: item.name, count: 0, revenue: 0 };
@@ -200,7 +213,7 @@ export default function DashboardPage() {
           </>
         ) : stats ? (
           <>
-            <StatCard label="Today's Revenue" value={formatCurrency(stats.todayRevenue)} />
+            <StatCard label="Paid Revenue Today" value={formatCurrency(stats.todayRevenue)} />
             <StatCard label="Total Orders" value={stats.totalOrders} />
             <StatCard label="Active Customers" value={stats.totalCustomers} />
             <StatCard label="Products" value={stats.totalProducts} />
@@ -210,7 +223,7 @@ export default function DashboardPage() {
 
       {/* Sub-stat badges */}
       {!isLoading && stats && (
-        <motion.div {...fadeUp} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <motion.div {...fadeUp} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
           <div className="rounded-xl border border-border/60 px-4 py-2.5">
             <div className="flex items-center gap-2">
               {stats.revenueChange >= 0 ? (
@@ -239,6 +252,13 @@ export default function DashboardPage() {
           </div>
           <div className="rounded-xl border border-border/60 px-4 py-2.5">
             <div className="flex items-center gap-2">
+              <Wallet className="size-4 text-amber-500" />
+              <span className="text-sm font-medium">{formatCurrency(stats.todayPendingRevenue)}</span>
+              <span className="text-xs text-muted-foreground">pending collection</span>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/60 px-4 py-2.5">
+            <div className="flex items-center gap-2">
               <Users className="size-4 text-purple-500" />
               <span className="text-sm font-medium">{stats.newCustomersThisMonth}</span>
               <span className="text-xs text-muted-foreground">new this month</span>
@@ -262,7 +282,7 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <IndianRupee className="size-5" />
-                Revenue — Last 7 Days
+                Paid Revenue — Last 7 Days
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -373,7 +393,7 @@ export default function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{item.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {item.count} orders · {formatCurrency(item.revenue)}
+                          {item.count} paid · {formatCurrency(item.revenue)}
                         </p>
                       </div>
                     </div>

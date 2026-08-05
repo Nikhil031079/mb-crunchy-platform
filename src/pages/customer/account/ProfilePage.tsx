@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { Loader2, Save } from "lucide-react";
@@ -14,11 +14,31 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/utils";
+
+import type { Order } from "@/types";
 
 export default function ProfilePage() {
   const { user } = useAuth();
   const customer = useQuery(api.customers.getByAuthUser, {});
   const updateProfile = useMutation(api.customers.updateProfile);
+
+  // "Total Paid" counts money actually collected — only orders with a verified
+  // payment are included, so unpaid/pending/cancelled/refunded orders never
+  // overstate what the customer has really spent.
+  const orders = useQuery(
+    api.orders.getByCustomer,
+    customer ? { customerId: customer._id } : "skip",
+  ) as Order[] | undefined;
+
+  const totalPaid = useMemo(
+    () =>
+      (orders ?? []).reduce(
+        (sum, o) => (o.paymentStatus === "paid" ? sum + (o.total ?? 0) : sum),
+        0,
+      ),
+    [orders],
+  );
 
   const [name, setName] = useState(customer?.name ?? "");
   const [email, setEmail] = useState(customer?.email ?? "");
@@ -146,10 +166,8 @@ export default function ProfilePage() {
               <p className="text-sm font-medium">{customer?.totalOrders ?? 0}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Spent</p>
-              <p className="text-sm font-medium">
-                {customer?.totalSpent ? `₹${customer.totalSpent.toFixed(2)}` : "₹0.00"}
-              </p>
+              <p className="text-sm text-muted-foreground">Total Paid</p>
+              <p className="text-sm font-medium">{formatCurrency(totalPaid)}</p>
             </div>
           </div>
         </CardContent>
