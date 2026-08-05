@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
@@ -147,7 +147,7 @@ export const getMaxRedeemable = query({
 // Mutations
 // ============================================================================
 
-export const ensureSettings = mutation({
+export const ensureSettings = internalMutation({
   handler: async (ctx) => {
     const existing = await ctx.db.query("loyaltySettings").first();
     if (existing) return existing._id;
@@ -167,7 +167,7 @@ export const ensureSettings = mutation({
   },
 });
 
-export const awardPoints = mutation({
+export const awardPoints = internalMutation({
   args: {
     customerId: v.id("customers"),
     orderId: v.id("orders"),

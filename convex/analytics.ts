@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 
 // ============================================================================
 // Daily Metrics Queries
@@ -51,7 +51,7 @@ export const getMetricsRange = query({
 // Daily Metrics Mutations
 // ============================================================================
 
-export const upsertDailyMetric = mutation({
+export const upsertDailyMetric = internalMutation({
   args: {
     businessUnitId: v.id("businessUnits"),
     date: v.string(),

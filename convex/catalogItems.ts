@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 // ============================================================================
@@ -445,10 +445,10 @@ export const getTrendingRanked = query({
 });
 
 // ============================================================================
-// Internal sync mutation (called by product/combo/partyPack mutations)
+// Internal sync mutation (called by product/combo/partyPack mutations only)
 // ============================================================================
 
-export const sync = mutation({
+export const sync = internalMutation({
   args: {
     sourceId: v.string(),
     businessUnitId: v.id("businessUnits"),
@@ -512,9 +512,10 @@ export const sync = mutation({
 });
 
 /**
- * Soft delete a catalog item by source ID
+ * Soft delete a catalog item by source ID.
+ * Internal-only: called by the admin-gated product/combo/partyPack deletions.
  */
-export const softDeleteBySource = mutation({
+export const softDeleteBySource = internalMutation({
   args: { sourceId: v.string() },
   handler: async (ctx, args) => {
     const existing = await ctx.db

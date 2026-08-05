@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAdminSession } from "./utils/adminAuth";
@@ -126,7 +126,7 @@ export const update = mutation({
   },
 });
 
-export const incrementUsage = mutation({
+export const incrementUsage = internalMutation({
   args: { id: v.id("offers") },
   handler: async (ctx, args) => {
     const offer = await ctx.db.get(args.id);

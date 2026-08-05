@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
@@ -115,7 +115,7 @@ export const create = mutation({
     });
 
     // Sync to catalog
-    await ctx.runMutation(api.catalogItems.sync, {
+    await ctx.runMutation(internal.catalogItems.sync, {
       sourceId: packId,
       businessUnitId: args.businessUnitId,
       itemType: "partyPack",
@@ -187,7 +187,7 @@ export const update = mutation({
     // Sync to catalog
     const pack = await ctx.db.get(id);
     if (pack) {
-      await ctx.runMutation(api.catalogItems.sync, {
+      await ctx.runMutation(internal.catalogItems.sync, {
         sourceId: id,
         businessUnitId: pack.businessUnitId,
         itemType: "partyPack",
@@ -223,7 +223,7 @@ export const softDelete = mutation({
       updatedAt: now,
     });
 
-    await ctx.runMutation(api.catalogItems.softDeleteBySource, {
+    await ctx.runMutation(internal.catalogItems.softDeleteBySource, {
       sourceId: args.id,
     });
   },
@@ -257,7 +257,7 @@ export const restore = mutation({
     // Restore in catalog
     const pack = await ctx.db.get(args.id);
     if (pack) {
-      await ctx.runMutation(api.catalogItems.sync, {
+      await ctx.runMutation(internal.catalogItems.sync, {
         sourceId: args.id,
         businessUnitId: pack.businessUnitId,
         itemType: "partyPack",

@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { requireAdminSession } from "./utils/adminAuth";
 import { logActivity } from "./orderActivities";
 
@@ -217,7 +217,7 @@ export const getStockMovements = query({
 
 export const upsert = mutation({
   args: {
-    sessionToken: v.optional(v.string()),
+    sessionToken: v.string(),
     catalogItemId: v.id("catalogItems"),
     businessUnitId: v.id("businessUnits"),
     variantName: v.string(),
@@ -233,9 +233,7 @@ export const upsert = mutation({
     location: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (args.sessionToken) {
-      await requireAdminSession(ctx, args.sessionToken);
-    }
+    await requireAdminSession(ctx, args.sessionToken);
 
     if (args.stockQuantity < 0) {
       throw new Error("Stock quantity cannot be negative");
@@ -341,7 +339,7 @@ export const adjustStock = mutation({
   },
 });
 
-export const reserveStock = mutation({
+export const reserveStock = internalMutation({
   args: {
     inventoryId: v.id("inventory"),
     quantity: v.number(),
@@ -393,7 +391,7 @@ export const reserveStock = mutation({
   },
 });
 
-export const confirmReservation = mutation({
+export const confirmReservation = internalMutation({
   args: {
     inventoryId: v.id("inventory"),
     quantity: v.number(),
@@ -447,7 +445,7 @@ export const confirmReservation = mutation({
   },
 });
 
-export const restoreStock = mutation({
+export const restoreStock = internalMutation({
   args: {
     inventoryId: v.id("inventory"),
     quantity: v.number(),

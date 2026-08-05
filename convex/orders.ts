@@ -6,7 +6,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
 import { logActivity } from "./orderActivities";
 import type { ActivityAction } from "./orderActivities";
@@ -707,7 +707,7 @@ export const updateStatus = mutation({
           item.variantName,
         );
         if (inventory) {
-          await ctx.runMutation(api.inventory.confirmReservation, {
+          await ctx.runMutation(internal.inventory.confirmReservation, {
             inventoryId: inventory._id,
             quantity: item.quantity,
             orderId: args.id,
@@ -732,7 +732,7 @@ export const updateStatus = mutation({
           item.variantName,
         );
         if (inventory) {
-          await ctx.runMutation(api.inventory.restoreStock, {
+          await ctx.runMutation(internal.inventory.restoreStock, {
             inventoryId: inventory._id,
             quantity: item.quantity,
             orderId: args.id,
@@ -744,7 +744,7 @@ export const updateStatus = mutation({
 
     // Auto-award loyalty points on delivery
     if (args.status === "delivered" && order.status !== "delivered" && order.customerId) {
-      await ctx.runMutation(api.loyalty.awardPoints, {
+      await ctx.runMutation(internal.loyalty.awardPoints, {
         customerId: order.customerId,
         orderId: args.id,
         orderTotal: order.total,
@@ -823,7 +823,7 @@ export const softDelete = mutation({
           item.variantName,
         );
         if (inventory) {
-          await ctx.runMutation(api.inventory.restoreStock, {
+          await ctx.runMutation(internal.inventory.restoreStock, {
             inventoryId: inventory._id,
             quantity: item.quantity,
             orderId: args.id,

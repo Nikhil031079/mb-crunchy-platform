@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
 import { firstActivePrice } from "./utils/variantHelper";
 
@@ -179,7 +179,7 @@ export const create = mutation({
     });
 
     // Sync to catalog
-    const catalogItemId = await ctx.runMutation(api.catalogItems.sync, {
+    const catalogItemId = await ctx.runMutation(internal.catalogItems.sync, {
       sourceId: productId,
       businessUnitId: args.businessUnitId,
       itemType: "product",
@@ -205,6 +205,7 @@ export const create = mutation({
     for (const variant of activeVariants) {
       const stockQty = variant.stock ?? args.stockQuantity ?? 0;
       await ctx.runMutation(api.inventory.upsert, {
+        sessionToken: args.sessionToken,
         catalogItemId: catalogItemId as any,
         businessUnitId: args.businessUnitId,
         variantName: variant.optionValue,
@@ -284,7 +285,7 @@ export const update = mutation({
       const { price: defaultPrice, compareAtPrice: defaultCompare } =
         firstActivePrice(product.variants);
 
-      await ctx.runMutation(api.catalogItems.sync, {
+      await ctx.runMutation(internal.catalogItems.sync, {
         sourceId: id,
         businessUnitId: product.businessUnitId,
         itemType: "product",
@@ -318,6 +319,7 @@ export const update = mutation({
           for (const variant of activeVariants) {
             const stockQty = variant.stock ?? fields.stockQuantity ?? product.stockQuantity ?? 0;
             await ctx.runMutation(api.inventory.upsert, {
+              sessionToken: args.sessionToken,
               catalogItemId: catalogItem._id,
               businessUnitId: product.businessUnitId,
               variantName: variant.optionValue,
@@ -345,7 +347,7 @@ export const softDelete = mutation({
     });
 
     // Soft delete from catalog
-    await ctx.runMutation(api.catalogItems.softDeleteBySource, {
+    await ctx.runMutation(internal.catalogItems.softDeleteBySource, {
       sourceId: args.id,
     });
   },
@@ -382,7 +384,7 @@ export const restore = mutation({
       const { price: defaultPrice, compareAtPrice: defaultCompare } =
         firstActivePrice(product.variants);
 
-      await ctx.runMutation(api.catalogItems.sync, {
+      await ctx.runMutation(internal.catalogItems.sync, {
         sourceId: args.id,
         businessUnitId: product.businessUnitId,
         itemType: "product",

@@ -1,5 +1,8 @@
 const PBKDF2_ITERATIONS = 100_000;
-const SESSION_SECRET = "mb-crunchy-admin-session-key-v1";
+// Production deployments MUST set SESSION_SECRET via `npx convex env set`.
+// The fallback only preserves local-dev behaviour before the env var is set.
+const SESSION_SECRET =
+  process.env.SESSION_SECRET ?? "mb-crunchy-admin-session-key-v1";
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 function getWebCrypto(): Crypto {
@@ -70,15 +73,28 @@ export async function verifyPassword(
 
 export function generateRecoveryKey(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const wc = getWebCrypto();
   const segments: string[] = ["MBCR"];
   for (let s = 0; s < 4; s++) {
     let segment = "";
     for (let i = 0; i < 4; i++) {
-      segment += chars[Math.floor(Math.random() * chars.length)];
+      segment += chars[secureRandomIndex(wc, chars.length)];
     }
     segments.push(segment);
   }
   return segments.join("-");
+}
+
+/** Uniform random index in [0, maxExclusive) using rejection sampling. */
+function secureRandomIndex(wc: Crypto, maxExclusive: number): number {
+  const buf = new Uint8Array(1);
+  const limit = 256 - (256 % maxExclusive);
+  let value: number;
+  do {
+    wc.getRandomValues(buf);
+    value = buf[0];
+  } while (value >= limit);
+  return value % maxExclusive;
 }
 
 function base64UrlEncode(buffer: ArrayBuffer): string {

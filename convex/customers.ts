@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
 import { requireAdminSession } from "./utils/adminAuth";
@@ -578,7 +578,7 @@ export const getCustomerInsights = query({
 // Mutations
 // ============================================================================
 
-export const create = mutation({
+export const create = internalMutation({
   args: {
     authUserId: v.optional(v.string()),
     name: v.string(),

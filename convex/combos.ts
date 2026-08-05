@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
@@ -115,7 +115,7 @@ export const create = mutation({
     });
 
     // Sync to catalog
-    await ctx.runMutation(api.catalogItems.sync, {
+    await ctx.runMutation(internal.catalogItems.sync, {
       sourceId: comboId,
       businessUnitId: args.businessUnitId,
       itemType: "combo",
@@ -187,7 +187,7 @@ export const update = mutation({
     // Sync to catalog
     const combo = await ctx.db.get(id);
     if (combo) {
-      await ctx.runMutation(api.catalogItems.sync, {
+      await ctx.runMutation(internal.catalogItems.sync, {
         sourceId: id,
         businessUnitId: combo.businessUnitId,
         itemType: "combo",
@@ -223,7 +223,7 @@ export const softDelete = mutation({
       updatedAt: now,
     });
 
-    await ctx.runMutation(api.catalogItems.softDeleteBySource, {
+    await ctx.runMutation(internal.catalogItems.softDeleteBySource, {
       sourceId: args.id,
     });
   },
@@ -257,7 +257,7 @@ export const restore = mutation({
     // Restore in catalog
     const combo = await ctx.db.get(args.id);
     if (combo) {
-      await ctx.runMutation(api.catalogItems.sync, {
+      await ctx.runMutation(internal.catalogItems.sync, {
         sourceId: args.id,
         businessUnitId: combo.businessUnitId,
         itemType: "combo",
