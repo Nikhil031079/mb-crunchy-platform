@@ -1,18 +1,25 @@
 import type { AuthConfig } from "convex/server";
 
-const issuer =
-  process.env.VLY_CONVEX_AUTH_ISSUER ??
-  process.env.CONVEX_SITE_URL ??
-  "http://localhost:5173";
+const siteUrl = process.env.CONVEX_SITE_URL ?? "http://localhost:5173";
+
+const vlyIssuer = process.env.VLY_CONVEX_AUTH_ISSUER;
 
 export default {
   providers: [
     {
-      type: "customJwt",
-      issuer,
-      jwks: `${issuer}/api/web/.well-known/jwks.json`,
+      domain: siteUrl,
       applicationID: "convex",
-      algorithm: "RS256",
     },
+    ...(vlyIssuer && vlyIssuer !== siteUrl
+      ? [
+          {
+            type: "customJwt" as const,
+            issuer: vlyIssuer,
+            jwks: `${vlyIssuer}/api/web/.well-known/jwks.json`,
+            applicationID: "convex",
+            algorithm: "RS256",
+          },
+        ]
+      : []),
   ],
 } satisfies AuthConfig;

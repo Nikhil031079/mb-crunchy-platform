@@ -9,7 +9,7 @@ import {
   Sparkles,
   ChefHat,
   BadgeCheck,
-  CreditCard,
+  Store,
   LayoutGrid,
 } from "lucide-react";
 
@@ -24,16 +24,10 @@ import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 import {
   HeroSection,
   HeroSectionSkeleton,
-  DeliveryInfoStrip,
-  PromoBannerStrip,
-  HappyHourBanner,
-  FlashSalesSection,
+  HomepageInfoStrip,
   HomepageSectionRenderer,
   RecentlyViewedSection,
-  ContinueShoppingSection,
   RecommendedForYouSection,
-  TrendingNowSection,
-  SeasonalSection,
 } from "@/components/customer";
 
 // Shared components
@@ -46,51 +40,45 @@ import type { EnrichedCategory } from "@/data/categories";
 import type { BusinessUnit, Category, Content, HomepageSection } from "@/types";
 
 // ============================================================================
-// Why Choose MB Crunchy — Static brand values
+// Trust items — compact brand trust band
 // ============================================================================
 
-interface WhyChooseItem {
+interface TrustItem {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
   color: string;
 }
 
-const WHY_CHOOSE_ITEMS: WhyChooseItem[] = [
+const TRUST_ITEMS: TrustItem[] = [
   {
     icon: ChefHat,
-    title: "Freshly Prepared",
-    description: "Meals and dishes prepared fresh, every single day for maximum taste.",
+    title: "Fresh Food",
+    description: "Prepared fresh, every single day",
     color: "text-orange-600 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-400",
-  },
-  {
-    icon: Sparkles,
-    title: "Premium Ingredients",
-    description: "Carefully sourced, high-quality ingredients in every single product.",
-    color: "text-purple-600 bg-purple-50 dark:bg-purple-950/50 dark:text-purple-400",
   },
   {
     icon: Leaf,
     title: "Organic Products",
-    description: "Farm-fresh organic groceries and natural staples, free of harmful chemicals.",
+    description: "Farm-fresh & naturally sourced",
     color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-400",
   },
   {
     icon: Truck,
-    title: "Fast Delivery",
-    description: "Swift and reliable delivery right to your doorstep, when you need it.",
+    title: "Fast Local Delivery",
+    description: "At your doorstep in minutes",
     color: "text-amber-600 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-400",
   },
   {
-    icon: CreditCard,
-    title: "Secure Payments",
-    description: "Multiple secure payment options — UPI, cards and more — fully protected.",
+    icon: Store,
+    title: "Pickup",
+    description: "Order online, collect in store",
     color: "text-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-400",
   },
   {
     icon: BadgeCheck,
-    title: "Quality Assured",
-    description: "Every product meets our strict quality standards before reaching you.",
+    title: "Trusted Local Store",
+    description: "Your neighbourhood favourite",
     color: "text-green-600 bg-green-50 dark:bg-green-950/50 dark:text-green-400",
   },
 ];
@@ -296,37 +284,69 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 2. PROMOTIONAL BANNER STRIP — active promotions (horizontal)     */}
+      {/* 2. EXPERIENCE CTA — below the hero for an early conversion       */}
       {/* ================================================================ */}
 
-      {!isLoading && <PromoBannerStrip />}
+      {!isLoading && (
+        <section className="relative overflow-hidden bg-primary py-12 text-primary-foreground sm:py-14">
+          <div className="absolute inset-0">
+            <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/5" />
+            <div className="absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-white/5" />
+          </div>
+          <div className="relative mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="mx-auto max-w-2xl"
+            >
+              <Sparkles className="mx-auto mb-4 h-8 w-8 text-accent" />
+              <h2 className="text-2xl font-bold sm:text-3xl">
+                Ready to Experience {SITE_NAME}?
+              </h2>
+              <p className="mt-3 text-base text-primary-foreground/70">
+                Browse our stores, explore our products, and enjoy seamless delivery right to your doorstep.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                {activeBusinessUnits.map((bu) => (
+                  <Link
+                    key={bu._id}
+                    to={`/${bu.slug}`}
+                    className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-medium backdrop-blur-sm transition-all hover:bg-white/20"
+                  >
+                    {bu.logo ? (
+                      <img src={bu.logo} alt="" className="h-5 w-5 rounded object-cover" />
+                    ) : (
+                      <div
+                        className="h-5 w-5 rounded"
+                        style={{ backgroundColor: bu.themeColor || "#fff" }}
+                      />
+                    )}
+                    {bu.name}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
 
       {/* ================================================================ */}
-      {/* 3. HAPPY HOUR — active announcement banner, when currently valid */}
+      {/* 3. INFO STRIP — merged promo / announcement / trust points       */}
       {/* ================================================================ */}
 
-      {!isLoading && <HappyHourBanner />}
+      {!isLoading && <HomepageInfoStrip />}
 
       {/* ================================================================ */}
-      {/* 4. DELIVERY INFORMATION STRIP                                   */}
-      {/* ================================================================ */}
-
-      {!isLoading && <DeliveryInfoStrip />}
-
-      {/* ================================================================ */}
-      {/* 5. FLASH SALES — time-urgent active offers with countdown        */}
-      {/* ================================================================ */}
-
-      {!isLoading && <FlashSalesSection businessUnits={activeBusinessUnits} />}
-
-      {/* ================================================================ */}
-      {/* 6. BROWSE BY CATEGORY — Premium category grid                    */}
+      {/* 4. BROWSE BY CATEGORY — Premium category grid                    */}
       {/* ================================================================ */}
 
       {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
-      {/* 7. DYNAMIC HOMEPAGE SECTIONS — ordered via homepageSections      */}
+      {/* 5. DYNAMIC HOMEPAGE SECTIONS — ordered via homepageSections      */}
       {/* ================================================================ */}
 
       {!isLoading && sectionsReady && (
@@ -350,133 +370,46 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 8. SEASONAL PICKS — time-aware themed product row                 */}
-      {/* ================================================================ */}
-
-      {!isLoading && <SeasonalSection businessUnits={activeBusinessUnits} />}
-
-      {/* ================================================================ */}
-      {/* 9. CONTINUE SHOPPING — cart-category related products            */}
-      {/* ================================================================ */}
-
-      {!isLoading && <ContinueShoppingSection businessUnits={activeBusinessUnits} />}
-
-      {/* ================================================================ */}
-      {/* 10. RECOMMENDED FOR YOU — deterministic personalized picks        */}
+      {/* 6. RECOMMENDED FOR YOU — deterministic personalized picks        */}
       {/* ================================================================ */}
 
       {!isLoading && <RecommendedForYouSection businessUnits={activeBusinessUnits} />}
 
       {/* ================================================================ */}
-      {/* 11. RECENTLY VIEWED — localStorage, guest-friendly                */}
+      {/* 7. RECENTLY VIEWED — localStorage, guest-friendly                */}
       {/* ================================================================ */}
 
       {!isLoading && <RecentlyViewedSection businessUnits={activeBusinessUnits} />}
 
       {/* ================================================================ */}
-      {/* 12. TRENDING NOW — featured/order/view ranked row                 */}
+      {/* 8. TRUST BAND — compact brand trust points                       */}
       {/* ================================================================ */}
 
-      {!isLoading && <TrendingNowSection businessUnits={activeBusinessUnits} />}
-
-      {/* ================================================================ */}
-      {/* 13. WHY CHOOSE MB CRUNCHY                                        */}
-      {/* ================================================================ */}
-
-      <section className="py-16 sm:py-20">
+      <section className="border-t border-border/40 bg-secondary/20 py-10 sm:py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10">
-            <div className="mb-2 flex items-center justify-center gap-2">
-              <Sparkles className="h-4 w-4 text-accent" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-accent">
-                Why Us
-              </span>
-            </div>
-            <h2 className="text-xl font-bold sm:text-2xl">
-              Why Choose {SITE_NAME}
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground max-w-lg mx-auto">
-              We're committed to delivering the best experience across every service
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {WHY_CHOOSE_ITEMS.map((item, index) => {
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-5">
+            {TRUST_ITEMS.map((item) => {
               const Icon = item.icon;
               return (
-                <motion.div
-                  key={item.title}
-                  initial={{ opacity: 0, y: 16 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-40px" }}
-                  transition={{ duration: 0.35, delay: index * 0.06 }}
-                  className="group"
-                >
-                  <div className="h-full rounded-2xl border border-border/40 bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5 hover:border-accent/20">
-                    <div
-                      className={cn(
-                        "mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3",
-                        item.color
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <h3 className="font-semibold text-sm">{item.title}</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                <div key={item.title} className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                      item.color
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold leading-tight">{item.title}</p>
+                    <p className="text-xs text-muted-foreground leading-tight">
                       {item.description}
                     </p>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
-        </div>
-      </section>
-
-      {/* ================================================================ */}
-      {/* 14. FINAL CTA                                                    */}
-      {/* ================================================================ */}
-
-      <section className="relative overflow-hidden bg-primary py-16 text-primary-foreground sm:py-20">
-        <div className="absolute inset-0">
-          <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/5" />
-          <div className="absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-white/5" />
-        </div>
-        <div className="relative mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="mx-auto max-w-2xl"
-          >
-            <Sparkles className="mx-auto mb-4 h-8 w-8 text-accent" />
-            <h2 className="text-2xl font-bold sm:text-3xl">
-              Ready to Experience {SITE_NAME}?
-            </h2>
-            <p className="mt-3 text-base text-primary-foreground/70">
-              Browse our stores, explore our products, and enjoy seamless delivery right to your doorstep.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              {activeBusinessUnits.map((bu) => (
-                <Link
-                  key={bu._id}
-                  to={`/${bu.slug}`}
-                  className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-medium backdrop-blur-sm transition-all hover:bg-white/20"
-                >
-                  {bu.logo ? (
-                    <img src={bu.logo} alt="" className="h-5 w-5 rounded object-cover" />
-                  ) : (
-                    <div
-                      className="h-5 w-5 rounded"
-                      style={{ backgroundColor: bu.themeColor || "#fff" }}
-                    />
-                  )}
-                  {bu.name}
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              ))}
-            </div>
-          </motion.div>
         </div>
       </section>
     </div>

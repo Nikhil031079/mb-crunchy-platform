@@ -1,11 +1,15 @@
-import { useState, useCallback, useEffect } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 import type { CartItem, CartState } from "@/types";
 import { STORAGE_KEYS } from "@/constants";
 import { safeJsonParse } from "@/utils";
 
 // ============================================================================
-// Cart Store
+// Cart Store — module-level singleton shared by every consumer of `useCart`.
+//
+// Each call to `useCart` subscribes to the SAME store, so adding, updating or
+// clearing the cart in one component immediately re-renders the header badge,
+// the cart page and every other subscribed consumer — no refresh required.
 // ============================================================================
 
 const CART_STORAGE_KEY = STORAGE_KEYS.CART;
@@ -42,7 +46,6 @@ function loadPersistedCart(): CartState | undefined {
     const stored = localStorage.getItem(CART_STORAGE_KEY);
     if (!stored) return undefined;
 
-    // Migrate legacy carts that still use productId
     const parsed = safeJsonParse<CartState | undefined>(stored, undefined);
     if (!parsed) return undefined;
 
@@ -52,78 +55,102 @@ function loadPersistedCart(): CartState | undefined {
   }
 }
 
+// ----------------------------------------------------------------------------
+// Module-level state + subscription registry
+// ----------------------------------------------------------------------------
+
+let state: CartState = loadPersistedCart() ?? defaultCartState;
+
+const listeners = new Set<() => void>();
+
+function emit(): void {
+  persistCart(state);
+  for (const listener of listeners) listener();
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot(): CartState {
+  return state;
+}
+
+function getServerSnapshot(): CartState {
+  return defaultCartState;
+}
+
+function setState(updater: (prev: CartState) => CartState): void {
+  const next = updater(state);
+  if (next === state) return;
+  state = next;
+  emit();
+}
+
 // ============================================================================
 // Cart Hook
 // ============================================================================
 
 export function useCart() {
-  const [cart, setCart] = useState<CartState>(() => {
-    const persisted = loadPersistedCart();
-    return persisted ?? defaultCartState;
-  });
+  const cart = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  // Persist cart on changes
-  useEffect(() => {
-    persistCart(cart);
-  }, [cart]);
-
-  const addItem = useCallback(
-    (item: Omit<CartItem, "totalPrice">) => {
-      setCart((prev) => {
-        // If adding from a different business unit, clear cart first
-        if (prev.businessUnitId && prev.businessUnitId !== item.businessUnitId) {
-          const newItems = [{ ...item, totalPrice: item.unitPrice * item.quantity }];
-          const subtotal = calculateSubtotal(newItems);
-          return {
-            ...defaultCartState,
-            items: newItems,
-            businessUnitId: item.businessUnitId,
-            subtotal,
-            total: subtotal,
-          };
-        }
-
-        // Check if item already exists (same catalogItemId + variant)
-        const existingIndex = prev.items.findIndex(
-          (i) => i.catalogItemId === item.catalogItemId && i.variantName === item.variantName
-        );
-
-        let newItems: CartItem[];
-
-        if (existingIndex >= 0) {
-          newItems = prev.items.map((existing, index) => {
-            if (index !== existingIndex) return existing;
-            const newQty = existing.quantity + item.quantity;
-            return {
-              ...existing,
-              quantity: newQty,
-              totalPrice: existing.unitPrice * newQty,
-            };
-          });
-        } else {
-          newItems = [
-            ...prev.items,
-            { ...item, totalPrice: item.unitPrice * item.quantity },
-          ];
-        }
-
+  const addItem = useCallback((item: Omit<CartItem, "totalPrice">) => {
+    setState((prev) => {
+      // If adding from a different business unit, clear cart first
+      if (prev.businessUnitId && prev.businessUnitId !== item.businessUnitId) {
+        const newItems = [{ ...item, totalPrice: item.unitPrice * item.quantity }];
         const subtotal = calculateSubtotal(newItems);
-
         return {
-          ...prev,
+          ...defaultCartState,
           items: newItems,
           businessUnitId: item.businessUnitId,
           subtotal,
-          total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax),
+          total: subtotal,
         };
-      });
-    },
-    []
-  );
+      }
+
+      // Check if item already exists (same catalogItemId + variant)
+      const existingIndex = prev.items.findIndex(
+        (i) => i.catalogItemId === item.catalogItemId && i.variantName === item.variantName
+      );
+
+      let newItems: CartItem[];
+
+      if (existingIndex >= 0) {
+        newItems = prev.items.map((existing, index) => {
+          if (index !== existingIndex) return existing;
+          const newQty = existing.quantity + item.quantity;
+          return {
+            ...existing,
+            quantity: newQty,
+            totalPrice: existing.unitPrice * newQty,
+          };
+        });
+      } else {
+        newItems = [
+          ...prev.items,
+          { ...item, totalPrice: item.unitPrice * item.quantity },
+        ];
+      }
+
+      const subtotal = calculateSubtotal(newItems);
+
+      return {
+        ...prev,
+        items: newItems,
+        businessUnitId: item.businessUnitId,
+        subtotal,
+        total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax),
+      };
+    });
+  }, []);
 
   const updateQuantity = useCallback(
     (catalogItemId: string, variantName: string, quantity: number) => {
-      setCart((prev) => {
+      setState((prev) => {
         if (quantity <= 0) {
           return removeItemInternal(prev, catalogItemId, variantName);
         }
@@ -146,15 +173,12 @@ export function useCart() {
     []
   );
 
-  const removeItem = useCallback(
-    (catalogItemId: string, variantName: string) => {
-      setCart((prev) => removeItemInternal(prev, catalogItemId, variantName));
-    },
-    []
-  );
+  const removeItem = useCallback((catalogItemId: string, variantName: string) => {
+    setState((prev) => removeItemInternal(prev, catalogItemId, variantName));
+  }, []);
 
   const clearCart = useCallback(() => {
-    setCart(defaultCartState);
+    setState(() => defaultCartState);
     try {
       localStorage.removeItem(CART_STORAGE_KEY);
     } catch {
@@ -174,7 +198,7 @@ export function useCart() {
   };
 }
 
-// Internal helper to avoid recreating the callback
+// Internal helper to avoid recreating the logic
 function removeItemInternal(
   prev: CartState,
   catalogItemId: string,

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,8 +11,6 @@ import {
   List,
   ArrowUpDown,
   ChevronDown,
-  Sparkles,
-  Star,
   ArrowRight,
   Utensils,
   ShoppingBag,
@@ -23,7 +21,7 @@ import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
-import { SITE_NAME, ROUTES } from "@/constants";
+import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
 import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
@@ -41,13 +39,12 @@ import {
   PartyPackCardSkeleton,
   CardGridSkeleton,
   StoreStatusBadge,
-  StoreSchedule,
 } from "@/components/customer";
 import { getStockStatus, getProductStockStatus } from "@/components/customer/StockBadge";
 import type { StockInfo } from "@/components/customer/StockBadge";
 
 // Shared components
-import { CategoryCard, CategoryIcon } from "@/components/shared/CategoryCard";
+import { CategoryIcon } from "@/components/shared/CategoryCard";
 import { SearchBar } from "@/components/shared/SearchBar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -64,7 +61,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product, CatalogItem } from "@/types";
+import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product } from "@/types";
 import type { Id } from "@convex/_generated/dataModel";
 
 // ============================================================================
@@ -103,11 +100,6 @@ export default function BusinessUnitPage() {
   // ==========================================================================
   // Data Fetching
   // ==========================================================================
-
-  // Load all business units (for header nav && BU switcher)
-  const allBusinessUnits = useQuery(api.businessUnits.getActive) as
-    | BusinessUnit[]
-    | undefined;
 
   // Load the specific business unit by slug
   const businessUnit = useQuery(api.businessUnits.getBySlug, {
@@ -230,24 +222,6 @@ export default function BusinessUnitPage() {
     () => activeCategories.map((c) => enrichCategory(c, catalog)),
     [activeCategories, catalog]
   );
-
-  // Product count per category (products with a synced catalog item)
-  const catalogItemBySourceId = useMemo(() => {
-    const map = new Map<string, CatalogItem>();
-    for (const item of catalogItems ?? []) {
-      if (item.itemType === "product") map.set(item.sourceId, item);
-    }
-    return map;
-  }, [catalogItems]);
-
-  const countByCategoryId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const p of allProducts ?? []) {
-      if (!catalogItemBySourceId.has(p._id)) continue;
-      map.set(p.categoryId, (map.get(p.categoryId) ?? 0) + 1);
-    }
-    return map;
-  }, [allProducts, catalogItemBySourceId]);
 
   // Ratings summary for catalog items (keyed by catalog item id)
   const catalogItemIds = useMemo(
@@ -660,29 +634,6 @@ export default function BusinessUnitPage() {
             ))}
           </div>
         )}
-
-        {/* Category Cards (when no filter is active) */}
-        {activeCategoryId === null && enrichedCategories.length > 0 && !searchQuery && (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {enrichedCategories.slice(0, 6).map((cat, index) => (
-              <button
-                key={cat._id}
-                onClick={() => handleCategoryChange(cat._id)}
-                className="group text-left"
-              >
-                <CategoryCard
-                  category={cat}
-                  businessUnitSlug={buSlug}
-                  index={index}
-                  productCount={countByCategoryId.get(cat._id) ?? 0}
-                  icon={cat.catalog?.icon}
-                  gradient={cat.catalog?.gradient}
-                  featured={cat.catalog?.featured}
-                />
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ================================================================ */}
@@ -874,111 +825,6 @@ export default function BusinessUnitPage() {
           </motion.section>
         )}
       </div>
-
-      {/* ================================================================ */}
-      {/* FOOTER                                                           */}
-      {/* ================================================================ */}
-
-      <footer className="border-t border-border/40 bg-secondary/30">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5">
-            {/* Brand */}
-            <div className="space-y-4">
-              <Link to="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <span className="text-lg font-bold">{SITE_NAME}</span>
-              </Link>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {bu.description || "Your premium destination for quality products and services."}
-              </p>
-            </div>
-
-            {/* Quick Links */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold tracking-tight">Quick Links</h4>
-              <ul className="space-y-3">
-                <li>
-                  <Link to="/" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    Home
-                  </Link>
-                </li>
-                <li>
-                  <Link to={`/${buSlug}`} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    {bu.name}
-                  </Link>
-                </li>
-                <li>
-                  <Link to={ROUTES.CART} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    Cart
-                  </Link>
-                </li>
-                <li>
-                  <Link to={ROUTES.CHECKOUT} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    Checkout
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Business Units */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold tracking-tight">Our Services</h4>
-              {allBusinessUnits && allBusinessUnits.length > 0 ? (
-                <ul className="space-y-3">
-                  {allBusinessUnits.filter((b) => b._id !== bu._id).slice(0, 4).map((b) => (
-                    <li key={b._id}>
-                      <Link
-                        to={`/${b.slug}`}
-                        className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        {b.logo ? (
-                          <img src={b.logo} alt="" className="h-4 w-4 rounded object-cover" />
-                        ) : (
-                          <div className="h-4 w-4 rounded" style={{ backgroundColor: b.themeColor || "#000" }} />
-                        )}
-                        {b.name}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">Services coming soon</p>
-              )}
-            </div>
-
-            {/* Opening Hours */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold tracking-tight">Opening Hours</h4>
-              {buSettings ? (
-                <StoreSchedule
-                  openingHours={buSettings.openingHours}
-                  isOpen={buSettings.isOpen}
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">Hours coming soon</p>
-              )}
-            </div>
-
-            {/* Support */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold tracking-tight">Support</h4>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Need help with your order? Our support team is here to assist you.
-              </p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Star className="h-4 w-4 text-accent" />
-                <span>Available 24/7</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-12 border-t border-border/40 pt-6 text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
