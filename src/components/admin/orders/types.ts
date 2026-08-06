@@ -135,6 +135,17 @@ export function canCancel(order: OrderRecord): boolean {
   return getAllowedTransitions(order.status, order.orderType).includes("cancelled");
 }
 
+// A failed/rejected verification can be re-opened while the order is still
+// alive (never after it is collected, cancelled, or refunded).
+export function canReopenPaymentVerification(order: OrderRecord): boolean {
+  return (
+    (order.paymentStatus === "failed" || order.paymentStatus === "rejected") &&
+    order.status !== "cancelled" &&
+    order.status !== "refunded" &&
+    order.status !== "delivered"
+  );
+}
+
 export function canBulkRefund(order: OrderRecord): boolean {
   return order.status === "delivered" && order.paymentStatus === "paid";
 }

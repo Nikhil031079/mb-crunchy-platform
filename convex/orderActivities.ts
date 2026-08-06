@@ -10,6 +10,7 @@ import { query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAdminSession } from "./utils/adminAuth";
+import { isCustomerOwner } from "./utils/customerAccess";
 
 export const ACTIVITY_ACTIONS = [
   "order_created",
@@ -17,6 +18,7 @@ export const ACTIVITY_ACTIONS = [
   "payment_verified",
   "payment_failed",
   "payment_rejected",
+  "payment_reopened",
   "order_accepted",
   "preparing",
   "ready",
@@ -83,6 +85,15 @@ export const getByOrder = query({
 export const getByOrderForCustomer = query({
   args: { orderId: v.id("orders") },
   handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order || !order.customerId) return [];
+
+    // Only the authenticated customer who owns the order may read its
+    // timeline. The guest tracking page uses the bundled activities returned
+    // by orders.getByPhoneAndOrderNumber instead of this query.
+    const allowed = await isCustomerOwner(ctx, order.customerId);
+    if (!allowed) return [];
+
     return await ctx.db
       .query("orderActivities")
       .withIndex("by_order", (q) => q.eq("orderId", args.orderId))

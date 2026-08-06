@@ -44,6 +44,7 @@ import type * as settings from "../settings.js";
 import type * as users from "../users.js";
 import type * as utils_adminAuth from "../utils/adminAuth.js";
 import type * as utils_crypto from "../utils/crypto.js";
+import type * as utils_customerAccess from "../utils/customerAccess.js";
 import type * as utils_storeHours from "../utils/storeHours.js";
 import type * as utils_variantHelper from "../utils/variantHelper.js";
 
@@ -90,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   "utils/adminAuth": typeof utils_adminAuth;
   "utils/crypto": typeof utils_crypto;
+  "utils/customerAccess": typeof utils_customerAccess;
   "utils/storeHours": typeof utils_storeHours;
   "utils/variantHelper": typeof utils_variantHelper;
 }>;

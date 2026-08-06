@@ -38,6 +38,12 @@ import type { Order } from "@/types";
 interface PaymentPendingCardProps {
   order: Order;
   onOrderAgain: (order: Order) => void;
+  /**
+   * Phone number of the customer who placed the order. The sanitized,
+   * customer-facing order projection intentionally strips `customerPhone`, so
+   * the caller supplies it from the verified source (tracking form / profile).
+   */
+  phone?: string;
 }
 
 interface PaymentConfig {
@@ -46,7 +52,7 @@ interface PaymentConfig {
   whatsappNumber?: string;
 }
 
-export function PaymentPendingCard({ order, onOrderAgain }: PaymentPendingCardProps) {
+export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendingCardProps) {
   const [showQR, setShowQR] = useState(false);
   const [claimState, setClaimState] = useState<"idle" | "claiming" | "claimed">("idle");
   const [reference, setReference] = useState("");
@@ -70,7 +76,7 @@ export function PaymentPendingCard({ order, onOrderAgain }: PaymentPendingCardPr
     try {
       const res = await claimPayment({
         orderId: order._id as Id<"orders">,
-        phone: order.customerPhone,
+        phone: phone || order.customerPhone,
         reference: referenceArg?.trim() || undefined,
       });
       if (res.outcome === "claimed" || res.outcome === "already_claimed") {

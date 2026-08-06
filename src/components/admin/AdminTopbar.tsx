@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ROUTES } from "@/constants";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 interface AdminTopbarProps {
   title: string;
@@ -22,6 +23,8 @@ interface AdminTopbarProps {
 }
 
 export function AdminTopbar({ title, group, onOpenMobileNavigation }: AdminTopbarProps) {
+  const { getSessionToken } = useAdminAuth();
+  const sessionToken = getSessionToken();
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
       <Button
@@ -41,7 +44,7 @@ export function AdminTopbar({ title, group, onOpenMobileNavigation }: AdminTopba
       </div>
 
       <div className="flex items-center gap-1.5">
-        <NotificationBell userId="admin" />
+        <NotificationBell userId="admin" sessionToken={sessionToken ?? undefined} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="ghost" className="h-9 gap-2 px-1.5" aria-label="Open user menu">

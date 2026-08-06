@@ -443,6 +443,7 @@ export type OrderActivityAction =
   | "payment_verified"
   | "payment_failed"
   | "payment_rejected"
+  | "payment_reopened"
   | "order_accepted"
   | "preparing"
   | "ready"

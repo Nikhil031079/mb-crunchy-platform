@@ -183,7 +183,8 @@ function toUpdateArgs(id: string, values: ProductFormValues) {
 
 export default function ProductsPage() {
   const { getSessionToken } = useAdminAuth();
-  const allDocs = useQuery(api.products.getAll);
+  const token = getSessionToken();
+  const allDocs = useQuery(api.products.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const allCats = useQuery(api.categories.getAll);
   const createProd = useMutation(api.products.create);

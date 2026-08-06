@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/utils";
 import { computeRevenueMetrics, isPaid as isPaidRevenueOrder } from "@/lib/finance";
 import type { Order, InventoryItem, Customer } from "@/types";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import {
   TrendingUp,
   TrendingDown,
@@ -59,10 +60,12 @@ function SkeletonCard() {
 }
 
 export default function DashboardPage() {
-  const orders = useQuery(api.orders.getAll);
-  const products = useQuery(api.products.getAll);
-  const customers = useQuery(api.customers.getAll);
-  const inventory = useQuery(api.inventory.getAll);
+  const { getSessionToken } = useAdminAuth();
+  const token = getSessionToken();
+  const orders = useQuery(api.orders.getAll, token ? { sessionToken: token } : "skip");
+  const products = useQuery(api.products.getAll, token ? { sessionToken: token } : "skip");
+  const customers = useQuery(api.customers.getAll, token ? { sessionToken: token } : "skip");
+  const inventory = useQuery(api.inventory.getAll, token ? { sessionToken: token } : "skip");
 
   const isLoading = orders === undefined || products === undefined || customers === undefined;
 

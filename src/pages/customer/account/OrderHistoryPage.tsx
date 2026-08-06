@@ -372,6 +372,7 @@ export default function OrderHistoryPage() {
                           order.status === "refunded") && (
                           <PaymentPendingCard
                             order={order}
+                            phone={customer?.phone}
                             onOrderAgain={handleOrderAgain}
                           />
                         )}

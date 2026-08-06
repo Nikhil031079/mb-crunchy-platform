@@ -37,13 +37,21 @@ async function findInventoryForOrderItem(
 // ============================================================================
 
 /**
- * Cancel orders that have been stuck in "pending" (payment unverified) past
- * the reservation timeout and release the stock reserved for them. Without
- * this, an abandoned checkout permanently ties up inventory and the storefront
- * can show "insufficient stock" for items that are actually on hand.
+ * Cancel orders that have been stuck without payment past the reservation
+ * timeout and release the stock reserved for them. Without this, an abandoned
+ * checkout permanently ties up inventory and the storefront can show
+ * "insufficient stock" for items that are actually on hand.
  *
- * Only unpaid orders are touched (paymentStatus pending / pending_verification).
- * Orders that were already marked paid or refunded are never auto-cancelled.
+ * Two order states are scanned:
+ *  - "pending"  — payment was never verified. Only the reservation exists, so
+ *    it is released (reservedStock reduced; on-hand stock untouched).
+ *  - "confirmed" — an admin accepted the order, so on-hand stock was already
+ *    deducted at confirmation. These are restored back to on-hand inventory
+ *    (stockQuantity increased; reservedStock is already reduced).
+ *
+ * Only unpaid orders are touched (paymentStatus pending / pending_verification
+ * / failed / rejected). Orders already marked paid or refunded are never
+ * auto-cancelled, and delivered orders are never scanned.
  *
  * Timeout is configurable via the RESERVATION_TIMEOUT_MINUTES env var
  * (default 60 minutes). Safe to run repeatedly: restoreStock is a no-op when
@@ -66,17 +74,25 @@ export const cleanupExpiredReservations = internalMutation({
     const cutoff = Date.now() - timeoutMinutes * 60 * 1000;
     const now = Date.now();
 
-    const staleOrders = await ctx.db
+    const stalePredicate = (q: any) =>
+      q.and(
+        q.eq(q.field("deletedAt"), undefined),
+        q.lt(q.field("createdAt"), cutoff),
+      );
+
+    const stalePending = await ctx.db
       .query("orders")
       .withIndex("by_status", (q) => q.eq("status", "pending"))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("deletedAt"), undefined),
-          q.lt(q.field("createdAt"), cutoff),
-        ),
-      )
+      .filter(stalePredicate)
       .collect();
 
+    const staleConfirmed = await ctx.db
+      .query("orders")
+      .withIndex("by_status", (q) => q.eq("status", "confirmed"))
+      .filter(stalePredicate)
+      .collect();
+
+    const staleOrders = [...stalePending, ...staleConfirmed];
     let cancelled = 0;
     let releasedItems = 0;
 
@@ -87,6 +103,11 @@ export const cleanupExpiredReservations = internalMutation({
       ) {
         continue;
       }
+
+      // Confirmed orders already deducted on-hand stock at confirmation, so
+      // the stock must be added back. Pending orders only release the
+      // reservation. Mirrors the cancel/refund logic in orders.updateStatus.
+      const deducted = order.status !== "pending";
 
       for (const item of order.items) {
         const inventory = await findInventoryForOrderItem(
@@ -100,6 +121,7 @@ export const cleanupExpiredReservations = internalMutation({
           inventoryId: inventory._id,
           quantity: item.quantity,
           orderId: order._id,
+          deducted,
         });
         releasedItems++;
       }
@@ -113,7 +135,7 @@ export const cleanupExpiredReservations = internalMutation({
         orderId: order._id,
         businessUnitId: order.businessUnitId,
         action: "cancelled",
-        previousValue: "pending",
+        previousValue: order.status,
         newValue: "cancelled",
         actor: "system",
         visibleToCustomer: true,

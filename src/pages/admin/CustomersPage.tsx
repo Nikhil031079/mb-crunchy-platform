@@ -40,6 +40,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/utils";
 import type { Customer, Order, CustomerAddress, LoyaltyAccount } from "@/types";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import {
   Users,
   Search,
@@ -116,8 +117,10 @@ type SortField = "name" | "totalSpent" | "totalOrders" | "createdAt";
 type SortDir = "asc" | "desc";
 
 export default function CustomersPage() {
-  const customers = useQuery(api.customers.getAll);
-  const orders = useQuery(api.orders.getAll);
+  const { getSessionToken } = useAdminAuth();
+  const token = getSessionToken();
+  const customers = useQuery(api.customers.getAll, token ? { sessionToken: token } : "skip");
+  const orders = useQuery(api.orders.getAll, token ? { sessionToken: token } : "skip");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -357,19 +360,23 @@ function CustomerDetailDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const customerId = customer?._id as Id<"customers"> | undefined;
+  const { getSessionToken } = useAdminAuth();
+  const token = getSessionToken();
 
-  const orders = useQuery(api.orders.getByCustomer, customerId ? { customerId } : "skip");
-  const addresses = useQuery(api.addresses.getByCustomer, customerId ? { customerId } : "skip");
-  const loyalty = useQuery(api.loyalty.getBalance, customerId ? { customerId } : "skip");
-  const tierProgress = useQuery(api.loyalty.getTierProgress, customerId ? { customerId } : "skip");
-  const loyaltyTransactions = useQuery(api.loyalty.getTransactions, customerId ? { customerId } : "skip");
-  const customer360 = useQuery(api.customers.getCustomer360, customerId ? { customerId } : "skip");
-  const customerInsights = useQuery(api.customers.getCustomerInsights, customerId ? { customerId } : "skip");
-  const timeline = useQuery(api.customers.getCustomerTimeline, customerId ? { customerId } : "skip");
+  const orders = useQuery(api.orders.getByCustomer, customerId && token ? { sessionToken: token, customerId } : "skip") as
+    | Order[]
+    | undefined;
+  const addresses = useQuery(api.addresses.getByCustomer, customerId && token ? { sessionToken: token, customerId } : "skip");
+  const loyalty = useQuery(api.loyalty.getBalance, customerId && token ? { sessionToken: token, customerId } : "skip");
+  const tierProgress = useQuery(api.loyalty.getTierProgress, customerId && token ? { sessionToken: token, customerId } : "skip");
+  const loyaltyTransactions = useQuery(api.loyalty.getTransactions, customerId && token ? { sessionToken: token, customerId } : "skip");
+  const customer360 = useQuery(api.customers.getCustomer360, customerId && token ? { sessionToken: token, customerId } : "skip");
+  const customerInsights = useQuery(api.customers.getCustomerInsights, customerId && token ? { sessionToken: token, customerId } : "skip");
+  const timeline = useQuery(api.customers.getCustomerTimeline, customerId && token ? { sessionToken: token, customerId } : "skip");
 
-  if (!customer) return null;
+  if (!customer || !tierProgress) return null;
 
-  const recentOrders = (orders ?? []).slice(0, 10) as Order[];
+  const recentOrders = (orders ?? []).slice(0, 10);
   const customerAddresses = (addresses ?? []) as CustomerAddress[];
   const loyaltyData = loyalty as LoyaltyAccount | null;
 

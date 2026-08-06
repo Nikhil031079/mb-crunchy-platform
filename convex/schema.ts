@@ -396,6 +396,7 @@ const orderActivities = defineTable({
     v.literal("payment_verified"),
     v.literal("payment_failed"),
     v.literal("payment_rejected"),
+    v.literal("payment_reopened"),
     v.literal("order_accepted"),
     v.literal("preparing"),
     v.literal("ready"),

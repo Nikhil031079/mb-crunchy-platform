@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import { requireAdminSession } from "./utils/adminAuth";
+import { sanitizeInventoryForStorefront } from "./utils/customerAccess";
 import { logActivity } from "./orderActivities";
 
 // ============================================================================
@@ -42,7 +43,9 @@ export async function logMovement(
 // ============================================================================
 
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("inventory")
       .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
@@ -50,9 +53,20 @@ export const getAll = query({
   },
 });
 
+export const getStorefrontAll = query({
+  handler: async (ctx) => {
+    const docs = await ctx.db
+      .query("inventory")
+      .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+    return docs.map(sanitizeInventoryForStorefront);
+  },
+});
+
 export const getByIds = query({
-  args: { ids: v.array(v.id("inventory")) },
+  args: { sessionToken: v.string(), ids: v.array(v.id("inventory")) },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const results = await Promise.all(
       args.ids.map((id) => ctx.db.get(id)),
     );
@@ -63,28 +77,31 @@ export const getByIds = query({
 export const getByCatalogItem = query({
   args: { catalogItemId: v.id("catalogItems") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const docs = await ctx.db
       .query("inventory")
       .withIndex("by_catalog_item", (q) => q.eq("catalogItemId", args.catalogItemId))
       .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
       .collect();
+    return docs.map(sanitizeInventoryForStorefront);
   },
 });
 
 export const getByBusinessUnit = query({
   args: { businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const docs = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
       .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
       .collect();
+    return docs.map(sanitizeInventoryForStorefront);
   },
 });
 
 export const getAvailable = query({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -101,8 +118,9 @@ export const getAvailable = query({
 });
 
 export const getBySku = query({
-  args: { sku: v.string() },
+  args: { sessionToken: v.string(), sku: v.string() },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("inventory")
       .withIndex("by_sku", (q) => q.eq("sku", args.sku))
@@ -112,8 +130,9 @@ export const getBySku = query({
 });
 
 export const getByBarcode = query({
-  args: { barcode: v.string() },
+  args: { sessionToken: v.string(), barcode: v.string() },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("inventory")
       .withIndex("by_barcode", (q) => q.eq("barcode", args.barcode))
@@ -123,8 +142,9 @@ export const getByBarcode = query({
 });
 
 export const getLowStock = query({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -140,8 +160,9 @@ export const getLowStock = query({
 });
 
 export const getOutOfStock = query({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -153,8 +174,9 @@ export const getOutOfStock = query({
 });
 
 export const getInventorySummary = query({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -199,10 +221,12 @@ export const getInventorySummary = query({
 
 export const getStockMovements = query({
   args: {
+    sessionToken: v.string(),
     inventoryId: v.id("inventory"),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("stockMovements")
       .withIndex("by_inventory", (q) => q.eq("inventoryId", args.inventoryId))

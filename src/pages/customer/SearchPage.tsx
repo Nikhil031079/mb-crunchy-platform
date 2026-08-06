@@ -477,10 +477,10 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
   const categoriesAll = useQuery(api.categories.getAll, isSearching ? {} : "skip") as
     | Category[]
     | undefined;
-  const productsAll = useQuery(api.products.getAll, isSearching ? {} : "skip") as
-    | Product[]
+  const catalogItemsAll = useQuery(api.catalogItems.getAll, isSearching ? {} : "skip") as
+    | CatalogItem[]
     | undefined;
-  const inventoryAll = useQuery(api.inventory.getAll, isSearching ? {} : "skip") as
+  const inventoryAll = useQuery(api.inventory.getStorefrontAll, isSearching ? {} : "skip") as
     | InventoryItem[]
     | undefined;
 
@@ -492,11 +492,28 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
     return map;
   }, [categoriesAll]);
 
+  // Product docs for the currently-visible search results only (public
+  // getByIds) — maps a product sourceId to its category for filtering.
+  const productSourceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const buResults of allRawResults) {
+      for (const item of buResults ?? []) {
+        if (item.itemType === "product") ids.add(item.sourceId);
+      }
+    }
+    return [...ids];
+  }, [allRawResults]);
+
+  const resultProducts = useQuery(
+    api.products.getByIds,
+    productSourceIds.length > 0 ? { ids: productSourceIds as never[] } : "skip",
+  ) as Product[] | undefined;
+
   const productCategoryBySourceId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const product of productsAll ?? []) map.set(product._id, product.categoryId);
+    for (const product of resultProducts ?? []) map.set(product._id, product.categoryId);
     return map;
-  }, [productsAll]);
+  }, [resultProducts]);
 
   // Corpus of known item names for "Did you mean" suggestions — bounded so the
   // edit-distance pass stays cheap on every keystroke.
@@ -509,15 +526,15 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
         list.push(tag);
       }
     }
-    for (const product of productsAll ?? []) {
+    for (const item of catalogItemsAll ?? []) {
       if (list.length >= 200) break;
-      if (!seen.has(product.name)) {
-        seen.add(product.name);
-        list.push(product.name);
+      if (!seen.has(item.name)) {
+        seen.add(item.name);
+        list.push(item.name);
       }
     }
     return list;
-  }, [productsAll]);
+  }, [catalogItemsAll]);
 
   const didYouMean = useMemo(
     () => suggestCorrection(debouncedQuery, suggestionCorpus),

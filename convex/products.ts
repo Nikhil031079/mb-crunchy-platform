@@ -354,7 +354,9 @@ export const softDelete = mutation({
 });
 
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("products")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))

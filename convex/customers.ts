@@ -56,7 +56,10 @@ export async function ensureCustomerByPhone(
 // ============================================================================
 
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
     const docs = await ctx.db
       .query("customers")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
@@ -81,8 +84,9 @@ export const getAll = query({
 });
 
 export const getByAuthUserId = query({
-  args: { authUserId: v.string() },
+  args: { sessionToken: v.string(), authUserId: v.string() },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("customers")
       .withIndex("by_auth_user", (q) => q.eq("authUserId", args.authUserId))
@@ -92,8 +96,9 @@ export const getByAuthUserId = query({
 });
 
 export const getByPhone = query({
-  args: { phone: v.string() },
+  args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("customers")
       .withIndex("by_phone", (q) => q.eq("phone", args.phone))
@@ -109,8 +114,10 @@ export const getByPhone = query({
 const NET_ORDER_STATUSES = ["cancelled", "refunded"];
 
 export const getCustomer360 = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
 
@@ -185,8 +192,10 @@ export const getCustomer360 = query({
 });
 
 export const getCustomerSummary = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
 
@@ -246,8 +255,10 @@ export interface CustomerTimelineEvent {
 }
 
 export const getCustomerTimeline = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
 
@@ -461,8 +472,10 @@ function computeOrderingActivity(orders: Doc<"orders">[]) {
 }
 
 export const getCustomerInsights = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
 

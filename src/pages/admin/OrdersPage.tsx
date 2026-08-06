@@ -279,9 +279,11 @@ function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: {
 export default function OrdersPage() {
   const navigate = useNavigate();
   const { getSessionToken } = useAdminAuth();
-  const allOrders = useQuery(api.orders.getAll);
+  const token = getSessionToken();
+  const allOrders = useQuery(api.orders.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const updateStatus = useMutation(api.orders.updateStatus);
+  const reopenPaymentVerification = useMutation(api.orders.reopenPaymentVerification);
   const bulkUpdateStatus = useMutation(api.orderBulk.bulkUpdateStatus);
   const bulkCancel = useMutation(api.orderBulk.bulkCancel);
   const bulkRefund = useMutation(api.orderBulk.bulkRefund);
@@ -595,6 +597,24 @@ export default function OrdersPage() {
     }
   };
 
+  const handleReopenPaymentVerification = async (order: OrderRecord) => {
+    try {
+      const res = await reopenPaymentVerification({
+        sessionToken: getSessionToken()!,
+        orderId: toOrderId(order.id),
+      });
+      if (res.reopened) {
+        toast.success(`${order.orderNumber} — verification re-opened`, {
+          description: "The customer can now retry payment and submit a new claim.",
+        });
+      } else {
+        toast.info(`${order.orderNumber} is already awaiting verification`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to re-open payment verification");
+    }
+  };
+
   return (
     <div>
       <PageHeader title="Orders" description="Manage customer orders and fulfillment.">
@@ -659,7 +679,7 @@ export default function OrdersPage() {
             isBusy={isBulkPending}
           />
           {isLoading ? (
-            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAllVisible} />
+            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} onReopenPaymentVerification={() => undefined} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAllVisible} />
           ) : visible.length === 0 ? (
             <EmptyState
               icon={ShoppingCart}
@@ -679,6 +699,7 @@ export default function OrdersPage() {
                 onQuickStatus={handleQuickStatus}
                 onCancel={handleCancel}
                 onUpdatePaymentStatus={handlePaymentStatusUpdate}
+                onReopenPaymentVerification={handleReopenPaymentVerification}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
                 onToggleSelectAll={toggleSelectAllVisible}

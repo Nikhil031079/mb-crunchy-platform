@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Daily Metrics Queries
@@ -11,10 +12,12 @@ import { query, mutation, internalMutation } from "./_generated/server";
 
 export const getDailyMetrics = query({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     date: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("dailyMetrics")
       .withIndex("by_business_unit", (q) =>
@@ -26,11 +29,13 @@ export const getDailyMetrics = query({
 
 export const getMetricsRange = query({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     startDate: v.string(),
     endDate: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("dailyMetrics")
       .withIndex("by_business_unit", (q) =>
@@ -117,6 +122,7 @@ export const trackEvent = mutation({
 
 export const getEvents = query({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     eventType: v.optional(
       v.union(
@@ -130,6 +136,7 @@ export const getEvents = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     let query = ctx.db
       .query("analyticsEvents")
       .withIndex("by_business_unit", (q) =>
@@ -147,10 +154,12 @@ export const getEvents = query({
 
 export const getMostViewed = query({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     const events = await ctx.db
       .query("analyticsEvents")
       .withIndex("by_event_type", (q) => q.eq("eventType", "view"))

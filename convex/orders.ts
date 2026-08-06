@@ -8,6 +8,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { requireAdminSession } from "./utils/adminAuth";
+import { canReadCustomerData, sanitizeOrderForCustomer } from "./utils/customerAccess";
 import { logActivity } from "./orderActivities";
 import type { ActivityAction } from "./orderActivities";
 import { logMovement } from "./inventory";
@@ -36,8 +37,9 @@ const CLAIM_COOLDOWN_MS = 2 * 60 * 1000;
 // ============================================================================
 
 export const getByBusinessUnit = query({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("orders")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -48,20 +50,32 @@ export const getByBusinessUnit = query({
 });
 
 export const getByCustomer = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.optional(v.string()), customerId: v.id("customers") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const allowed = await canReadCustomerData(ctx, {
+      customerId: args.customerId,
+      sessionToken: args.sessionToken,
+    });
+    if (!allowed) return [];
+
+    const docs = await ctx.db
       .query("orders")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("desc")
       .collect();
+
+    // Admin sessions read the full document (UTR, address, contact details).
+    // Customer-owner reads are projected so PII and internal metadata never
+    // leave the server.
+    return args.sessionToken ? docs : docs.map(sanitizeOrderForCustomer);
   },
 });
 
 export const getByPhone = query({
-  args: { phone: v.string() },
+  args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("orders")
       .withIndex("by_phone", (q) => q.eq("customerPhone", args.phone))
@@ -73,6 +87,7 @@ export const getByPhone = query({
 
 export const getByStatus = query({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     status: v.union(
       v.literal("pending"),
@@ -86,6 +101,7 @@ export const getByStatus = query({
     ),
   },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("orders")
       .withIndex("by_status", (q) => q.eq("status", args.status))
@@ -101,7 +117,9 @@ export const getByStatus = query({
 });
 
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("orders")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
@@ -111,9 +129,59 @@ export const getAll = query({
 });
 
 export const getById = query({
-  args: { orderId: v.id("orders") },
+  args: { sessionToken: v.string(), orderId: v.id("orders") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db.get(args.orderId);
+  },
+});
+
+// ============================================================================
+// Public order tracking
+// ============================================================================
+
+/**
+ * Secure guest order tracking. The caller must present BOTH the phone number
+ * used at checkout AND the order number shown on the receipt. Returns exactly
+ * one order (never a list) with all PII stripped, plus the customer-visible
+ * activity timeline.
+ *
+ * The arg object + return shape are deliberately stable: a future
+ * "phone + order number + OTP" verification step can be added as an extra
+ * optional arg (e.g. `otp`) with an additional server-side check inside this
+ * handler — no call-site or response-shape change required.
+ */
+export const getByPhoneAndOrderNumber = query({
+  args: { phone: v.string(), orderNumber: v.string() },
+  handler: async (ctx, args) => {
+    const phone = args.phone.trim();
+    const orderNumber = args.orderNumber.trim().toUpperCase();
+    if (!phone || !orderNumber) return null;
+
+    const order = await ctx.db
+      .query("orders")
+      .withIndex("by_phone", (q) => q.eq("customerPhone", phone))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("orderNumber"), orderNumber),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .first();
+
+    if (!order) return null;
+
+    const activities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .filter((q) => q.eq(q.field("visibleToCustomer"), true))
+      .order("desc")
+      .collect();
+
+    return {
+      order: sanitizeOrderForCustomer(order),
+      activities,
+    };
   },
 });
 
@@ -839,6 +907,75 @@ export const updateStatus = mutation({
 });
 
 // ============================================================================
+// Re-open payment verification
+// ============================================================================
+
+/**
+ * Admin-only recovery for an order whose payment verification was rejected or
+ * failed. Moves paymentStatus back to "pending_verification" so the customer
+ * can retry payment and submit a fresh claim. This never touches order status,
+ * inventory, or money — it only re-arms the verification window and records an
+ * auditable activity.
+ *
+ * Idempotent: calling it on an order already awaiting verification is a no-op.
+ */
+export const reopenPaymentVerification = mutation({
+  args: { sessionToken: v.string(), orderId: v.id("orders") },
+  handler: async (ctx, args) => {
+    const { admin } = await requireAdminSession(ctx, args.sessionToken);
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order || order.deletedAt) throw new Error("Order not found");
+
+    // Terminal order states have no verification window to re-open.
+    if (
+      order.status === "cancelled" ||
+      order.status === "refunded" ||
+      order.status === "delivered"
+    ) {
+      throw new Error("This order can no longer be re-opened for verification");
+    }
+
+    // Money already collected — never un-verify a paid/refunded order.
+    if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
+      throw new Error("Payment is already settled for this order");
+    }
+
+    // Already awaiting verification — idempotent no-op (double-click safe).
+    if (order.paymentStatus === "pending_verification") {
+      return { reopened: false };
+    }
+
+    // Only a failed or rejected verification can be re-opened.
+    if (
+      order.paymentStatus !== "failed" &&
+      order.paymentStatus !== "rejected"
+    ) {
+      throw new Error("Payment is not in a failed or rejected state");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.orderId, {
+      paymentStatus: "pending_verification",
+      updatedAt: now,
+    });
+
+    await logActivity(ctx, {
+      orderId: args.orderId,
+      businessUnitId: order.businessUnitId,
+      action: "payment_reopened",
+      previousValue: order.paymentStatus,
+      newValue: "pending_verification",
+      actor: admin.username,
+      actorId: admin._id,
+      visibleToCustomer: true,
+    });
+
+    return { reopened: true };
+  },
+});
+
+// ============================================================================
 // Customer payment claim
 // ============================================================================
 
@@ -879,8 +1016,15 @@ export const claimPayment = mutation({
       return { outcome: "already_paid" as const };
     }
 
-    // Only unpaid orders awaiting verification can be claimed.
-    if (order.paymentStatus !== "pending_verification") {
+    // A claim may be submitted while payment is awaiting verification, or after
+    // a failed/rejected verification when the customer has retried and wants a
+    // re-check. Paid/refunded orders are handled above; "pending" (never
+    // submitted for verification) stays un-claimable.
+    if (
+      order.paymentStatus !== "pending_verification" &&
+      order.paymentStatus !== "failed" &&
+      order.paymentStatus !== "rejected"
+    ) {
       return { outcome: "not_pending" as const };
     }
 

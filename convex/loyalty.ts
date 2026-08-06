@@ -7,6 +7,7 @@ import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { canReadCustomerData } from "./utils/customerAccess";
 
 // ============================================================================
 // Helpers
@@ -33,8 +34,10 @@ export const getSettings = query({
 });
 
 export const getBalance = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.optional(v.string()), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    const allowed = await canReadCustomerData(ctx, args);
+    if (!allowed) return null;
     return await ctx.db
       .query("loyaltyAccounts")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
@@ -44,8 +47,10 @@ export const getBalance = query({
 });
 
 export const getTransactions = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.optional(v.string()), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    const allowed = await canReadCustomerData(ctx, args);
+    if (!allowed) return [];
     return await ctx.db
       .query("loyaltyTransactions")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
@@ -55,8 +60,11 @@ export const getTransactions = query({
 });
 
 export const getTierProgress = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.optional(v.string()), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    const allowed = await canReadCustomerData(ctx, args);
+    if (!allowed) return null;
+
     const account = await ctx.db
       .query("loyaltyAccounts")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
@@ -139,8 +147,16 @@ export async function getMaxRedeemableInternal(
 }
 
 export const getMaxRedeemable = query({
-  args: { customerId: v.id("customers"), orderTotal: v.number() },
-  handler: async (ctx, args) => getMaxRedeemableInternal(ctx, args),
+  args: {
+    sessionToken: v.optional(v.string()),
+    customerId: v.id("customers"),
+    orderTotal: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const allowed = await canReadCustomerData(ctx, args);
+    if (!allowed) return null;
+    return getMaxRedeemableInternal(ctx, args);
+  },
 });
 
 // ============================================================================

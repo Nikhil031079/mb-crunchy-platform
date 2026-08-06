@@ -89,7 +89,8 @@ function SummaryCard({ title, value, icon: Icon, className }: { title: string; v
 
 export default function InventoryPage() {
   const { getSessionToken } = useAdminAuth();
-  const allInventory = useQuery(api.inventory.getAll);
+  const token = getSessionToken();
+  const allInventory = useQuery(api.inventory.getAll, token ? { sessionToken: token } : "skip");
   const allCatalogItems = useQuery(api.catalogItems.getAll);
   const allBUs = useQuery(api.businessUnits.getAll);
   const upsertInventory = useMutation(api.inventory.upsert);

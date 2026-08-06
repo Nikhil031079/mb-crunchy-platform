@@ -4,14 +4,17 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { canReadCustomerData } from "./utils/customerAccess";
 
 // ============================================================================
 // Queries
 // ============================================================================
 
 export const getByCustomer = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.optional(v.string()), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    const allowed = await canReadCustomerData(ctx, args);
+    if (!allowed) return [];
     return await ctx.db
       .query("addresses")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
@@ -21,8 +24,10 @@ export const getByCustomer = query({
 });
 
 export const getDefault = query({
-  args: { customerId: v.id("customers") },
+  args: { sessionToken: v.optional(v.string()), customerId: v.id("customers") },
   handler: async (ctx, args) => {
+    const allowed = await canReadCustomerData(ctx, args);
+    if (!allowed) return null;
     return await ctx.db
       .query("addresses")
       .withIndex("by_default", (q) =>

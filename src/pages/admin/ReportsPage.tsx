@@ -25,6 +25,7 @@ import {
 
 import { api } from "@convex/_generated/api";
 
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -212,11 +213,13 @@ interface Movement {
 }
 
 export default function ReportsPage() {
-  const orders = useQuery(api.orders.getAll);
+  const { getSessionToken } = useAdminAuth();
+  const token = getSessionToken();
+  const orders = useQuery(api.orders.getAll, token ? { sessionToken: token } : "skip");
   const businessUnits = useQuery(api.businessUnits.getAll);
-  const inventory = useQuery(api.inventory.getAll);
+  const inventory = useQuery(api.inventory.getAll, token ? { sessionToken: token } : "skip");
   const catalogItems = useQuery(api.catalogItems.getAll);
-  const products = useQuery(api.products.getAll);
+  const products = useQuery(api.products.getAll, token ? { sessionToken: token } : "skip");
   const categories = useQuery(api.categories.getAll);
 
   const [rangeKey, setRangeKey] = useState<RangeKey>("today");

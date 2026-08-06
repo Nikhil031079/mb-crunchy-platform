@@ -17,6 +17,12 @@ import type { InAppNotificationType } from "@/types";
 
 interface NotificationBellProps {
   userId: string;
+  /**
+   * Admin session token. Required when `userId` is an admin account — the
+   * underlying queries only return data for the signed-in owner or an
+   * authenticated admin session.
+   */
+  sessionToken?: string;
   className?: string;
 }
 
@@ -38,18 +44,18 @@ function timeAgo(ts: number): string {
   return `${days}d ago`;
 }
 
-export function NotificationBell({ userId, className }: NotificationBellProps) {
+export function NotificationBell({ userId, sessionToken, className }: NotificationBellProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   const unreadCount = useQuery(
     api.inAppNotifications.getUnreadCount,
-    userId ? { userId } : "skip",
+    userId ? { userId, ...(sessionToken ? { sessionToken } : {}) } : "skip",
   );
 
   const notifications = useQuery(
     api.inAppNotifications.getForUser,
-    userId ? { userId, limit: 20 } : "skip",
+    userId ? { userId, limit: 20, ...(sessionToken ? { sessionToken } : {}) } : "skip",
   );
 
   const markRead = useMutation(api.inAppNotifications.markRead);

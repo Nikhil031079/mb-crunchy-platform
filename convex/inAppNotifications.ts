@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
+import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -11,11 +12,19 @@ import { query, mutation, internalMutation } from "./_generated/server";
 
 export const getForUser = query({
   args: {
+    sessionToken: v.optional(v.string()),
     userId: v.string(),
     unreadOnly: v.optional(v.boolean()),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (args.sessionToken) {
+      await requireAdminSession(ctx, args.sessionToken);
+    } else if (!identity || identity.subject !== args.userId) {
+      return [];
+    }
+
     const limit = args.limit ?? 50;
 
     if (args.unreadOnly) {
@@ -37,8 +46,15 @@ export const getForUser = query({
 });
 
 export const getUnreadCount = query({
-  args: { userId: v.string() },
+  args: { sessionToken: v.optional(v.string()), userId: v.string() },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (args.sessionToken) {
+      await requireAdminSession(ctx, args.sessionToken);
+    } else if (!identity || identity.subject !== args.userId) {
+      return 0;
+    }
+
     const unread = await ctx.db
       .query("inAppNotifications")
       .withIndex("by_user_read", (q) =>

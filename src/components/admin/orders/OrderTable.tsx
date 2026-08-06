@@ -10,7 +10,7 @@ import { STATUS_COLORS } from "@/constants";
 import { cn } from "@/lib/utils";
 
 import type { OrderRecord, OrderSortKey, PaymentStatus, SortDirection } from "./types";
-import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS } from "./types";
+import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS, canReopenPaymentVerification } from "./types";
 
 // ---------------------------------------------------------------------------
 // Elapsed timer (kitchen queue)
@@ -69,6 +69,7 @@ interface OrderTableProps {
   onQuickStatus: (order: OrderRecord) => void;
   onCancel: (order: OrderRecord) => void;
   onUpdatePaymentStatus: (order: OrderRecord, paymentStatus: PaymentStatus) => void;
+  onReopenPaymentVerification: (order: OrderRecord) => void;
   selectedIds?: ReadonlySet<string>;
   onToggleSelect?: (orderId: string) => void;
   onToggleSelectAll?: () => void;
@@ -78,7 +79,7 @@ interface OrderTableProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onUpdatePaymentStatus, selectedIds, onToggleSelect, onToggleSelectAll }: OrderTableProps) {
+export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onUpdatePaymentStatus, onReopenPaymentVerification, selectedIds, onToggleSelect, onToggleSelectAll }: OrderTableProps) {
   const hasSelection = Boolean(onToggleSelect);
   const skeletonCols = hasSelection ? 10 : 9;
 
@@ -191,6 +192,17 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                           Reject
                         </Button>
                       </>
+                    )}
+                    {canReopenPaymentVerification(order) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-amber-600"
+                        title="Re-open verification so the customer can retry payment"
+                        onClick={() => onReopenPaymentVerification(order)}
+                      >
+                        Re-open
+                      </Button>
                     )}
                     <Button variant="ghost" size="icon" className="size-7" onClick={() => onViewDetail(order)}>
                       <Eye aria-hidden="true" className="size-3.5" />

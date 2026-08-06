@@ -11,8 +11,9 @@ import { requireAdminSession } from "./utils/adminAuth";
 // ============================================================================
 
 export const getByBusinessUnit = query({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("notifications")
       .withIndex("by_business_unit", (q) =>
@@ -25,6 +26,7 @@ export const getByBusinessUnit = query({
 
 export const getChannel = query({
   args: {
+    sessionToken: v.string(),
     businessUnitId: v.id("businessUnits"),
     channel: v.union(
       v.literal("whatsapp"),
@@ -34,6 +36,7 @@ export const getChannel = query({
     ),
   },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("notifications")
       .withIndex("by_channel", (q) =>
@@ -47,8 +50,9 @@ export const getChannel = query({
 });
 
 export const getEnabledChannels = query({
-  args: { businessUnitId: v.id("businessUnits") },
+  args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
     return await ctx.db
       .query("notifications")
       .withIndex("by_business_unit", (q) =>

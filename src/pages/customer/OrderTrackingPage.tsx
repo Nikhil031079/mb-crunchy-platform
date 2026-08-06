@@ -10,9 +10,7 @@ import {
   Truck,
   XCircle,
   ArrowLeft,
-  MapPin,
   Phone,
-  ChevronRight,
   CalendarClock,
   Store,
   Tag,
@@ -320,19 +318,24 @@ function TrackingSummary({
 
 export default function OrderTrackingPage() {
   const [phone, setPhone] = useState("");
-  const [searchedPhone, setSearchedPhone] = useState<string | null>(null);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [orderNumber, setOrderNumber] = useState("");
+  const [searchedKey, setSearchedKey] = useState<{ phone: string; orderNumber: string } | null>(null);
 
   const { addItem } = useCart();
 
-  const orders = useQuery(
-    api.orders.getByPhone,
-    searchedPhone ? { phone: searchedPhone } : "skip"
+  // Secure guest lookup: BOTH the phone number and the order number must match
+  // a single order. This never returns a list of orders for a phone number and
+  // never exposes sensitive fields (UTR, contact details, delivery address).
+  const tracked = useQuery(
+    api.orders.getByPhoneAndOrderNumber,
+    searchedKey
+      ? { phone: searchedKey.phone, orderNumber: searchedKey.orderNumber }
+      : "skip",
   );
 
   const businessUnits = useQuery(
     api.businessUnits.getAll,
-    selectedOrderId ? {} : "skip"
+    tracked ? {} : "skip"
   );
 
   useEffect(() => {
@@ -342,23 +345,27 @@ export default function OrderTrackingPage() {
   const handleSearch = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      const cleaned = phone.trim().replace(/[\s\-()]/g, "");
-      if (!cleaned || cleaned.length < 7) {
+      const cleanedPhone = phone.trim().replace(/[\s\-()]/g, "");
+      const cleanedOrderNumber = orderNumber.trim().toUpperCase();
+      if (!cleanedPhone || cleanedPhone.length < 7) {
         toast.error("Please enter a valid phone number");
         return;
       }
-      setSearchedPhone(cleaned);
-      setSelectedOrderId(null);
+      if (!cleanedOrderNumber) {
+        toast.error("Please enter your order number");
+        return;
+      }
+      setSearchedKey({ phone: cleanedPhone, orderNumber: cleanedOrderNumber });
     },
-    [phone]
+    [phone, orderNumber]
   );
 
-  const selectedOrder = orders?.find((o) => o._id === selectedOrderId);
+  const selectedOrder = (tracked?.order ?? null) as Order | null;
+  const activities = tracked?.activities;
 
-  const activities = useQuery(
-    api.orderActivities.getByOrderForCustomer,
-    selectedOrder ? { orderId: selectedOrder._id } : "skip"
-  );
+  const businessUnitName = selectedOrder
+    ? businessUnits?.find((bu) => bu._id === selectedOrder.businessUnitId)?.name
+    : undefined;
 
   // Re-add a previous order's items to the cart so the customer can order again
   // (e.g. after a reservation expired). Stock is validated again at checkout.
@@ -406,26 +413,26 @@ export default function OrderTrackingPage() {
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">Track Your Order</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Enter the phone number you used to place your order.
+            Enter the phone number and order number used to place your order.
           </p>
         </motion.div>
 
-        {/* Phone Search Form */}
+        {/* Search Form */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
           className="rounded-xl border border-border/60 bg-card p-6 mb-6"
         >
-          <form onSubmit={handleSearch} className="flex gap-3">
-            <div className="flex-1">
-              <Label htmlFor="phone" className="sr-only">
+          <form onSubmit={handleSearch} className="space-y-4">
+            <div>
+              <Label htmlFor="track-phone" className="text-xs font-medium text-muted-foreground">
                 Phone Number
               </Label>
-              <div className="relative">
+              <div className="relative mt-1.5">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="phone"
+                  id="track-phone"
                   type="tel"
                   placeholder="Enter your phone number"
                   value={phone}
@@ -434,24 +441,40 @@ export default function OrderTrackingPage() {
                 />
               </div>
             </div>
-            <Button type="submit">
+            <div>
+              <Label htmlFor="track-order-number" className="text-xs font-medium text-muted-foreground">
+                Order Number
+              </Label>
+              <div className="relative mt-1.5">
+                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="track-order-number"
+                  type="text"
+                  placeholder="e.g. MB-12345"
+                  value={orderNumber}
+                  onChange={(e) => setOrderNumber(e.target.value)}
+                  className="pl-10 font-mono"
+                />
+              </div>
+            </div>
+            <Button type="submit" className="w-full sm:w-auto">
               <Search className="mr-1.5 h-4 w-4" />
-              Search
+              Track Order
             </Button>
           </form>
         </motion.div>
 
         {/* Results */}
-        {searchedPhone && (
+        {searchedKey && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.15 }}
           >
-            {orders === undefined ? (
+            {tracked === undefined ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Searching orders...
+                  Searching for your order...
                 </p>
                 <div className="space-y-3">
                   {[0, 1, 2].map((i) => (
@@ -459,196 +482,141 @@ export default function OrderTrackingPage() {
                   ))}
                 </div>
               </div>
-            ) : orders.length === 0 ? (
+            ) : !selectedOrder ? (
               <div className="rounded-xl border border-border/60 bg-card p-12 text-center space-y-3">
                 <Package className="mx-auto h-10 w-10 text-muted-foreground/30" />
                 <p className="text-sm text-muted-foreground">
-                  No orders found for {searchedPhone}
+                  No order found for{" "}
+                  <span className="font-medium text-foreground">
+                    {searchedKey.orderNumber}
+                  </span>{" "}
+                  · <span className="font-medium text-foreground">{searchedKey.phone}</span>
                 </p>
                 <p className="text-xs text-muted-foreground/60">
-                  Check the phone number or try a different one.
+                  Double-check the phone number and order number, then try again.
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Found {orders.length} order{orders.length !== 1 ? "s" : ""} for{" "}
-                  <span className="font-medium text-foreground">{searchedPhone}</span>
-                </p>
+              <div className="rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+                {/* Order header */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-semibold">
+                        {selectedOrder.orderNumber}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] px-1.5 py-0",
+                          STATUS_COLORS[selectedOrder.status] ?? ""
+                        )}
+                      >
+                        {getStatusLabel(selectedOrder.status, selectedOrder.orderType)}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(selectedOrder.createdAt)}
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold">
+                    {formatCurrency(selectedOrder.total)}
+                  </span>
+                </div>
 
-                {/* Order List */}
-                <div className="space-y-3">
-                  {orders.map((order) => {
-                    const businessUnitName = businessUnits?.find(
-                      (bu) => bu._id === order.businessUnitId
-                    )?.name;
-                    return (
-                    <button
-                      key={order._id}
-                      onClick={() =>
-                        setSelectedOrderId(
-                          selectedOrderId === order._id ? null : order._id
-                        )
-                      }
-                      className={cn(
-                        "w-full rounded-xl border bg-card p-4 text-left transition-all hover:shadow-sm",
-                        selectedOrderId === order._id
-                          ? "border-primary ring-1 ring-primary/20"
-                          : "border-border/60 hover:border-border"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm font-semibold">
-                              {order.orderNumber}
-                            </span>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] px-1.5 py-0",
-                                STATUS_COLORS[order.status] ?? ""
-                              )}
-                            >
-                              {getStatusLabel(order.status, order.orderType)}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDate(order.createdAt)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">
-                            {formatCurrency(order.total)}
-                          </span>
-                          <ChevronRight
+                {/* Payment pending / continuation */}
+                {(selectedOrder.paymentStatus === "pending_verification" ||
+                  selectedOrder.paymentStatus === "failed" ||
+                  selectedOrder.paymentStatus === "rejected" ||
+                  selectedOrder.status === "cancelled" ||
+                  selectedOrder.status === "refunded") && (
+                  <div className="mt-5">
+                    <PaymentPendingCard
+                      order={selectedOrder}
+                      phone={searchedKey.phone}
+                      onOrderAgain={handleOrderAgain}
+                    />
+                  </div>
+                )}
+
+                {/* Tracking Summary */}
+                <div className="mt-5">
+                  <TrackingSummary
+                    order={selectedOrder}
+                    businessUnitName={businessUnitName}
+                  />
+                </div>
+
+                {/* Progress Flow */}
+                <div className="mt-5">
+                  <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
+                    Order Progress
+                  </p>
+                  <StatusProgressFlow
+                    status={selectedOrder.status}
+                    orderType={selectedOrder.orderType}
+                    paymentStatus={selectedOrder.paymentStatus}
+                  />
+                </div>
+
+                {/* Details */}
+                <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
+                        Details
+                      </p>
+                      <div className="space-y-1.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Payment</span>
+                          <span
                             className={cn(
-                              "h-4 w-4 text-muted-foreground transition-transform",
-                              selectedOrderId === order._id && "rotate-90"
+                              "font-medium capitalize",
+                              PAYMENT_COLORS[selectedOrder.paymentStatus] ?? ""
                             )}
-                          />
+                          >
+                            {PAYMENT_LABELS[selectedOrder.paymentStatus] ?? selectedOrder.paymentStatus}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Items</span>
+                          <span className="font-medium">
+                            {selectedOrder.items.length}
+                          </span>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Expanded Details */}
-                      {selectedOrderId === order._id && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="mt-4 pt-4 border-t border-border/60"
-                        >
-                          {/* Payment pending / continuation */}
-                          {(order.paymentStatus === "pending_verification" ||
-                            order.paymentStatus === "failed" ||
-                            order.paymentStatus === "rejected" ||
-                            order.status === "cancelled" ||
-                            order.status === "refunded") && (
-                            <div className="mb-5">
-                              <PaymentPendingCard
-                                order={order}
-                                onOrderAgain={handleOrderAgain}
-                              />
-                            </div>
-                          )}
-
-                          {/* Tracking Summary */}
-                          <TrackingSummary
-                            order={order}
-                            businessUnitName={businessUnitName}
-                          />
-
-                          {/* Progress Flow */}
-                          <div className="mt-5">
-                            <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
-                              Order Progress
-                            </p>
-                            <StatusProgressFlow
-                              status={order.status}
-                              orderType={order.orderType}
-                              paymentStatus={order.paymentStatus}
-                            />
+                    {/* Items */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
+                        Items
+                      </p>
+                      <div className="space-y-1">
+                        {selectedOrder.items.map((item, i) => (
+                          <div
+                            key={i}
+                            className="flex justify-between text-xs"
+                          >
+                            <span className="text-muted-foreground truncate">
+                              {item.quantity}x {item.name} ({item.variantName})
+                            </span>
+                            <span className="font-medium shrink-0 ml-2">
+                              {formatCurrency(item.totalPrice)}
+                            </span>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                          {/* Details */}
-                          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
-                                  Details
-                                </p>
-                                <div className="space-y-1.5 text-sm">
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Payment</span>
-                                    <span
-                                      className={cn(
-                                        "font-medium capitalize",
-                                        PAYMENT_COLORS[order.paymentStatus] ?? ""
-                                      )}
-                                    >
-                                      {PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Items</span>
-                                    <span className="font-medium">
-                                      {order.items.length}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Items */}
-                              <div>
-                                <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-                                  Items
-                                </p>
-                                <div className="space-y-1">
-                                  {order.items.map((item, i) => (
-                                    <div
-                                      key={i}
-                                      className="flex justify-between text-xs"
-                                    >
-                                      <span className="text-muted-foreground truncate">
-                                        {item.quantity}x {item.name} ({item.variantName})
-                                      </span>
-                                      <span className="font-medium shrink-0 ml-2">
-                                        {formatCurrency(item.totalPrice)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div>
-                              {order.deliveryAddress && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">
-                                    Delivery Address
-                                  </p>
-                                  <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                                    <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
-                                    <span>{order.deliveryAddress}</span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Activity Timeline */}
-                          <div className="mt-5 pt-5 border-t border-border/60">
-                            <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
-                              Activity Timeline
-                            </p>
-                            <OrderActivityFeed activities={activities} />
-                          </div>
-                        </motion.div>
-                      )}
-                    </button>
-                    );
-                  })}
+                {/* Activity Timeline */}
+                <div className="mt-5 pt-5 border-t border-border/60">
+                  <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
+                    Activity Timeline
+                  </p>
+                  <OrderActivityFeed activities={activities} />
                 </div>
               </div>
             )}
