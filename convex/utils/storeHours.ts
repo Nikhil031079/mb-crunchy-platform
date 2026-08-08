@@ -16,9 +16,30 @@ const DAY_NAMES = [
   "saturday",
 ] as const;
 
+// Store hours are configured in the store's local timezone (Asia/Kolkata,
+// UTC+05:30). Convex functions run on UTC clocks, so the current weekday and
+// time-of-day must be derived from UTC shifted by the store's offset — never
+// from `new Date().getDay()/getHours()` directly, or orders get rejected
+// (and accepted) at the wrong local times. India has no DST, so a fixed
+// offset is safe.
+const STORE_TIMEZONE_OFFSET_MINUTES = 5 * 60 + 30;
+
 function parseTime(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+}
+
+/**
+ * Current weekday index + minutes-of-day in the store's timezone.
+ * Handles day rollover when shifting UTC forward by the offset.
+ */
+function getStoreNow(date = new Date()): { day: number; minutes: number } {
+  const shifted =
+    date.getUTCHours() * 60 + date.getUTCMinutes() + STORE_TIMEZONE_OFFSET_MINUTES;
+  const minutes = ((shifted % 1440) + 1440) % 1440;
+  const dayShift = Math.floor(shifted / 1440);
+  const day = (((date.getUTCDay() + dayShift) % 7) + 7) % 7;
+  return { day, minutes };
 }
 
 interface DayHours {
@@ -45,12 +66,11 @@ export function isStoreCurrentlyOpen(
   if (!settings.isOpen) return false;
   if (!settings.openingHours) return true;
 
-  const todayKey = DAY_NAMES[new Date().getDay()];
+  const { day, minutes: currentMinutes } = getStoreNow();
+  const todayKey = DAY_NAMES[day];
   const todayHours = settings.openingHours[todayKey];
   if (!todayHours?.open || !todayHours.close) return false;
 
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const openMinutes = parseTime(todayHours.open);
   const closeMinutes = parseTime(todayHours.close);
 

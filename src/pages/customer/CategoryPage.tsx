@@ -402,6 +402,27 @@ export default function CategoryPage() {
     return () => observer.disconnect();
   }, [isDataLoaded, activeCategories, categoryIdBySlug]);
 
+  // Route fallback — never treat a product slug as a category. When the
+  // :categorySlug segment isn't an active category but matches an active
+  // product in this business unit, build the canonical product URL.
+  const productRedirect = useMemo(() => {
+    if (!isDataLoaded || isBuNotFound || !categorySlug) return null;
+    if (activeCategories.some((c) => c.slug === categorySlug)) return null;
+    const product = (allProducts ?? []).find(
+      (p) => p.slug === categorySlug && p.status === "active"
+    );
+    if (!product) return null;
+    const category = activeCategories.find((c) => c._id === product.categoryId);
+    if (!category) return null;
+    return `/${buSlug}/${category.slug}/${product.slug}`;
+  }, [isDataLoaded, isBuNotFound, activeCategories, categorySlug, allProducts, buSlug]);
+
+  useEffect(() => {
+    if (productRedirect) {
+      navigate(productRedirect, { replace: true });
+    }
+  }, [productRedirect, navigate]);
+
   // ==========================================================================
   // Loading State
   // ==========================================================================
@@ -457,6 +478,30 @@ export default function CategoryPage() {
 
   const noCategories = activeCategories.length === 0;
   const catNotFound = !noCategories && !activeCategories.some((c) => c.slug === categorySlug);
+
+  if (catNotFound && productRedirect) {
+    // The :categorySlug segment matches a product, not a category. The
+    // redirect effect will navigate to the product page shortly; render the
+    // loading state so we never flash a "Category Not Found" error.
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="border-b border-border/40 bg-secondary/30 py-8">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-4 flex items-center gap-2">
+              <div className="h-4 w-20 animate-pulse rounded bg-secondary" />
+              <div className="h-4 w-4 animate-pulse rounded bg-secondary" />
+              <div className="h-4 w-32 animate-pulse rounded bg-secondary" />
+            </div>
+            <div className="h-8 w-56 animate-pulse rounded bg-secondary" />
+            <div className="mt-2 h-4 w-72 animate-pulse rounded bg-secondary" />
+          </div>
+        </div>
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <CardGridSkeleton count={8} columns={4} type="product" />
+        </div>
+      </div>
+    );
+  }
 
   if (catNotFound) {
     return (

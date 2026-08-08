@@ -56,6 +56,13 @@ export const getAll = query({
   },
 });
 
+export const getById = query({
+  args: { id: v.id("businessUnits") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================

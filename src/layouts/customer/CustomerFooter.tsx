@@ -144,7 +144,7 @@ export function CustomerFooter({
                 <li>
                   <Link
                     to={`/${kitchenBu.slug}`}
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {kitchenBu.name}
                   </Link>
@@ -154,14 +154,6 @@ export function CustomerFooter({
                     {kitchenBu.description}
                   </li>
                 )}
-                <li>
-                  <Link
-                    to={`/${kitchenBu.slug}`}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-                  >
-                    Explore Kitchen
-                  </Link>
-                </li>
               </ul>
             ) : (
               <ul className="space-y-2.5">
@@ -184,7 +176,7 @@ export function CustomerFooter({
                 <li>
                   <Link
                     to={`/${martBu.slug}`}
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {martBu.name}
                   </Link>
@@ -194,14 +186,6 @@ export function CustomerFooter({
                     {martBu.description}
                   </li>
                 )}
-                <li>
-                  <Link
-                    to={`/${martBu.slug}`}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-                  >
-                    Shop Mart
-                  </Link>
-                </li>
               </ul>
             ) : (
               <ul className="space-y-2.5">

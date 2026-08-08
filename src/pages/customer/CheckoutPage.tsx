@@ -159,6 +159,9 @@ export default function CheckoutPage() {
       : "skip"
   ) as DeliveryZone[] | undefined;
 
+  // Global settings for payment config
+  const globalSettings = useQuery(api.settings.getGlobalSettings);
+
   // ==========================================================================
   // Store Open Status
   // ==========================================================================
@@ -1472,14 +1475,14 @@ export default function CheckoutPage() {
       {/* UPI Payment QR Modal */}
       {showPaymentQR && pendingOrder && (
         <PaymentQR
-          upiId={buSettings?.paymentConfig?.upiId ?? ""}
-          merchantName={buSettings?.paymentConfig?.merchantName ?? SITE_NAME}
+          upiId={globalSettings?.paymentConfig?.upiId ?? ""}
+          merchantName={globalSettings?.paymentConfig?.merchantName ?? SITE_NAME}
           amount={pricing.total}
           orderNumber={pendingOrder.orderNumber}
-          whatsappNumber={buSettings?.paymentConfig?.whatsappNumber}
+          whatsappNumber={globalSettings?.paymentConfig?.whatsappNumber}
           onPaid={handlePaymentClaimed}
           onWhatsApp={() => {
-            const phone = (buSettings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
+            const phone = (globalSettings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
             const msg = encodeURIComponent(
               `Hi! I've placed order #${pendingOrder.orderNumber} for ${formatCurrency(pricing.total)}. Please confirm my payment.`
             );

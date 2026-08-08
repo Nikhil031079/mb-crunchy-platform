@@ -4,7 +4,6 @@
 
 // Navigation
 export { Header } from "./Header";
-export { Footer } from "./Footer";
 export { DesktopNav, DesktopNavSkeleton } from "./DesktopNav";
 export { MobileNav } from "./MobileNav";
 export { MobileBottomBar } from "./MobileBottomBar";
@@ -34,6 +33,7 @@ export type { CountdownParts } from "./CountdownTimer";
 export { ProductGridSection } from "./ProductGridSection";
 export { RecentlyViewedSection } from "./RecentlyViewedSection";
 export { RecommendedForYouSection } from "./RecommendedForYouSection";
+export { TodaySpecialsSection } from "./TodaySpecialsSection";
 export { FrequentlyBoughtTogetherSection } from "./FrequentlyBoughtTogetherSection";
 export { CrossSellSections } from "./CrossSellSections";
 
@@ -55,6 +55,9 @@ export { StoreStatusDot, StoreStatusBadge, StoreSchedule } from "./StoreStatusBa
 // Stock
 export { StockBadge, getStockStatus, getProductStockStatus } from "./StockBadge";
 export type { StockStatus, StockInfo } from "./StockBadge";
+
+// Flash Sales
+export { FlashSalesSection } from "./FlashSalesSection";
 
 // Loading
 export {

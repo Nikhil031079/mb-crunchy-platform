@@ -18,26 +18,23 @@ import { api } from "@convex/_generated/api";
 import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
 import { isContentActive, getContentMarketingSettings } from "@/utils";
-import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 
 // Customer Reusable Components
 import {
   HeroSection,
   HeroSectionSkeleton,
   HomepageInfoStrip,
-  HomepageSectionRenderer,
-  RecentlyViewedSection,
   RecommendedForYouSection,
+  TodaySpecialsSection,
 } from "@/components/customer";
 
 // Shared components
 import { CategoryCard } from "@/components/shared/CategoryCard";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { getCategoryCatalog, enrichCategory } from "@/data/categories";
 
 import type { EnrichedCategory } from "@/data/categories";
 
-import type { BusinessUnit, Category, Content, HomepageSection } from "@/types";
+import type { BusinessUnit, Category, Content } from "@/types";
 
 // ============================================================================
 // Trust items — compact brand trust band
@@ -170,24 +167,6 @@ export default function HomePage() {
       ),
     [businessUnits]
   );
-
-  // The primary business unit drives the homepage section layout ordering.
-  const primaryBu = activeBusinessUnits[0];
-
-  const { preferredBusinessUnitId } = useBrowsingPreference();
-
-  // Prefer the shopper's preferred BU layout when available; fall back to the
-  // primary BU. Sections themselves are ordered by priority + preference below.
-  const layoutBu =
-    activeBusinessUnits.find((bu) => bu._id === preferredBusinessUnitId) ??
-    primaryBu;
-
-  const homepageSections = useQuery(
-    api.homepageSections.getVisible,
-    layoutBu ? { businessUnitId: layoutBu._id } : "skip",
-  ) as HomepageSection[] | undefined;
-
-  const sectionsReady = layoutBu === undefined || homepageSections !== undefined;
 
   // Build hero banners dynamically from active hero content (date-valid).
   const heroBanners = useMemo(() => {
@@ -346,28 +325,10 @@ export default function HomePage() {
       {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
-      {/* 5. DYNAMIC HOMEPAGE SECTIONS — ordered via homepageSections      */}
+      {/* 5. TODAY'S SPECIALS — deduped featured products across stores    */}
       {/* ================================================================ */}
 
-      {!isLoading && sectionsReady && (
-        activeBusinessUnits.length === 0 ? (
-          <section className="py-16">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-              <EmptyState
-                title="Explore our services"
-                description="Once business units are created, their products and offers will appear here."
-                icon={Sparkles}
-              />
-            </div>
-          </section>
-        ) : (
-          <HomepageSectionRenderer
-            sections={homepageSections}
-            businessUnits={activeBusinessUnits}
-            preferredBusinessUnitId={preferredBusinessUnitId ?? undefined}
-          />
-        )
-      )}
+      {!isLoading && <TodaySpecialsSection businessUnits={activeBusinessUnits} />}
 
       {/* ================================================================ */}
       {/* 6. RECOMMENDED FOR YOU — deterministic personalized picks        */}
@@ -376,13 +337,7 @@ export default function HomePage() {
       {!isLoading && <RecommendedForYouSection businessUnits={activeBusinessUnits} />}
 
       {/* ================================================================ */}
-      {/* 7. RECENTLY VIEWED — localStorage, guest-friendly                */}
-      {/* ================================================================ */}
-
-      {!isLoading && <RecentlyViewedSection businessUnits={activeBusinessUnits} />}
-
-      {/* ================================================================ */}
-      {/* 8. TRUST BAND — compact brand trust points                       */}
+      {/* 7. TRUST BAND — compact brand trust points                       */}
       {/* ================================================================ */}
 
       <section className="border-t border-border/40 bg-secondary/20 py-10 sm:py-12">

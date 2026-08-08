@@ -15,6 +15,7 @@ import {
   Settings,
   ShoppingCart,
   Tag,
+  Truck,
   Users,
   Warehouse,
   Zap,
@@ -45,6 +46,7 @@ const iconMap: Record<AdminNavigationIcon, ComponentType<{ className?: string }>
   Zap,
   Clock3,
   BarChart3,
+  Truck,
 };
 
 interface AdminNavigationProps {

@@ -55,14 +55,6 @@ export const upsertBusinessUnitSettings = mutation({
         twitter: v.optional(v.string()),
       })
     ),
-    paymentConfig: v.optional(
-      v.object({
-        mode: v.union(v.literal("upi_qr"), v.literal("razorpay")),
-        upiId: v.optional(v.string()),
-        merchantName: v.optional(v.string()),
-        whatsappNumber: v.optional(v.string()),
-      })
-    ),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -98,6 +90,16 @@ export const upsertGlobalSettings = mutation({
     primaryColor: v.string(),
     supportEmail: v.optional(v.string()),
     supportPhone: v.optional(v.string()),
+    paymentConfig: v.optional(
+      v.object({
+        mode: v.union(v.literal("upi_qr"), v.literal("razorpay")),
+        upiId: v.optional(v.string()),
+        merchantName: v.optional(v.string()),
+        whatsappNumber: v.optional(v.string()),
+        qrDisplayName: v.optional(v.string()),
+        paymentInstructions: v.optional(v.string()),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);

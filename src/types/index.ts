@@ -698,12 +698,6 @@ export interface BusinessUnitSettings extends Timestamps {
     facebook?: string;
     twitter?: string;
   };
-  paymentConfig?: {
-    mode: "upi_qr" | "razorpay";
-    upiId?: string;
-    merchantName?: string;
-    whatsappNumber?: string;
-  };
   deletedAt?: number;
 }
 
@@ -715,6 +709,14 @@ export interface GlobalSettings extends Timestamps {
   primaryColor: string;
   supportEmail?: string;
   supportPhone?: string;
+  paymentConfig?: {
+    mode: "upi_qr" | "razorpay";
+    upiId?: string;
+    merchantName?: string;
+    whatsappNumber?: string;
+    qrDisplayName?: string;
+    paymentInstructions?: string;
+  };
   deletedAt?: number;
 }
 

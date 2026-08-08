@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { toast } from "sonner";
-import { Loader2, Save, Globe, Building2, Clock, DollarSign, Mail, Phone, MapPin, Share2, ShieldCheck, Eye, EyeOff, KeyRound, LogOut, CreditCard } from "lucide-react";
+import { Loader2, Save, Globe, Building2, Clock, DollarSign, Mail, Phone, MapPin, Share2, ShieldCheck, Eye, EyeOff, KeyRound, LogOut, CreditCard, Users, UserPlus, UserCheck, UserX, Edit2, Trash2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { useNavigate } from "react-router";
 import { ROUTES } from "@/constants";
+import { cn } from "@/lib/utils";
 
 import type { Id } from "@convex/_generated/dataModel";
+
+import { hashPassword } from "@/utils/crypto";
 
 // ============================================================================
 // Opening Hours Helpers
@@ -112,6 +116,12 @@ function GlobalSettingsSection() {
     primaryColor: "#000000",
     supportEmail: "",
     supportPhone: "",
+    paymentMode: "upi_qr" as "upi_qr" | "razorpay",
+    upiId: "",
+    merchantName: "",
+    whatsappNumber: "",
+    qrDisplayName: "",
+    paymentInstructions: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -126,6 +136,12 @@ function GlobalSettingsSection() {
         primaryColor: globalSettings.primaryColor ?? "#000000",
         supportEmail: globalSettings.supportEmail ?? "",
         supportPhone: globalSettings.supportPhone ?? "",
+        paymentMode: globalSettings.paymentConfig?.mode ?? "upi_qr",
+        upiId: globalSettings.paymentConfig?.upiId ?? "",
+        merchantName: globalSettings.paymentConfig?.merchantName ?? "",
+        whatsappNumber: globalSettings.paymentConfig?.whatsappNumber ?? "",
+        qrDisplayName: globalSettings.paymentConfig?.qrDisplayName ?? "",
+        paymentInstructions: globalSettings.paymentConfig?.paymentInstructions ?? "",
       });
       setLoaded(true);
     }
@@ -147,6 +163,14 @@ function GlobalSettingsSection() {
         primaryColor: form.primaryColor,
         supportEmail: form.supportEmail.trim() || undefined,
         supportPhone: form.supportPhone.trim() || undefined,
+        paymentConfig: {
+          mode: form.paymentMode,
+          upiId: form.upiId.trim() || undefined,
+          merchantName: form.merchantName.trim() || undefined,
+          whatsappNumber: form.whatsappNumber.trim() || undefined,
+          qrDisplayName: form.qrDisplayName.trim() || undefined,
+          paymentInstructions: form.paymentInstructions.trim() || undefined,
+        },
       });
       toast.success("Global settings saved");
     } catch (err) {
@@ -240,6 +264,54 @@ function GlobalSettingsSection() {
             </div>
           </div>
         </div>
+
+        <Separator />
+
+        {/* Payment Settings (Global) */}
+        <div>
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            Payment Settings
+          </h3>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Payment Mode</Label>
+              <Select value={form.paymentMode} onValueChange={(v) => setForm((f) => ({ ...f, paymentMode: v as "upi_qr" | "razorpay" }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="upi_qr">UPI QR Code</SelectItem>
+                  <SelectItem value="razorpay">Razorpay (Coming Soon)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.paymentMode === "upi_qr" && (
+              <>
+                <div className="grid gap-2">
+                  <Label>UPI ID <span className="font-normal text-muted-foreground">(required for UPI)</span></Label>
+                  <Input value={form.upiId} onChange={(e) => setForm((f) => ({ ...f, upiId: e.target.value }))} placeholder="yourname@upi" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Merchant Name <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <Input value={form.merchantName} onChange={(e) => setForm((f) => ({ ...f, merchantName: e.target.value }))} placeholder="MB Crunchy" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>QR Display Name <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <Input value={form.qrDisplayName} onChange={(e) => setForm((f) => ({ ...f, qrDisplayName: e.target.value }))} placeholder="MB Crunchy" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Payment Instructions <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <Textarea value={form.paymentInstructions} onChange={(e) => setForm((f) => ({ ...f, paymentInstructions: e.target.value }))} placeholder="Scan QR to pay..." rows={2} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>WhatsApp Business Number <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <Input value={form.whatsappNumber} onChange={(e) => setForm((f) => ({ ...f, whatsappNumber: e.target.value }))} placeholder="+91 98765 43210" />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -272,10 +344,6 @@ function BusinessUnitSettingsSection() {
     facebook: "",
     twitter: "",
     openingHours: defaultOpeningHours() as OpeningHours,
-    paymentMode: "upi_qr" as "upi_qr" | "razorpay",
-    upiId: "",
-    merchantName: "",
-    whatsappNumber: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [loaded, setLoaded] = useState<string | null>(null);
@@ -295,10 +363,6 @@ function BusinessUnitSettingsSection() {
         facebook: buSettings.socialLinks?.facebook ?? "",
         twitter: buSettings.socialLinks?.twitter ?? "",
         openingHours: (buSettings.openingHours as OpeningHours) ?? defaultOpeningHours(),
-        paymentMode: buSettings.paymentConfig?.mode ?? "upi_qr",
-        upiId: buSettings.paymentConfig?.upiId ?? "",
-        merchantName: buSettings.paymentConfig?.merchantName ?? "",
-        whatsappNumber: buSettings.paymentConfig?.whatsappNumber ?? "",
       });
       setLoaded(selectedBuId);
     }
@@ -327,12 +391,6 @@ function BusinessUnitSettingsSection() {
           instagram: form.instagram.trim() || undefined,
           facebook: form.facebook.trim() || undefined,
           twitter: form.twitter.trim() || undefined,
-        },
-        paymentConfig: {
-          mode: form.paymentMode,
-          upiId: form.upiId.trim() || undefined,
-          merchantName: form.merchantName.trim() || undefined,
-          whatsappNumber: form.whatsappNumber.trim() || undefined,
         },
       });
       toast.success("Business unit settings saved");
@@ -524,47 +582,434 @@ function BusinessUnitSettingsSection() {
               </div>
             </div>
           </div>
-
-          {/* Payment Settings */}
-          <div>
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-              Payment Settings
-            </h3>
-            <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label>Payment Mode</Label>
-                <Select value={form.paymentMode} onValueChange={(v) => setForm((f) => ({ ...f, paymentMode: v as "upi_qr" | "razorpay" }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="upi_qr">UPI QR Code</SelectItem>
-                    <SelectItem value="razorpay">Razorpay (Coming Soon)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.paymentMode === "upi_qr" && (
-                <>
-                  <div className="grid gap-2">
-                    <Label>UPI ID <span className="font-normal text-muted-foreground">(required for UPI)</span></Label>
-                    <Input value={form.upiId} onChange={(e) => setForm((f) => ({ ...f, upiId: e.target.value }))} placeholder="yourname@upi" />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Merchant Name <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                    <Input value={form.merchantName} onChange={(e) => setForm((f) => ({ ...f, merchantName: e.target.value }))} placeholder="MB Kitchen" />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>WhatsApp Business Number <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                    <Input value={form.whatsappNumber} onChange={(e) => setForm((f) => ({ ...f, whatsappNumber: e.target.value }))} placeholder="+91 98765 43210" />
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
         </div>
       )}
     </section>
+  );
+}
+
+// ============================================================================
+// Kitchen Staff Management Section
+// ============================================================================
+
+function KitchenStaffSection() {
+  const { getSessionToken } = useAdminAuth();
+  const kitchenStaff = useQuery(api.adminAuth.getKitchenStaff, {
+    sessionToken: getSessionToken() ?? "",
+  });
+  const allBUs = useQuery(api.businessUnits.getAll);
+  const createStaff = useMutation(api.adminAuth.createKitchenStaff);
+  const updateStaff = useMutation(api.adminAuth.updateKitchenStaff);
+  const resetPassword = useMutation(api.adminAuth.resetKitchenStaffPassword);
+  const toggleActive = useMutation(api.adminAuth.toggleKitchenStaffActive);
+
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState<string | null>(null);
+  const [isToggling, setIsToggling] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState<string | null>(null);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [newBusinessUnitIds, setNewBusinessUnitIds] = useState<string[]>([]);
+  const [resetPasswordFor, setResetPasswordFor] = useState<string | null>(null);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [editBusinessUnitIds, setEditBusinessUnitIds] = useState<string[]>([]);
+
+  const handleCreateStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUsername.trim() || !newPassword || newPassword !== confirmPassword) {
+      toast.error("Please fill all fields and ensure passwords match");
+      return;
+    }
+    const token = getSessionToken();
+    if (!token) return;
+
+    setIsCreating(true);
+    try {
+      const { hash: pwHash, salt: pwSalt } = await hashPassword(newPassword);
+      const { hash: rkHash, salt: rkSalt } = await hashPassword(newPassword); // Use same for recovery key
+
+      await createStaff({
+        sessionToken: token,
+        username: newUsername.trim(),
+        passwordHash: pwHash,
+        passwordSalt: pwSalt,
+        recoveryKeyHash: rkHash,
+        recoveryKeySalt: rkSalt,
+        businessUnitIds: newBusinessUnitIds.length > 0 ? newBusinessUnitIds as Id<"businessUnits">[] : undefined,
+      });
+      toast.success("Kitchen staff account created");
+      setShowCreateDialog(false);
+      setNewUsername("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setNewBusinessUnitIds([]);
+    } catch (err) {
+      toast.error("Failed to create account", { description: err instanceof Error ? err.message : "Unknown error" });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleUpdateStaff = async (staffId: string, businessUnitIds: string[]) => {
+    const token = getSessionToken();
+    if (!token) return;
+
+    setIsUpdating(staffId);
+    try {
+      await updateStaff({
+        sessionToken: token,
+        targetAdminId: staffId as Id<"admins">,
+        businessUnitIds: businessUnitIds.length > 0 ? businessUnitIds as Id<"businessUnits">[] : undefined,
+      });
+      toast.success("Business unit assignments updated");
+      setShowEditDialog(null);
+    } catch (err) {
+      toast.error("Failed to update assignments", { description: err instanceof Error ? err.message : "Unknown error" });
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
+  const handleResetPassword = async (staffId: string) => {
+    if (!resetNewPassword || resetNewPassword !== resetConfirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    const token = getSessionToken();
+    if (!token) return;
+
+    setIsResetting(staffId);
+    try {
+      const { hash: pwHash, salt: pwSalt } = await hashPassword(resetNewPassword);
+      await resetPassword({
+        sessionToken: token,
+        targetAdminId: staffId as Id<"admins">,
+        newPasswordHash: pwHash,
+        newPasswordSalt: pwSalt,
+      });
+      toast.success("Password reset successfully");
+      setResetPasswordFor(null);
+      setResetNewPassword("");
+      setResetConfirmPassword("");
+    } catch (err) {
+      toast.error("Failed to reset password", { description: err instanceof Error ? err.message : "Unknown error" });
+    } finally {
+      setIsResetting(null);
+    }
+  };
+
+  const handleToggleActive = async (staffId: string, active: boolean) => {
+    const token = getSessionToken();
+    if (!token) return;
+
+    setIsToggling(staffId);
+    try {
+      await toggleActive({
+        sessionToken: token,
+        targetAdminId: staffId as Id<"admins">,
+        active,
+      });
+      toast.success(active ? "Account enabled" : "Account disabled");
+    } catch (err) {
+      toast.error("Failed to update account", { description: err instanceof Error ? err.message : "Unknown error" });
+    } finally {
+      setIsToggling(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          Kitchen Staff Accounts
+        </h3>
+        <Button size="sm" variant="outline" onClick={() => setShowCreateDialog(true)}>
+          <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+          Add Staff
+        </Button>
+      </div>
+
+      {kitchenStaff === undefined ? (
+        <div className="space-y-3">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : kitchenStaff.length === 0 ? (
+        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <Users className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
+          <p>No kitchen staff accounts yet. Click "Add Staff" to create one.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {kitchenStaff.map((staff) => (
+            <div key={staff.id} className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">{staff.username}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Created: {new Date(staff.createdAt).toLocaleDateString()}
+                    {staff.lastLoginAt && ` • Last login: ${new Date(staff.lastLoginAt).toLocaleDateString()}`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={cn("px-2 py-1 rounded-full text-xs font-medium", staff.active ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground")}>
+                  {staff.active ? "Active" : "Disabled"}
+                </span>
+                
+                {allBUs && staff.businessUnitIds && staff.businessUnitIds.length > 0 && (
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                    {staff.businessUnitIds.map((buId: string) => allBUs.find((bu: any) => bu._id === buId)?.name).filter(Boolean).join(" + ")}
+                  </span>
+                )}
+                
+                {allBUs && (!staff.businessUnitIds || staff.businessUnitIds.length === 0) && (
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                    No assignment
+                  </span>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditBusinessUnitIds((staff.businessUnitIds ?? []) as Id<"businessUnits">[]);
+                    setShowEditDialog(staff.id);
+                  }}
+                  disabled={isUpdating === staff.id}
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                  Assign BUs
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setResetPasswordFor(staff.id)}
+                  disabled={isResetting === staff.id}
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Reset Password
+                </Button>
+                <Button
+                  variant={staff.active ? "outline" : "secondary"}
+                  size="sm"
+                  onClick={() => handleToggleActive(staff.id, !staff.active)}
+                  disabled={isToggling === staff.id}
+                >
+                  {isToggling === staff.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : staff.active ? (
+                    <UserX className="h-3.5 w-3.5" />
+                  ) : (
+                    <UserCheck className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create Staff Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Kitchen Staff Account</DialogTitle>
+            <DialogDescription>
+              Kitchen staff can log in at /kitchen/login to access the kitchen dashboard.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateStaff} className="space-y-4">
+            <div className="grid gap-2">
+              <Label>Username</Label>
+              <Input
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="e.g. kitchen_john"
+                autoFocus
+                disabled={isCreating}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Password</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter password"
+                disabled={isCreating}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Confirm Password</Label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm password"
+                disabled={isCreating}
+              />
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-destructive">Passwords do not match</p>
+              )}
+            </div>
+            {allBUs && (
+              <div className="grid gap-2">
+                <Label>Assigned Business Units</Label>
+                <div className="flex flex-wrap gap-2">
+                  {allBUs.map((bu: any) => (
+                    <label
+                      key={bu._id}
+                      className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-accent"
+                    >
+                      <input
+                        type="checkbox"
+                        value={bu._id}
+                        checked={newBusinessUnitIds.includes(bu._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewBusinessUnitIds([...newBusinessUnitIds, bu._id]);
+                          } else {
+                            setNewBusinessUnitIds(newBusinessUnitIds.filter((id) => id !== bu._id));
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-input text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                      <span>{bu.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Staff will only see orders from assigned business units. Leave empty for no assignment.
+                </p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)} disabled={isCreating}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isCreating || !newUsername.trim() || !newPassword || newPassword !== confirmPassword}>
+                {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Create Account
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+        </Dialog>
+
+      {/* Reset Password Dialog */}
+      {resetPasswordFor && (
+        <Dialog open={true} onOpenChange={() => setResetPasswordFor(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reset Password</DialogTitle>
+              <DialogDescription>
+                Enter a new password for this kitchen staff account.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={(e) => { e.preventDefault(); handleResetPassword(resetPasswordFor!); }} className="space-y-4">
+              <div className="grid gap-2">
+                <Label>New Password</Label>
+                <Input
+                  type="password"
+                  value={resetNewPassword}
+                  onChange={(e) => setResetNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  autoFocus
+                  disabled={isResetting === resetPasswordFor}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Confirm New Password</Label>
+                <Input
+                  type="password"
+                  value={resetConfirmPassword}
+                  onChange={(e) => setResetConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  disabled={isResetting === resetPasswordFor}
+                />
+                {resetConfirmPassword && resetNewPassword !== resetConfirmPassword && (
+                  <p className="text-xs text-destructive">Passwords do not match</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setResetPasswordFor(null)} disabled={isResetting === resetPasswordFor}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isResetting === resetPasswordFor || !resetNewPassword || resetNewPassword !== resetConfirmPassword}>
+                  {isResetting === resetPasswordFor ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                  Reset Password
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Staff Business Units Dialog */}
+      {showEditDialog && allBUs && (
+        <Dialog open={true} onOpenChange={() => setShowEditDialog(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Business Unit Assignments</DialogTitle>
+              <DialogDescription>
+                Select which business units this kitchen staff member can access.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdateStaff(showEditDialog!, editBusinessUnitIds); }} className="space-y-4">
+              <div className="grid gap-2">
+                <Label>Assigned Business Units</Label>
+                <div className="flex flex-wrap gap-2">
+                  {allBUs.map((bu: any) => (
+                    <label
+                      key={bu._id}
+                      className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-accent"
+                    >
+                      <input
+                        type="checkbox"
+                        value={bu._id}
+                        checked={editBusinessUnitIds.includes(bu._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditBusinessUnitIds([...editBusinessUnitIds, bu._id]);
+                          } else {
+                            setEditBusinessUnitIds(editBusinessUnitIds.filter((id) => id !== bu._id));
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-input text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                      <span>{bu.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Staff will only see orders from assigned business units. Leave empty for no assignment.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowEditDialog(null)} disabled={isUpdating === showEditDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isUpdating === showEditDialog}>
+                  {isUpdating === showEditDialog ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                  Save Assignments
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
 
@@ -758,6 +1203,11 @@ function AuthSecuritySection() {
             </Button>
           </form>
         </div>
+
+        <Separator />
+
+        {/* Kitchen Staff Management */}
+        <KitchenStaffSection />
 
         <Separator />
 

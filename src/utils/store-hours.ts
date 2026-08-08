@@ -24,9 +24,23 @@ const DAY_LABELS_FULL: Record<string, string> = {
   saturday: "Saturday",
 };
 
+// Store hours are configured in the store's local timezone (Asia/Kolkata,
+// UTC+05:30). Compute the current weekday + time-of-day in that zone so the
+// status shown to customers always matches the server-side order gate.
+const STORE_TIMEZONE_OFFSET_MINUTES = 5 * 60 + 30;
+
 function parseTime(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+}
+
+function getStoreNow(date = new Date()): { day: number; minutes: number } {
+  const shifted =
+    date.getUTCHours() * 60 + date.getUTCMinutes() + STORE_TIMEZONE_OFFSET_MINUTES;
+  const minutes = ((shifted % 1440) + 1440) % 1440;
+  const dayShift = Math.floor(shifted / 1440);
+  const day = (((date.getUTCDay() + dayShift) % 7) + 7) % 7;
+  return { day, minutes };
 }
 
 function formatTime12(time: string): string {
@@ -54,13 +68,12 @@ export function isStoreCurrentlyOpen(
 
   if (!settings.openingHours) return true;
 
-  const todayKey = DAY_NAMES[new Date().getDay()];
+  const { day, minutes: currentMinutes } = getStoreNow();
+  const todayKey = DAY_NAMES[day];
   const todayHours = settings.openingHours[todayKey];
 
   if (!todayHours) return false;
 
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const openMinutes = parseTime(todayHours.open);
   const closeMinutes = parseTime(todayHours.close);
 
@@ -88,9 +101,7 @@ export function getNextOpenTime(
 ): NextOpenTime | null {
   if (!settings.openingHours) return null;
 
-  const now = new Date();
-  const currentDayIndex = now.getDay();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const { day: currentDayIndex, minutes: currentMinutes } = getStoreNow();
 
   // Check up to 8 days (full week + 1 to wrap)
   for (let offset = 0; offset < 8; offset++) {
@@ -126,7 +137,8 @@ export function getTodayHours(
 ): string | null {
   if (!openingHours) return null;
 
-  const todayKey = DAY_NAMES[new Date().getDay()];
+  const { day } = getStoreNow();
+  const todayKey = DAY_NAMES[day];
   const todayHours = openingHours[todayKey];
 
   if (!todayHours) return null;

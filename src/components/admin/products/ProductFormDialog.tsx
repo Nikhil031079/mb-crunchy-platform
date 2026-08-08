@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +18,19 @@ const emptyValues: ProductFormValues = {
   sku: "", stockQuantity: "", unit: "pcs", vegNonVeg: "veg", taxPercentage: "0",
   available: true, tags: "", status: "active", featured: false, displayOrder: 1,
 };
+
+// Preset variant groups with suggested option values
+const VARIANT_GROUP_PRESETS: Record<string, string[]> = {
+  Weight: ["250 g", "500 g", "750 g", "1 kg", "2 kg", "5 kg"],
+  Volume: ["100 ml", "200 ml", "250 ml", "500 ml", "750 ml", "1 L", "2 L", "5 L"],
+  Quantity: ["1 pc", "2 pcs", "4 pcs", "6 pcs", "10 pcs", "12 pcs", "24 pcs"],
+  Pack: ["Single", "Pack of 2", "Pack of 4", "Pack of 6", "Family Pack"],
+  Size: ["Small", "Medium", "Large", "XL"],
+  Flavor: ["Chocolate", "Vanilla", "Mango", "Strawberry", "Orange", "Mixed Fruit"],
+  Color: ["Red", "Blue", "Green", "Black", "White", "Pink", "Yellow"],
+};
+
+const PRESET_GROUP_NAMES = Object.keys(VARIANT_GROUP_PRESETS);
 
 interface ProductFormDialogProps {
   open: boolean;
@@ -153,7 +166,20 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
     });
   };
 
-  const variantGroups = [...new Set(values.variants.map((v) => v.optionName || ""))];
+  const variantGroups = useMemo(() => {
+    const groups: { name: string; variants: (AdminVariant & { _index: number })[] }[] = [];
+    const seen = new Set<string>();
+    values.variants.forEach((v, i) => {
+      const groupName = v.optionName || "";
+      if (!seen.has(groupName)) {
+        seen.add(groupName);
+        groups.push({ name: groupName, variants: [] });
+      }
+      const group = groups.find((g) => g.name === groupName)!;
+      group.variants.push({ ...v, _index: i });
+    });
+    return groups;
+  }, [values.variants]);
 
   return (
     <>
@@ -229,27 +255,60 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
               </div>
               <p className="text-xs text-muted-foreground">Group options by type (e.g. Weight: 250g, 500g, 1kg). All options share the same group.</p>
 
-              {variantGroups.map((groupName) => {
-                const groupVariants = values.variants
-                  .map((v, i) => ({ ...v, _index: i }))
-                  .filter((v) => (v.optionName || "") === groupName);
+              {variantGroups.map((group, groupIndex) => {
+                const isCustom = group.name === "__custom__";
                 return (
-                  <div key={groupName || "__default__"} className="rounded-md border bg-secondary/30 p-3 space-y-2">
+                  <div key={group.variants[0]?._index ?? groupIndex} className="rounded-md border bg-secondary/30 p-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <GripVertical className="size-4 text-muted-foreground" />
-                      <Input
-                        value={groupName}
-                        onChange={(e) => {
-                          const newName = e.target.value;
-                          groupVariants.forEach((v) => updateVariant(v._index, "optionName", newName));
-                        }}
-                        placeholder="Option Group (e.g. Weight, Volume, Flavor)"
-                        className="h-8 max-w-xs text-sm font-medium"
-                      />
-                      {groupName && <span className="text-xs text-muted-foreground">({groupVariants.length} options)</span>}
+                      {!isCustom ? (
+                        <Select
+                          value={group.name}
+                          onValueChange={(newName) => {
+                            if (newName === "__custom__") {
+                              group.variants.forEach((v) => updateVariant(v._index, "optionName", ""));
+                            } else {
+                              group.variants.forEach((v) => updateVariant(v._index, "optionName", newName));
+                              if (VARIANT_GROUP_PRESETS[newName] && group.variants.length <= 1) {
+                                const suggestions = VARIANT_GROUP_PRESETS[newName];
+                                suggestions.forEach((suggestion, i) => {
+                                  if (group.variants[i]) {
+                                    updateVariant(group.variants[i]._index, "optionValue", suggestion);
+                                  } else if (i > 0) {
+                                    setValues((current) => {
+                                      const newVariant = { ...emptyVariant(current.variants.length), optionName: newName, optionValue: suggestion };
+                                      return { ...current, variants: [...current.variants, newVariant] };
+                                    });
+                                  }
+                                });
+                              }
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 max-w-xs text-sm font-medium w-auto">
+                            <SelectValue placeholder="Option Group (e.g. Weight, Volume, Flavor)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PRESET_GROUP_NAMES.map((preset) => (
+                              <SelectItem key={preset} value={preset}>{preset}</SelectItem>
+                            ))}
+                            <SelectItem value="__custom__">Custom…</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={group.name === "__custom__" ? "" : group.name}
+                          onChange={(e) => {
+                            group.variants.forEach((v) => updateVariant(v._index, "optionName", e.target.value));
+                          }}
+                          placeholder="Option Group (e.g. Weight, Volume, Flavor)"
+                          className="h-8 max-w-xs text-sm font-medium"
+                        />
+                      )}
+                      {group.name && !isCustom && <span className="text-xs text-muted-foreground">({group.variants.length} options)</span>}
                     </div>
                     <div className="space-y-2">
-                      {groupVariants.map((variant) => (
+                      {group.variants.map((variant) => (
                         <VariantRow
                           key={variant._index}
                           variant={variant}

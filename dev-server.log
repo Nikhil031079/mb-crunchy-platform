@@ -1,0 +1,193 @@
+
+> mb-crunchy@1.0.0 dev
+> vite
+
+[2m4:31:54 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because lockfile has changed
+
+  [32m[1mVITE[22m v7.3.6[39m  [2mready in [0m[1m474[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.0.165:[1m5173[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m5:13:55 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/admin/products/ProductFormDialog.tsx[22m
+[2m5:14:15 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/admin/products/ProductFormDialog.tsx[22m
+[2m5:14:28 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/admin/products/ProductFormDialog.tsx[22m
+[2m5:15:20 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/admin/products/ProductFormDialog.tsx[22m
+[2m5:16:37 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/admin/products/ProductFormDialog.tsx[22m
+[2m5:21:18 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/customer/BusinessUnitPage.tsx, /src/index.css[22m
+[2m5:21:26 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/customer/BusinessUnitPage.tsx, /src/index.css[22m
+[2m5:22:29 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/customer/HomePage.tsx, /src/pages/customer/CategoryPage.tsx, /src/pages/customer/BusinessUnitPage.tsx, /src/pages/customer/CartPage.tsx[22m
+[2m5:22:37 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/customer/FlashSalesSection.tsx[22m
+[2m5:23:26 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/customer/FlashSalesSection.tsx[22m
+[2m5:23:35 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/customer/FlashSalesSection.tsx[22m
+[2m5:24:50 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/customer/BusinessUnitPage.tsx, /src/index.css[22m
+[2m5:25:26 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/customer/BusinessUnitPage.tsx, /src/index.css[22m
+[2m5:29:08 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:29:52 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:30:17 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:30:38 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:30:47 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:31:29 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:31:48 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:32:18 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:32:47 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:32:47 pm[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\Projects\mb-crunchy-platform\src\pages\admin\SettingsPage.tsx: Expected corresponding JSX closing tag for <section>. (241:2)
+
+[0m [90m 239 |[31m       )}
+ [90m 240 |[31m     [33m<[31m[33m/[31m[33mdiv[31m[33m>[31m
+[31m[1m>[22m[31m[90m 241 |[31m   [33m<[31m[33m/[31m[33mdiv[31m[33m>[31m
+ [90m     |[31m   [31m[1m^[22m[31m
+ [90m 242 |[31m [33m<[31m[33m/[31m[33mdiv[31m[33m>[31m
+ [90m 243 |[31m
+ [90m 244 |[31m         [33m<[31m[33mSeparator[31m [33m/[31m[33m>[31m[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mF:/Projects/mb-crunchy-platform/src/pages/admin/SettingsPage.tsx[39m:241:2
+[33m  239 |        )}
+  240 |      </div>
+  241 |    </div>
+      |    ^
+  242 |  </div>
+  243 |  [39m
+      at constructor (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.jsxParseElementAt (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4739:16)
+      at TypeScriptParserMixin.jsxParseElement (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10848:21)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9792:18)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10801:23)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9525:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12784:17)
+      at TypeScriptParserMixin.parseStatementListItem (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12764:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13333:61)
+      at TypeScriptParserMixin.parseBlockBody (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13326:10)
+      at TypeScriptParserMixin.parseBlock (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13314:10)
+      at TypeScriptParserMixin.parseFunctionBody (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12117:24)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12103:10)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9189:18)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13462:12
+      at TypeScriptParserMixin.withSmartMixTopicForbiddingContext (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12420:14)
+      at TypeScriptParserMixin.parseFunction (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13461:10)
+[2m5:34:07 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:34:07 pm[22m [31m[1m[vite][22m[39m [31mInternal server error: F:\Projects\mb-crunchy-platform\src\pages\admin\SettingsPage.tsx: Expected corresponding JSX closing tag for <section>. (241:2)
+
+[0m [90m 239 |[31m       )}
+ [90m 240 |[31m     [33m<[31m[33m/[31m[33mdiv[31m[33m>[31m
+[31m[1m>[22m[31m[90m 241 |[31m   [33m<[31m[33m/[31m[33mdiv[31m[33m>[31m
+ [90m     |[31m   [31m[1m^[22m[31m
+ [90m 242 |[31m [33m<[31m[33m/[31m[33mdiv[31m[33m>[31m
+ [90m 243 |[31m
+ [90m 244 |[31m         [33m<[31m[33mSeparator[31m [33m/[31m[33m>[31m[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mF:/Projects/mb-crunchy-platform/src/pages/admin/SettingsPage.tsx[39m:241:2
+[33m  239 |        )}
+  240 |      </div>
+  241 |    </div>
+      |    ^
+  242 |  </div>
+  243 |  [39m
+      at constructor (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:6616:19)
+      at TypeScriptParserMixin.jsxParseElementAt (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4739:16)
+      at TypeScriptParserMixin.jsxParseElement (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4761:17)
+      at TypeScriptParserMixin.parseExprAtom (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4771:19)
+      at TypeScriptParserMixin.parseExprSubscripts (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10848:21)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9792:39
+      at TypeScriptParserMixin.tryParse (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:6924:20)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9792:18)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10817:39
+      at TypeScriptParserMixin.allowInAnd (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12443:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10817:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12510:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11692:28)
+      at TypeScriptParserMixin.parseExprAtom (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11348:23)
+      at TypeScriptParserMixin.parseExprAtom (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:4776:20)
+      at TypeScriptParserMixin.parseExprSubscripts (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11098:23)
+      at TypeScriptParserMixin.parseUpdate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11083:21)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:11063:23)
+      at TypeScriptParserMixin.parseMaybeUnary (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9854:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10916:61)
+      at TypeScriptParserMixin.parseExprOps (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10921:23)
+      at TypeScriptParserMixin.parseMaybeConditional (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10898:23)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10848:21)
+      at TypeScriptParserMixin.parseMaybeAssign (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9803:20)
+      at TypeScriptParserMixin.parseExpressionBase (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10801:23)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10797:39
+      at TypeScriptParserMixin.allowInAnd (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12438:16)
+      at TypeScriptParserMixin.parseExpression (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:10797:17)
+      at TypeScriptParserMixin.parseReturnStatement (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13159:28)
+      at TypeScriptParserMixin.parseStatementContent (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12815:21)
+      at TypeScriptParserMixin.parseStatementContent (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9525:18)
+      at TypeScriptParserMixin.parseStatementLike (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12784:17)
+      at TypeScriptParserMixin.parseStatementListItem (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12764:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13333:61)
+      at TypeScriptParserMixin.parseBlockBody (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13326:10)
+      at TypeScriptParserMixin.parseBlock (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13314:10)
+      at TypeScriptParserMixin.parseFunctionBody (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12117:24)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12103:10)
+      at TypeScriptParserMixin.parseFunctionBodyAndFinish (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:9189:18)
+      at F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13462:12
+      at TypeScriptParserMixin.withSmartMixTopicForbiddingContext (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:12420:14)
+      at TypeScriptParserMixin.parseFunction (F:\Projects\mb-crunchy-platform\node_modules\@babel\parser\lib\index.js:13461:10)
+[2m5:36:34 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m5:38:20 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m7:30:55 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/index.css[22m
+[2m7:30:55 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m7:30:55 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m7:31:30 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/index.css[22m
+[2m7:31:30 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m7:31:30 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m7:32:07 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/hooks/use-branding.tsx, /src/layouts/customer/CustomerFooter.tsx, /src/layouts/customer/CustomerNavbar.tsx, /src/layouts/customer/CustomerLayout.tsx, /src/components/customer/MobileBottomBar.tsx, /src/components/customer/BestSellersSection.tsx, /src/components/customer/RecommendedForYouSection.tsx, /src/components/customer/ComboOffersSection.tsx, /src/components/customer/CrossSellSections.tsx, /src/components/customer/PartyPacksSection.tsx, /src/components/customer/BusinessUnitSections.tsx, /src/components/customer/ProductCard.tsx, /src/components/customer/TodaySpecialsSection.tsx, /src/components/customer/RecentlyViewedSection.tsx, /src/components/customer/FrequentlyBoughtTogetherSection.tsx, /src/pages/customer/CategoryPage.tsx, /src/pages/customer/BusinessUnitPage.tsx, /src/pages/customer/CartPage.tsx, /src/pages/customer/CheckoutPage.tsx, /src/pages/customer/HomePage.tsx, /src/components/customer/MobileNav.tsx, /src/components/customer/Header.tsx, /src/components/customer/HeroSection.tsx, /src/layouts/admin/AdminLayout.tsx, /src/components/admin/AdminNavigation.tsx, /src/components/admin/AdminBrand.tsx, /src/components/admin/AdminBreadcrumbs.tsx, /src/components/admin/AdminTopbar.tsx, /src/pages/admin/AdminLoginPage.tsx, /src/pages/admin/BusinessUnitsPage.tsx, /src/components/admin/business-units/BusinessUnitFormDialog.tsx, /src/pages/admin/CategoriesPage.tsx, /src/pages/admin/ProductsPage.tsx, /src/pages/admin/CombosPage.tsx, /src/pages/admin/PartyPacksPage.tsx, /src/pages/admin/InventoryPage.tsx, /src/pages/admin/OffersPage.tsx, /src/pages/admin/OrdersPage.tsx, /src/components/admin/orders/OrderToolbar.tsx, /src/components/admin/orders/OrderDetailDialog.tsx, /src/components/admin/orders/OrderTable.tsx, /src/pages/admin/ReportsPage.tsx, /src/pages/admin/BannersPage.tsx, /src/pages/admin/HappyHourPage.tsx, /src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m7:32:07 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/hooks/use-branding.tsx[22m Could not Fast Refresh ("useBranding" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m7:32:07 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/main.tsx, /src/layouts/customer/CustomerFooter.tsx, /src/layouts/customer/CustomerNavbar.tsx, /src/components/customer/Header.tsx, /src/components/admin/AdminBrand.tsx, /src/pages/admin/AdminLoginPage.tsx[22m
+[2m7:32:07 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/main.tsx[22m Could not Fast Refresh ("true" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m7:32:07 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m7:32:51 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m7:34:30 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m7:35:21 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m7:36:16 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m7:36:43 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m7:37:00 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m7:37:18 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m7:54:19 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m8:01:54 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m8:02:46 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m8:06:58 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m
+[2m8:10:05 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/SettingsPage.tsx, /src/index.css[22m

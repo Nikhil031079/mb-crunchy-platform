@@ -39,6 +39,7 @@ import {
   PartyPackCardSkeleton,
   CardGridSkeleton,
   StoreStatusBadge,
+  FlashSalesSection,
 } from "@/components/customer";
 import { getStockStatus, getProductStockStatus } from "@/components/customer/StockBadge";
 import type { StockInfo } from "@/components/customer/StockBadge";
@@ -250,6 +251,9 @@ export default function BusinessUnitPage() {
   const filteredItems = useMemo(() => {
     let items = [...(catalogItems ?? [])];
 
+    // Only show products in the main grid (combos/party packs have their own sections)
+    items = items.filter((item) => item.itemType === "product");
+
     // Filter by category — map products' categoryId to catalog items via sourceId
     if (activeCategoryId && allProducts) {
       const productIdsInCategory = new Set(
@@ -257,9 +261,7 @@ export default function BusinessUnitPage() {
           .filter((p) => p.categoryId === activeCategoryId)
           .map((p) => p._id)
       );
-      items = items.filter(
-        (item) => item.itemType === "product" && productIdsInCategory.has(item.sourceId)
-      );
+      items = items.filter((item) => productIdsInCategory.has(item.sourceId));
     }
 
     // Filter by search query
@@ -654,17 +656,20 @@ export default function BusinessUnitPage() {
             />
 
             <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {featuredItems!.slice(0, 12).map((item: any, index: number) => (
-                <ProductCard
-                  key={item._id}
-                  product={item}
-                  businessUnitSlug={buSlug}
-                  index={index}
-                  compact
-                  onAddToCart={handleAddToCart}
-                  stockInfo={getStockInfoForProduct(item)}
-                />
-              ))}
+              {featuredItems!
+                .filter((item) => item.itemType === "product")
+                .slice(0, 12)
+                .map((item: any, index: number) => (
+                  <ProductCard
+                    key={item._id}
+                    product={item}
+                    businessUnitSlug={buSlug}
+                    index={index}
+                    compact
+                    onAddToCart={handleAddToCart}
+                    stockInfo={getStockInfoForProduct(item)}
+                  />
+                ))}
             </div>
           </section>
         )}
@@ -724,8 +729,16 @@ export default function BusinessUnitPage() {
           )}
         </section>
 
+{/* ================================================================ */}
+        {/* FLASH SALES (Feature Flag)                                         */}
         {/* ================================================================ */}
-        {/* OFFERS                                                         */}
+
+        {!isDataLoading && bu.enableOffers && (
+          <FlashSalesSection businessUnitId={bu._id} className="mt-16" />
+        )}
+
+        {/* ================================================================ */}
+        {/* ACTIVE OFFERS                                                      */}
         {/* ================================================================ */}
 
         {!isDataLoading && enableOffers && (

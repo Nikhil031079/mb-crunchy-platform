@@ -149,6 +149,7 @@ interface SearchResult extends CatalogItem {
   _businessUnitName: string;
   _businessUnitSlug: string;
   _categoryId?: string;
+  _categorySlug?: string;
 }
 
 // ============================================================================
@@ -206,7 +207,14 @@ function ResultCard({ item, query, ratings }: ResultCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
     >
-      <Link to={`/${item._businessUnitSlug}/${item.slug}`} className="group block">
+      <Link
+        to={
+          item.itemType === "product" && item._categorySlug
+            ? `/${item._businessUnitSlug}/${item._categorySlug}/${item.slug}`
+            : `/${item._businessUnitSlug}/${item.slug}`
+        }
+        className="group block"
+      >
         <Card className="overflow-hidden border-border/60 transition-shadow hover:shadow-md">
           <div className="flex">
             {/* Image */}
@@ -492,6 +500,14 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
     return map;
   }, [categoriesAll]);
 
+  const categorySlugById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const category of categoriesAll ?? []) {
+      map.set(category._id, category.slug);
+    }
+    return map;
+  }, [categoriesAll]);
+
   // Product docs for the currently-visible search results only (public
   // getByIds) — maps a product sourceId to its category for filtering.
   const productSourceIds = useMemo(() => {
@@ -564,11 +580,15 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
           _businessUnitName: bu.name,
           _businessUnitSlug: bu.slug,
           _categoryId: item.itemType === "product" ? productCategoryBySourceId.get(item.sourceId) : undefined,
+          _categorySlug:
+            item.itemType === "product"
+              ? categorySlugById.get(productCategoryBySourceId.get(item.sourceId) ?? "") ?? undefined
+              : undefined,
         });
       }
     }
     return enriched;
-  }, [allRawResults, buIds, activeBUs, productCategoryBySourceId]);
+  }, [allRawResults, buIds, activeBUs, productCategoryBySourceId, categorySlugById]);
 
   // Collect all item IDs for ratings
   const resultIds = useMemo(() => allResults.map((item) => item._id as string), [allResults]);

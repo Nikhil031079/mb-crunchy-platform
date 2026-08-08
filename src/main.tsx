@@ -5,9 +5,10 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { AdminAuthProvider } from "@/hooks/use-admin-auth";
+import { KitchenAuthProvider } from "@/hooks/use-kitchen-auth";
 import { BrandingProvider } from "@/hooks/use-branding";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Route, Routes, useLocation, useNavigationType } from "react-router";
 import "./index.css";
 
 // ============================================================================
@@ -46,11 +47,17 @@ const OrdersPage = lazy(() => import("@/pages/admin/OrdersPage"));
 const ReportsPage = lazy(() => import("@/pages/admin/ReportsPage"));
 const InventoryPage = lazy(() => import("@/pages/admin/InventoryPage"));
 const CustomersPage = lazy(() => import("@/pages/admin/CustomersPage"));
+const DeliveryZonesPage = lazy(() => import("@/pages/admin/DeliveryZonesPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
 const HomepageSectionsPage = lazy(() => import("@/pages/admin/HomepageSectionsPage"));
 const FlashSalesPage = lazy(() => import("@/pages/admin/FlashSalesPage"));
 const HappyHourPage = lazy(() => import("@/pages/admin/HappyHourPage"));
+
+// Kitchen Layout & Pages
+const KitchenLayout = lazy(() => import("@/layouts/kitchen/KitchenLayout"));
+const KitchenLoginPage = lazy(() => import("@/pages/kitchen/KitchenLoginPage"));
+const KitchenDashboardPage = lazy(() => import("@/pages/kitchen/KitchenDashboardPage"));
 
 // Shared Pages
 const AuthPage = lazy(() => import("@/pages/Auth.tsx"));
@@ -140,12 +147,21 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 function RouteSyncer() {
   const location = useLocation();
+  const navigationType = useNavigationType();
   useEffect(() => {
     window.parent.postMessage(
       { type: "iframe-route-change", path: location.pathname },
       "*",
     );
   }, [location.pathname]);
+
+  // Scroll to top on SPA navigation (PUSH/REPLACE), but preserve scroll
+  // position on back/forward (POP) so the browser can restore it.
+  useEffect(() => {
+    if (navigationType !== "POP") {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, [location.pathname, navigationType]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -169,6 +185,45 @@ function AppRoutes() {
   return (
     <Suspense fallback={<RouteLoading />}>
       <Routes>
+        {/* ============ Kitchen Auth (standalone) ============ */}
+        <Route path="/kitchen/login" element={<KitchenAuthProvider><KitchenLoginPage /></KitchenAuthProvider>} />
+
+        {/* ============ Kitchen Routes ============ */}
+        <Route path="/kitchen" element={<KitchenAuthProvider><KitchenLayout /></KitchenAuthProvider>}>
+          <Route index element={<KitchenDashboardPage />} />
+          <Route path="dashboard" element={<KitchenDashboardPage />} />
+        </Route>
+
+        {/* ============ Admin Auth ============ */}
+        <Route path="/admin/login" element={<AdminAuthProvider><AdminLoginPage /></AdminAuthProvider>} />
+        <Route path="/admin/setup" element={<AdminAuthProvider><AdminSetupPage /></AdminAuthProvider>} />
+        <Route path="/admin/forgot-password" element={<AdminAuthProvider><AdminForgotPasswordPage /></AdminAuthProvider>} />
+
+        {/* ============ Admin Routes ============ */}
+        <Route path="/admin" element={<AdminAuthProvider><AdminLayout /></AdminAuthProvider>}>
+          <Route index element={<DashboardPage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="business-units" element={<BusinessUnitsPage />} />
+          <Route path="categories" element={<CategoriesPage />} />
+          <Route path="products" element={<ProductsPage />} />
+          <Route path="combos" element={<CombosPage />} />
+          <Route path="party-packs" element={<PartyPacksPage />} />
+          <Route path="offers" element={<OffersPage />} />
+          <Route path="orders" element={<OrdersPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="inventory" element={<InventoryPage />} />
+          <Route path="customers" element={<CustomersPage />} />
+          <Route path="delivery-zones" element={<DeliveryZonesPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="banners" element={<BannersPage />} />
+          <Route path="homepage-sections" element={<HomepageSectionsPage />} />
+          <Route path="flash-sales" element={<FlashSalesPage />} />
+          <Route path="happy-hour" element={<HappyHourPage />} />
+        </Route>
+
+        {/* ============ Auth ============ */}
+        <Route path="/auth" element={<AuthPage redirectAfterAuth="/" />} />
+
         {/* ============ Customer Routes ============ */}
         <Route element={<CustomerLayout />}>
           <Route path="/" element={<HomePage />} />
@@ -192,35 +247,6 @@ function AppRoutes() {
             <Route path="favourites" element={<FavouritesPage />} />
           </Route>
         </Route>
-
-        {/* ============ Admin Auth (standalone) ============ */}
-        <Route path="/admin/login" element={<AdminAuthProvider><AdminLoginPage /></AdminAuthProvider>} />
-        <Route path="/admin/setup" element={<AdminAuthProvider><AdminSetupPage /></AdminAuthProvider>} />
-        <Route path="/admin/forgot-password" element={<AdminAuthProvider><AdminForgotPasswordPage /></AdminAuthProvider>} />
-
-        {/* ============ Admin Routes ============ */}
-        <Route path="/admin" element={<AdminAuthProvider><AdminLayout /></AdminAuthProvider>}>
-          <Route index element={<DashboardPage />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="business-units" element={<BusinessUnitsPage />} />
-          <Route path="categories" element={<CategoriesPage />} />
-          <Route path="products" element={<ProductsPage />} />
-          <Route path="combos" element={<CombosPage />} />
-          <Route path="party-packs" element={<PartyPacksPage />} />
-          <Route path="offers" element={<OffersPage />} />
-          <Route path="orders" element={<OrdersPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="inventory" element={<InventoryPage />} />
-          <Route path="customers" element={<CustomersPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="banners" element={<BannersPage />} />
-          <Route path="homepage-sections" element={<HomepageSectionsPage />} />
-          <Route path="flash-sales" element={<FlashSalesPage />} />
-          <Route path="happy-hour" element={<HappyHourPage />} />
-        </Route>
-
-        {/* ============ Auth ============ */}
-        <Route path="/auth" element={<AuthPage redirectAfterAuth="/" />} />
 
         {/* ============ 404 ============ */}
         <Route path="*" element={<NotFound />} />

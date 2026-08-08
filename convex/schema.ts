@@ -746,14 +746,6 @@ const settings = defineTable({
       twitter: v.optional(v.string()),
     })
   ),
-  paymentConfig: v.optional(
-    v.object({
-      mode: v.union(v.literal("upi_qr"), v.literal("razorpay")),
-      upiId: v.optional(v.string()),
-      merchantName: v.optional(v.string()),
-      whatsappNumber: v.optional(v.string()),
-    })
-  ),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -772,6 +764,16 @@ const globalSettings = defineTable({
   primaryColor: v.string(),
   supportEmail: v.optional(v.string()),
   supportPhone: v.optional(v.string()),
+  paymentConfig: v.optional(
+    v.object({
+      mode: v.union(v.literal("upi_qr"), v.literal("razorpay")),
+      upiId: v.optional(v.string()),
+      merchantName: v.optional(v.string()),
+      whatsappNumber: v.optional(v.string()),
+      qrDisplayName: v.optional(v.string()),
+      paymentInstructions: v.optional(v.string()),
+    })
+  ),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -849,10 +851,11 @@ const admins = defineTable({
   username: v.string(),
   passwordHash: v.string(),
   passwordSalt: v.string(),
-  role: v.union(v.literal("superadmin"), v.literal("admin")),
+  role: v.union(v.literal("superadmin"), v.literal("admin"), v.literal("kitchen")),
   active: v.boolean(),
   recoveryKeyHash: v.optional(v.string()),
   recoveryKeySalt: v.optional(v.string()),
+  businessUnitIds: v.optional(v.array(v.id("businessUnits"))),
   lastLoginAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
