@@ -451,7 +451,8 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
+    // Allow guest checkout - authentication is optional for order creation
+    // Customer is identified by phone/email via ensureCustomerByPhone
 
     // ----------------------------------------------------------------------
     // 0. Idempotency — reject duplicate submissions (network retry, browser
@@ -998,7 +999,7 @@ export const claimPayment = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
+    // Allow guest payment claim - verified by phone number
 
     const order = await ctx.db.get(args.orderId);
     if (!order || order.deletedAt) throw new Error("Order not found");
