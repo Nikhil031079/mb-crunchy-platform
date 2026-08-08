@@ -360,7 +360,7 @@ const orders = defineTable({
   deliveryZoneId: v.optional(v.id("deliveryZones")),
   deliveryNotes: v.optional(v.string()),
   status: v.union(
-    v.literal("pending"), v.literal("confirmed"), v.literal("preparing"),
+    v.literal("awaiting_payment"), v.literal("pending"), v.literal("confirmed"), v.literal("preparing"),
     v.literal("ready"), v.literal("out_for_delivery"), v.literal("delivered"),
     v.literal("cancelled"), v.literal("refunded")
   ),

@@ -605,9 +605,9 @@ export const create = mutation({
     // 5. Create the order with server-computed values.
     // ----------------------------------------------------------------------
     const prefix = "MB";
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const orderNumber = `${prefix}-${timestamp}-${random}`;
+    const timestamp = Date.now().toString(36).toUpperCase().slice(-4);
+    const random = Math.random().toString(36).substring(2, 4).toUpperCase();
+    const orderNumber = `${prefix}-${timestamp}${random}`;
     const now = Date.now();
 
     const paymentStatus = args.paymentMethod === "upi_qr" ? "pending_verification" as const : "pending" as const;
@@ -629,7 +629,7 @@ export const create = mutation({
       deliveryAddress: args.deliveryAddress,
       deliveryZoneId: args.deliveryZoneId,
       deliveryNotes: args.deliveryNotes,
-      status: "pending",
+      status: "awaiting_payment",
       paymentStatus,
       paymentMethod: args.paymentMethod,
       offerId,
@@ -648,14 +648,8 @@ export const create = mutation({
       visibleToCustomer: true,
     });
 
-    await logActivity(ctx, {
-      orderId,
-      businessUnitId: args.businessUnitId,
-      action: "payment_pending",
-      newValue: paymentStatus,
-      actor: "system",
-      visibleToCustomer: true,
-    });
+    // Don't send NEW_ORDER notification or reserve inventory for awaiting_payment orders
+    // These happen when payment is verified (claimPayment -> admin verification)
 
     // Coupon usage — incremented exactly once per successfully created order.
     // `create` is idempotency-keyed (a retry returns the existing order above),
@@ -736,6 +730,7 @@ export const updateStatus = mutation({
     sessionToken: v.string(),
     id: v.id("orders"),
     status: v.union(
+      v.literal("awaiting_payment"),
       v.literal("pending"),
       v.literal("confirmed"),
       v.literal("preparing"),
@@ -1019,16 +1014,105 @@ export const claimPayment = mutation({
       return { outcome: "already_paid" as const };
     }
 
-    // A claim may be submitted while payment is awaiting verification, or after
-    // a failed/rejected verification when the customer has retried and wants a
-    // re-check. Paid/refunded orders are handled above; "pending" (never
-    // submitted for verification) stays un-claimable.
+    // A claim may be submitted for awaiting_payment orders, or while payment is 
+    // awaiting verification, or after a failed/rejected verification when the 
+    // customer has retried and wants a re-check.
     if (
+      order.status !== "awaiting_payment" &&
       order.paymentStatus !== "pending_verification" &&
       order.paymentStatus !== "failed" &&
       order.paymentStatus !== "rejected"
     ) {
       return { outcome: "not_pending" as const };
+    }
+
+    // For awaiting_payment orders, transition to pending and pending_verification
+    if (order.status === "awaiting_payment") {
+      const now = Date.now();
+      await ctx.db.patch(order._id, {
+        status: "pending",
+        paymentStatus: "pending_verification",
+        updatedAt: now,
+      });
+
+      // Now send NEW_ORDER notification and reserve inventory
+      const businessUnit = await ctx.db.get(order.businessUnitId);
+      await notify("NEW_ORDER", {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        businessUnitName: businessUnit?.name ?? "",
+        orderType: order.orderType,
+        total: order.total,
+        itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+        customerName: order.customerName,
+      });
+
+      // Reserve stock
+      for (const item of order.items) {
+        const inventory = await findInventoryForOrderItem(
+          ctx,
+          item.catalogItemId,
+          item.variantName,
+        );
+
+        if (!inventory) continue;
+
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+        }
+
+        const reserved = inventory.reservedStock ?? 0;
+        const avail = inventory.stockQuantity - reserved;
+        if (avail < item.quantity) {
+          throw new Error(
+            `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
+          );
+        }
+
+        const newReserved = reserved + item.quantity;
+        await ctx.db.patch(inventory._id, {
+          reservedStock: newReserved,
+          available: (inventory.stockQuantity - newReserved) > 0,
+          updatedAt: Date.now(),
+        });
+
+        await logMovement(ctx, {
+          inventoryId: inventory._id,
+          businessUnitId: inventory.businessUnitId,
+          type: "reservation",
+          quantity: item.quantity,
+          previousStock: inventory.stockQuantity,
+          newStock: inventory.stockQuantity,
+          orderId: order._id,
+        });
+
+        await logActivity(ctx, {
+          orderId: order._id,
+          businessUnitId: inventory.businessUnitId,
+          action: "inventory_reserved",
+          newValue: `${item.quantity} × ${inventory.variantName}`,
+          actor: "system",
+          visibleToCustomer: true,
+        });
+      }
+
+      await logActivity(ctx, {
+        orderId: order._id,
+        businessUnitId: order.businessUnitId,
+        action: "order_accepted",
+        newValue: "pending",
+        actor: "system",
+        visibleToCustomer: true,
+      });
+
+      await logActivity(ctx, {
+        orderId: order._id,
+        businessUnitId: order.businessUnitId,
+        action: "payment_pending",
+        newValue: "pending_verification",
+        actor: "system",
+        visibleToCustomer: true,
+      });
     }
 
     // Optionally record the customer's UPI transaction reference (UTR) so the

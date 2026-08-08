@@ -7,6 +7,7 @@ export type { OrderStatus, PaymentStatus, OrderType };
 // ---------------------------------------------------------------------------
 
 export const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  awaiting_payment: ["pending", "cancelled"],
   pending: ["confirmed", "cancelled"],
   confirmed: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],
@@ -30,6 +31,7 @@ export function getAllowedTransitions(
 }
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
+  awaiting_payment: "Awaiting Payment",
   pending: "Pending",
   confirmed: "Accepted",
   preparing: "Preparing",

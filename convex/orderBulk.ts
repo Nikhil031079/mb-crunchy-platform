@@ -84,6 +84,7 @@ export const bulkUpdateStatus = mutation({
     sessionToken: v.string(),
     orderIds: v.array(v.id("orders")),
     status: v.union(
+      v.literal("awaiting_payment"),
       v.literal("pending"),
       v.literal("confirmed"),
       v.literal("preparing"),

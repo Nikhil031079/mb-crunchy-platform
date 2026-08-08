@@ -401,6 +401,13 @@ export default function CheckoutPage() {
     if (form.orderType === "delivery" && deliveryZones && deliveryZones.length > 0 && !form.selectedZoneId) {
       newErrors.selectedZoneId = "Please select a delivery zone";
     }
+    // Delivery minimum order validation
+    if (form.orderType === "delivery" && deliveryZones && form.selectedZoneId) {
+      const selectedZone = deliveryZones.find((z) => z._id === form.selectedZoneId);
+      if (selectedZone?.minOrder && pricing.afterDiscount < selectedZone.minOrder) {
+        newErrors.selectedZoneId = `Minimum order for delivery is ${formatCurrency(selectedZone.minOrder)}. Add ${formatCurrency(selectedZone.minOrder - pricing.afterDiscount)} more to your cart.`;
+      }
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -566,7 +573,7 @@ export default function CheckoutPage() {
               transition={{ delay: 0.25 }}
             >
               <h1 className="text-2xl font-bold tracking-tight">
-                Order Placed Successfully!
+                Payment Submitted for Verification
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 Payment recorded — we&apos;ll verify it and start preparing
@@ -587,16 +594,17 @@ export default function CheckoutPage() {
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Pending
+                <span className="text-muted-foreground">Payment</span>
+                <span className="flex items-center gap-1.5 text-amber-600 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Pending Verification
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Type</span>
-                <span className="font-medium capitalize">
-                  {form.orderType}
+                <span className="text-muted-foreground">Order</span>
+                <span className="flex items-center gap-1.5 text-amber-600 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Awaiting Payment Verification
                 </span>
               </div>
               {pricing.estimatedMinutes && form.orderType === "delivery" && (

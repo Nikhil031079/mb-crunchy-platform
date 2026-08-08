@@ -172,7 +172,7 @@ function kitchenStatusLabel(order: OrderRecord): string {
 
 function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: { orders: OrderRecord[]; onOpenOrder: (order: OrderRecord) => void; onAdvanceStatus: (order: OrderRecord, target: OrderStatus) => void; pendingOrderId: string | null }) {
   const now = useLiveClock();
-  const hasActive = orders.some((r) => ["pending", "confirmed", "preparing", "ready"].includes(r.status));
+  const hasActive = orders.some((r) => ["awaiting_payment", "pending", "confirmed", "preparing", "ready"].includes(r.status));
 
   const groupedOrders = useMemo(() => {
     const scored = orders

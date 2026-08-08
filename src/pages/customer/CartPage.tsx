@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Clock,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 import { SITE_NAME, ROUTES } from "@/constants";
@@ -23,8 +24,8 @@ import { formatCurrency } from "@/utils";
 
 // Hooks
 import { useCart } from "@/stores/cart";
-
-// Customer components
+import { useAuth } from "@/hooks/use-auth";
+import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { QuantitySelector } from "@/components/customer";
 import { ProductCard, ProductCardSkeleton } from "@/components/customer";
 import { FrequentlyBoughtTogetherSection } from "@/components/customer/FrequentlyBoughtTogetherSection";
@@ -38,7 +39,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 
-import type { BusinessUnit, DeliveryZone, BusinessUnitSettings } from "@/types";
+import type { BusinessUnit, DeliveryZone, BusinessUnitSettings, CatalogItem } from "@/types";
+import type { CardProduct } from "@/components/customer/ProductCard";
 
 // ============================================================================
 // CartPage — Enhanced with free delivery progress, savings, recommendations
@@ -46,7 +48,23 @@ import type { BusinessUnit, DeliveryZone, BusinessUnitSettings } from "@/types";
 
 export default function CartPage() {
   const navigate = useNavigate();
-  const { cart, updateQuantity, removeItem, clearCart, itemCount } = useCart();
+  const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem } = useCart();
+  const addToCartHook = useAddToCart();
+
+  // Wrapper to convert CatalogItem to the format expected by addItem
+  const addToCart = useCallback((product: CatalogItem) => {
+    // CatalogItem has price directly, no variants array
+    addItem({
+      catalogItemId: product._id,
+      itemType: "product",
+      businessUnitId: product.businessUnitId,
+      name: product.name,
+      variantName: "Default",
+      quantity: 1,
+      unitPrice: product.price ?? 0,
+      image: product.coverImage || product.thumbnail,
+    });
+  }, [addItem]);
 
   // Page title
   useEffect(() => {
@@ -472,6 +490,7 @@ export default function CartPage() {
                   key={item._id}
                   product={item}
                   compact
+                  onAddToCart={addToCart as (product: CatalogItem | CardProduct) => void}
                 />
               ))}
             </div>

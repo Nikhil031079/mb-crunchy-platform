@@ -393,7 +393,7 @@ export interface OrderItem {
 }
 
 export type OrderStatus =
-  | "pending" | "confirmed" | "preparing" | "ready"
+  | "awaiting_payment" | "pending" | "confirmed" | "preparing" | "ready"
   | "out_for_delivery" | "delivered" | "cancelled" | "refunded";
 
 export type PaymentStatus = "pending" | "pending_verification" | "paid" | "failed" | "refunded" | "rejected";

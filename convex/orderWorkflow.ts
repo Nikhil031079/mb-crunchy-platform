@@ -16,6 +16,7 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   OrderStatus,
   readonly OrderStatus[]
 > = {
+  awaiting_payment: ["pending", "cancelled"],
   pending: ["confirmed", "cancelled"],
   confirmed: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],
@@ -27,6 +28,7 @@ export const ORDER_STATUS_TRANSITIONS: Record<
 };
 
 export const CANCELLABLE_STATUSES: readonly OrderStatus[] = [
+  "awaiting_payment",
   "pending",
   "confirmed",
   "preparing",
