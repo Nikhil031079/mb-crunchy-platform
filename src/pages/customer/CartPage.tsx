@@ -54,7 +54,12 @@ export default function CartPage() {
   }, [itemCount]);
 
   // Fetch BU settings for free delivery threshold
-  const primaryBusinessUnitId = cart.businessUnitIds[0];
+  // Use first item's businessUnitId as fallback when businessUnitIds is empty
+  const primaryBusinessUnitId = useMemo(() => {
+    if (cart.businessUnitIds.length > 0) return cart.businessUnitIds[0];
+    if (cart.items.length > 0) return cart.items[0].businessUnitId;
+    return null;
+  }, [cart.businessUnitIds, cart.items]);
 
   const buSettings = useQuery(
     api.settings.getBusinessUnitSettings,
