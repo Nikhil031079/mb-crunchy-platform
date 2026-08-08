@@ -26,7 +26,9 @@ import { isStoreCurrentlyOpen } from "./utils/storeHours";
 // Client-submitted money values are display-only; the server recomputes every
 // value from current catalog data. These tolerances allow harmless float
 // rounding while rejecting any real mismatch (stale cart / tampered prices).
-const PRICE_TOLERANCE = 0.01;
+// Increased from 0.01 to 0.02 to handle JavaScript floating point precision
+// in tax, delivery fee, and total calculations.
+const PRICE_TOLERANCE = 0.02;
 
 // Minimum gap between two customer payment claims on the same order. Keeps
 // claim logging idempotent so a double-tap never produces duplicate activities.
