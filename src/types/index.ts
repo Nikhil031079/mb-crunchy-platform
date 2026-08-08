@@ -738,7 +738,7 @@ export interface CartItem {
 
 export interface CartState {
   items: CartItem[];
-  businessUnitId: string | null;
+  businessUnitIds: string[];
   subtotal: number;
   discount: number;
   deliveryFee: number;

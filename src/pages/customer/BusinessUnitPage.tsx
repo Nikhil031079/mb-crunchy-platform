@@ -327,7 +327,7 @@ export default function BusinessUnitPage() {
         itemType: "product",
         businessUnitId: businessUnit._id,
         name: product.name,
-        variantName: defaultVariant?.name ?? "Default",
+        variantName: defaultVariant?.optionValue ?? "Default",
         quantity: 1,
         unitPrice: product.price ?? defaultVariant?.price ?? 0,
         image: product.coverImage || product.thumbnail,

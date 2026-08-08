@@ -54,17 +54,19 @@ export default function CartPage() {
   }, [itemCount]);
 
   // Fetch BU settings for free delivery threshold
+  const primaryBusinessUnitId = cart.businessUnitIds[0];
+
   const buSettings = useQuery(
     api.settings.getBusinessUnitSettings,
-    cart.businessUnitId
-      ? { businessUnitId: cart.businessUnitId as any }
+    primaryBusinessUnitId
+      ? { businessUnitId: primaryBusinessUnitId as any }
       : "skip",
   ) as BusinessUnitSettings | null | undefined;
 
   const deliveryZones = useQuery(
     api.deliveryZones.getActive,
-    cart.businessUnitId
-      ? { businessUnitId: cart.businessUnitId as any }
+    primaryBusinessUnitId
+      ? { businessUnitId: primaryBusinessUnitId as any }
       : "skip",
   ) as DeliveryZone[] | undefined;
 
@@ -80,8 +82,8 @@ export default function CartPage() {
   );
   const recommendedItems = useQuery(
     api.catalogItems.getRecommended,
-    cart.businessUnitId
-      ? { businessUnitId: cart.businessUnitId as any, excludeIds: cartItemIds as any, limit: 6 }
+    primaryBusinessUnitId
+      ? { businessUnitId: primaryBusinessUnitId as any, excludeIds: cartItemIds as any, limit: 6 }
       : "skip",
   );
 
@@ -430,7 +432,7 @@ export default function CartPage() {
         {/* ================================================================ */}
         {/* RECOMMENDED PRODUCTS                                            */}
         {/* ================================================================ */}
-        {recommendedItems === undefined && cart.businessUnitId && (
+        {recommendedItems === undefined && cart.businessUnitIds[0] && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -476,10 +478,10 @@ export default function CartPage() {
       {/* CROSS-SELL — Frequently Bought Together + Recently Viewed        */}
       {/* ================================================================ */}
 
-      {cart.businessUnitId && cart.items[0] && (
+      {cart.businessUnitIds[0] && cart.items[0] && (
         <FrequentlyBoughtTogetherSection
           catalogItemId={cart.items[0].catalogItemId}
-          businessUnitId={cart.businessUnitId}
+          businessUnitId={cart.businessUnitIds[0]}
           businessUnits={activeBUs ?? []}
           productName={cart.items[0].name}
         />

@@ -16,7 +16,7 @@ const CART_STORAGE_KEY = STORAGE_KEYS.CART;
 
 const defaultCartState: CartState = {
   items: [],
-  businessUnitId: null,
+  businessUnitIds: [],
   subtotal: 0,
   discount: 0,
   deliveryFee: 0,
@@ -99,18 +99,10 @@ export function useCart() {
 
   const addItem = useCallback((item: Omit<CartItem, "totalPrice">) => {
     setState((prev) => {
-      // If adding from a different business unit, clear cart first
-      if (prev.businessUnitId && prev.businessUnitId !== item.businessUnitId) {
-        const newItems = [{ ...item, totalPrice: item.unitPrice * item.quantity }];
-        const subtotal = calculateSubtotal(newItems);
-        return {
-          ...defaultCartState,
-          items: newItems,
-          businessUnitId: item.businessUnitId,
-          subtotal,
-          total: subtotal,
-        };
-      }
+      // Support multiple business units in cart - don't clear when adding from different BU
+      const businessUnitIds = prev.businessUnitIds.includes(item.businessUnitId)
+        ? prev.businessUnitIds
+        : [...prev.businessUnitIds, item.businessUnitId];
 
       // Check if item already exists (same catalogItemId + variant)
       const existingIndex = prev.items.findIndex(
@@ -141,7 +133,7 @@ export function useCart() {
       return {
         ...prev,
         items: newItems,
-        businessUnitId: item.businessUnitId,
+        businessUnitIds,
         subtotal,
         total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax),
       };
@@ -208,11 +200,10 @@ function removeItemInternal(
     (item) => !(item.catalogItemId === catalogItemId && item.variantName === variantName)
   );
 
-  if (newItems.length === 0) {
-    return defaultCartState;
-  }
+  // If no items left, clear businessUnitIds as well
+  const businessUnitIds = newItems.length > 0 ? prev.businessUnitIds : [];
 
   const subtotal = calculateSubtotal(newItems);
 
-  return { ...prev, items: newItems, subtotal, total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax) };
+  return { ...prev, items: newItems, businessUnitIds, subtotal, total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax) };
 }

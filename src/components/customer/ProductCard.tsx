@@ -16,7 +16,7 @@ import type { StockInfo } from "./StockBadge";
 
 export type CardProduct = Pick<
   Product,
-  "_id" | "name" | "slug" | "coverImage" | "images" | "variants" | "tags"
+  "_id" | "name" | "slug" | "coverImage" | "images" | "variants" | "tags" | "thumbnail"
 > &
   Partial<Pick<Product, "description" | "status" | "featured">> &
   Partial<{ vegNonVeg: "veg" | "nonveg" }>;

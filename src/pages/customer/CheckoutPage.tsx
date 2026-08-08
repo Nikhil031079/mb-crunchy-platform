@@ -145,17 +145,20 @@ export default function CheckoutPage() {
   // Data Fetching — BU settings + delivery zones
   // ==========================================================================
 
+  // Use the first business unit from cart for settings/zones queries
+  const primaryBusinessUnitId = cart.businessUnitIds[0];
+
   const buSettings = useQuery(
     api.settings.getBusinessUnitSettings,
-    cart.businessUnitId
-      ? { businessUnitId: cart.businessUnitId as any }
+    primaryBusinessUnitId
+      ? { businessUnitId: primaryBusinessUnitId as any }
       : "skip"
   ) as BusinessUnitSettings | null | undefined;
 
   const deliveryZones = useQuery(
     api.deliveryZones.getActive,
-    cart.businessUnitId
-      ? { businessUnitId: cart.businessUnitId as any }
+    primaryBusinessUnitId
+      ? { businessUnitId: primaryBusinessUnitId as any }
       : "skip"
   ) as DeliveryZone[] | undefined;
 
@@ -288,10 +291,10 @@ export default function CheckoutPage() {
 
   const couponValidation = useQuery(
     api.offers.validateCoupon,
-    form.couponCode.trim() && cart.businessUnitId
+    form.couponCode.trim() && primaryBusinessUnitId
       ? {
           code: form.couponCode.trim(),
-          businessUnitId: cart.businessUnitId as any,
+          businessUnitId: primaryBusinessUnitId as any,
           subtotal: cart.subtotal,
         }
       : "skip"
@@ -426,8 +429,9 @@ export default function CheckoutPage() {
       setPaymentStatus("creating_order");
 
       try {
+        const primaryBusinessUnitId = cart.businessUnitIds[0];
         const orderResult = await createOrder({
-          businessUnitId: cart.businessUnitId! as any,
+          businessUnitId: primaryBusinessUnitId! as any,
           customerName: form.customerName.trim(),
           customerPhone: form.customerPhone.trim(),
           customerEmail: form.customerEmail.trim() || undefined,
@@ -691,7 +695,7 @@ export default function CheckoutPage() {
         </motion.div>
 
         {/* Loading State — settings still loading */}
-        {buSettings === undefined && cart.businessUnitId && (
+        {buSettings === undefined && cart.businessUnitIds[0] && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

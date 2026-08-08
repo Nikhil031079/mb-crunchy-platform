@@ -275,9 +275,8 @@ async function resolveOrderLine(
   if (!doc) {
     throw new Error("Item not found in catalog");
   }
-  if (doc.businessUnitId !== businessUnitId) {
-    throw new Error("Item does not belong to this store");
-  }
+  // Allow items from different business units in the same order
+  // The order is created under the primary business unit, but can contain items from other BUs
   if (doc.itemType && doc.itemType !== item.itemType) {
     throw new Error("Item type mismatch");
   }
@@ -290,9 +289,7 @@ async function resolveOrderLine(
   if (!source) {
     throw new Error("Item source not found");
   }
-  if (source.businessUnitId !== businessUnitId) {
-    throw new Error("Item does not belong to this store");
-  }
+  // Allow items from different business units in the same order
   if (doc.status !== "active" || doc.deletedAt) {
     throw new Error(`"${doc.name ?? "Item"}" is no longer available`);
   }
@@ -305,10 +302,13 @@ async function resolveOrderLine(
     const variant = (source.variants ?? []).find(
       (v) => v.active && v.optionValue === item.variantName,
     );
-    if (!variant) {
-      throw new Error(`Variant "${item.variantName}" not found`);
+    if (variant) {
+      unitPrice = variant.price;
+    } else {
+      // Fallback: product has no matching variant (e.g., no variants defined, or "Default" sent for product without variants).
+      // Use the catalog item's base price (stored in the catalog item's price field).
+      unitPrice = doc.price ?? 0;
     }
-    unitPrice = variant.price;
   } else {
     unitPrice = source.price ?? 0;
   }

@@ -332,7 +332,7 @@ export default function CategoryPage() {
     [activeCategories, countByCategoryId]
   );
 
-  const handleAddToCart = useCallback(
+const handleAddToCart = useCallback(
     (product: CatalogItem | CardProduct) => {
       if (!businessUnit) return;
       if (!storeIsOpen) {
@@ -343,18 +343,22 @@ export default function CategoryPage() {
         });
         return;
       }
-      const item = product as CatalogItem;
+      // Check if product has variants (CardProduct) or is a CatalogItem
+      const isCardProduct = "variants" in product && Array.isArray(product.variants);
+      const defaultVariant = isCardProduct ? product.variants?.[0] : undefined;
+      const variantName = isCardProduct ? defaultVariant?.optionValue ?? "Default" : "Default";
+      const unitPrice = isCardProduct ? (defaultVariant?.price ?? 0) : (product as CatalogItem).price ?? 0;
       addItem({
-        catalogItemId: item._id,
+        catalogItemId: product._id,
         itemType: "product",
         businessUnitId: businessUnit._id,
-        name: item.name,
-        variantName: "Default",
+        name: product.name,
+        variantName,
         quantity: 1,
-        unitPrice: item.price ?? 0,
-        image: item.coverImage || item.thumbnail,
+        unitPrice,
+        image: product.coverImage || product.thumbnail,
       });
-      toast.success("Added to cart", { description: item.name });
+      toast.success("Added to cart", { description: product.name });
     },
     [addItem, businessUnit, storeIsOpen, nextOpenTime]
   );
