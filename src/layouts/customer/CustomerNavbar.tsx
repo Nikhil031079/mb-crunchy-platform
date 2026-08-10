@@ -11,6 +11,7 @@ import {
   Star,
   Package,
   UserCircle,
+  Package as PackageIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -117,6 +118,18 @@ export function CustomerNavbar({
                 </Link>
               );
             })}
+            <Link
+              to={ROUTES.TRACK_ORDER}
+              className={cn(
+                "px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                location.pathname === ROUTES.TRACK_ORDER
+                  ? "bg-accent/10 text-accent"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+              )}
+            >
+              <PackageIcon className="mr-1.5 h-4 w-4" />
+              Track Order
+            </Link>
           </nav>
 
           {/* Actions */}
@@ -260,6 +273,14 @@ export function CustomerNavbar({
                       <Star className="h-4 w-4" />
                       Loyalty
                     </Link>
+                    <Link
+                      to={ROUTES.TRACK_ORDER}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    >
+                      <PackageIcon className="h-4 w-4" />
+                      Track Order
+                    </Link>
                     <button
                       onClick={() => {
                         setMobileMenuOpen(false);
@@ -272,14 +293,24 @@ export function CustomerNavbar({
                     </button>
                   </>
                 ) : (
-                  <Link
-                    to={ROUTES.AUTH}
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Button variant="default" size="sm" className="w-full">
-                      Sign In
-                    </Button>
-                  </Link>
+                  <>
+                    <Link
+                      to={ROUTES.TRACK_ORDER}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    >
+                      <PackageIcon className="h-4 w-4" />
+                      Track Order
+                    </Link>
+                    <Link
+                      to={ROUTES.AUTH}
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Button variant="default" size="sm" className="w-full">
+                        Sign In
+                      </Button>
+                    </Link>
+                  </>
                 )}
               </div>
             </nav>

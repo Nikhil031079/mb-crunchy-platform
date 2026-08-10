@@ -173,6 +173,7 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                         className="h-7 gap-1 px-2 text-xs"
                         onClick={() => onQuickStatus(order)}
                         title={`Move to ${STATUS_LABELS[nextStatus]}`}
+                        disabled={nextStatus === "confirmed" && order.paymentStatus !== "paid"}
                       >
                         {STATUS_LABELS[nextStatus]}
                         <ChevronRight aria-hidden="true" className="size-3" />

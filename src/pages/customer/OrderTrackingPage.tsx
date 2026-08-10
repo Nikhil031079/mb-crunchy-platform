@@ -21,7 +21,6 @@ import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
-import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
@@ -233,10 +232,8 @@ function StatusProgressFlow({
 
 function TrackingSummary({
   order,
-  businessUnitName,
 }: {
   order: Order;
-  businessUnitName?: string;
 }) {
   const isCancelled = order.status === "cancelled" || order.status === "refunded";
   const steps = getTrackingSteps(order.orderType, order.paymentStatus);
@@ -294,13 +291,6 @@ function TrackingSummary({
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Last Updated</p>
               <p className="truncate font-medium">{formatDateTime(lastUpdated)}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-2">
-            <Store className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Business Unit</p>
-              <p className="truncate font-medium">{businessUnitName ?? "—"}</p>
             </div>
           </div>
           <div className="col-span-2 flex items-start gap-2 sm:col-span-1">
@@ -544,7 +534,6 @@ export default function OrderTrackingPage() {
                 <div className="mt-5">
                   <TrackingSummary
                     order={selectedOrder}
-                    businessUnitName={businessUnitName}
                   />
                 </div>
 
@@ -587,37 +576,7 @@ export default function OrderTrackingPage() {
                         </div>
                       </div>
                     </div>
-
-                    {/* Items */}
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-                        Items
-                      </p>
-                      <div className="space-y-1">
-                        {selectedOrder.items.map((item, i) => (
-                          <div
-                            key={i}
-                            className="flex justify-between text-xs"
-                          >
-                            <span className="text-muted-foreground truncate">
-                              {item.quantity}x {item.name} ({item.variantName})
-                            </span>
-                            <span className="font-medium shrink-0 ml-2">
-                              {formatCurrency(item.totalPrice)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                   </div>
-                </div>
-
-                {/* Activity Timeline */}
-                <div className="mt-5 pt-5 border-t border-border/60">
-                  <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
-                    Activity Timeline
-                  </p>
-                  <OrderActivityFeed activities={activities} />
                 </div>
               </div>
             )}

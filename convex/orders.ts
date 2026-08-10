@@ -774,6 +774,17 @@ export const updateStatus = mutation({
       }
     }
 
+    // Operating rule: an order can only be accepted (moved to confirmed)
+    // after payment has been verified. This prevents Kitchen from receiving
+    // unpaid orders and ensures Admin cannot bypass payment verification.
+    if (
+      args.status === "confirmed" &&
+      args.status !== previousStatus &&
+      (args.paymentStatus ?? order.paymentStatus) !== "paid"
+    ) {
+      throw new Error("Payment must be verified before accepting this order");
+    }
+
     // Payment status must be independent of order status. An order may only
     // become "paid" through an explicit, separate payment confirmation; it
     // must never flip to paid as a side effect of a status change.

@@ -48,6 +48,9 @@ function getKitchenActionForOrder(order: any) {
   if (order.orderType === "pickup" && order.status === "ready") {
     return { label: "Mark Collected", nextStatus: "delivered" };
   }
+  if (order.orderType === "delivery" && order.status === "ready") {
+    return { label: "Dispatch", nextStatus: "out_for_delivery" };
+  }
   return KITCHEN_ACTIONS[order.status];
 }
 
@@ -331,7 +334,7 @@ export default function KitchenDashboard() {
                           </p>
                         )}
                         <p className="text-xs text-muted-foreground">
-                          Items: {order.items.reduce((sum: number, i: any) => sum + i.quantity, 0)} | {formatCurrency(order.total)}
+                          Items: {order.items.reduce((sum: number, i: any) => sum + i.quantity, 0)}
                         </p>
                         {!isPaid && action.nextStatus === "preparing" && (
                           <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
@@ -346,7 +349,6 @@ export default function KitchenDashboard() {
                         {order.items.slice(0, 3).map((item: any, idx: number) => (
                           <div key={idx} className="flex justify-between text-xs">
                             <span className="text-muted-foreground">{item.quantity}x {item.name}</span>
-                            <span className="font-medium">{formatCurrency(item.unitPrice * item.quantity)}</span>
                           </div>
                         ))}
                         {order.items.length > 3 && (
@@ -419,7 +421,7 @@ export default function KitchenDashboard() {
                     </div>
                     <p className="text-xs text-muted-foreground">{order.customerName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {order.items.reduce((sum: number, i: any) => sum + i.quantity, 0)} items · {formatCurrency(order.total)}
+                      {order.items.reduce((sum: number, i: any) => sum + i.quantity, 0)} items
                     </p>
                   </motion.div>
                 ))}
