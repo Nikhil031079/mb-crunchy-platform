@@ -525,7 +525,8 @@ export default function OrderTrackingPage() {
                 </div>
 
                 {/* Payment pending / continuation */}
-                {(selectedOrder.paymentStatus === "pending_verification" ||
+                {(selectedOrder.status === "awaiting_payment" ||
+                  selectedOrder.paymentStatus === "pending_verification" ||
                   selectedOrder.paymentStatus === "failed" ||
                   selectedOrder.paymentStatus === "rejected" ||
                   selectedOrder.status === "cancelled" ||

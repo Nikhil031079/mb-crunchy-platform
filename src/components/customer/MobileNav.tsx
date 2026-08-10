@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, User, ChefHat, Search } from "lucide-react";
+import { ShoppingCart, User, ChefHat, Search, Package } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -109,6 +109,14 @@ export function MobileNav({
                     {cartItemCount}
                   </Badge>
                 )}
+              </Link>
+              <Link
+                to={ROUTES.TRACK_ORDER}
+                onClick={onClose}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Package className="h-4 w-4" />
+                Track Order
               </Link>
               <Link
                 to={ROUTES.AUTH}

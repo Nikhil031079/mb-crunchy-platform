@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -12,7 +13,7 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
-import { SITE_NAME } from "@/constants";
+import { SITE_NAME, ROUTES } from "@/constants";
 import { formatCurrency, formatDateTime } from "@/utils";
 import { cn } from "@/lib/utils";
 
@@ -66,9 +67,17 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
 
   const cancelled = order.status === "cancelled";
   const refunded = order.status === "refunded";
-  const unpaid = order.paymentStatus === "pending_verification";
-  const stillOpen = order.status === "pending" || order.status === "confirmed";
-  const needsRetry = !unpaid && (order.paymentStatus === "failed" || order.paymentStatus === "rejected") && stillOpen;
+  const isAwaitingPayment = order.status === "awaiting_payment";
+  const isPendingVerification = order.status === "pending" && order.paymentStatus === "pending_verification";
+  const isWorkStartedUnpaid =
+    (order.status === "preparing" ||
+      order.status === "ready" ||
+      order.status === "out_for_delivery" ||
+      order.status === "delivered") &&
+    order.paymentStatus === "pending_verification";
+  const needsRetry =
+    (order.paymentStatus === "failed" || order.paymentStatus === "rejected") &&
+    (order.status === "pending" || order.status === "confirmed");
 
   const handleClaim = useCallback(async (referenceArg?: string) => {
     if (claimState !== "idle") return;
@@ -115,15 +124,15 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-red-700 dark:text-red-300">
-              {unpaid ? "Order Cancelled · Reservation Expired" : "Order Cancelled"}
+<p className="font-semibold text-red-700 dark:text-red-300">
+              {isAwaitingPayment ? "Order Cancelled · Reservation Expired" : "Order Cancelled"}
             </p>
             <p className="mt-1 text-sm text-red-600/90 dark:text-red-300/80">
-              {unpaid
+              {isAwaitingPayment
                 ? "Payment wasn't completed in time, so this reservation was released. Your items are no longer reserved."
                 : refunded
-                  ? "This order was refunded."
-                  : "This order was cancelled."}
+                ? "This order was refunded."
+                : "This order was cancelled."}
             </p>
             <Button
               size="sm"
@@ -142,7 +151,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   // --------------------------------------------------------------------------
   // Payment pending but work has started (preparing/ready) — honest note only
   // --------------------------------------------------------------------------
-  if (unpaid && !stillOpen) {
+  if (isWorkStartedUnpaid) {
     return (
       <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-800/50 dark:bg-amber-950/20">
         <div className="flex items-start gap-3">
@@ -162,9 +171,9 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   }
 
   // --------------------------------------------------------------------------
-  // Payment pending / failed / rejected — Pay Now + I've Paid
+  // awaiting_payment — Pay Now + I've Paid (customer hasn't claimed payment yet)
   // --------------------------------------------------------------------------
-  if (unpaid && stillOpen) {
+  if (isAwaitingPayment) {
     const paymentConfig = settings?.paymentConfig;
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/60 dark:bg-amber-950/30">
@@ -172,11 +181,10 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
           <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-amber-800 dark:text-amber-200">
-              Payment Pending
+              Payment Not Completed
             </p>
             <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-              Your order is safely reserved. Preparation starts after payment
-              verification.
+              Your order is reserved for {formatCurrency(order.total)}. Complete the UPI payment to continue.
             </p>
 
             <dl className="mt-3 space-y-1.5 text-sm">
@@ -293,6 +301,37 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
             }}
           />
         )}
+      </div>
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // pending_verification — Customer has submitted "I've Paid"
+  // --------------------------------------------------------------------------
+  if (isPendingVerification) {
+    return (
+      <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-800/50 dark:bg-amber-950/20">
+        <div className="flex items-start gap-3">
+          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-amber-800 dark:text-amber-200">
+              Payment Submitted for Verification
+            </p>
+            <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+              We've received your payment claim. MB Crunchy will verify your payment shortly.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-3 gap-1.5"
+              asChild
+            >
+              <Link to={ROUTES.TRACK_ORDER}>
+                Track Order
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

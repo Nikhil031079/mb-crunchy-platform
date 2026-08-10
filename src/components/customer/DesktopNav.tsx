@@ -1,7 +1,9 @@
 import { Link } from "react-router";
 import { motion } from "framer-motion";
+import { Package } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { ROUTES } from "@/constants";
 
 import type { BusinessUnit } from "@/types";
 
@@ -44,6 +46,19 @@ export function DesktopNav({
           </Link>
         );
       })}
+      <Link
+        to={ROUTES.TRACK_ORDER}
+        className={cn(
+          "relative px-3 py-2 text-sm font-medium rounded-md transition-colors",
+          "hover:bg-secondary/80",
+          currentPath === ROUTES.TRACK_ORDER
+            ? "text-accent"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Package className="inline h-4 w-4 mr-1.5" />
+        Track Order
+      </Link>
     </nav>
   );
 }
