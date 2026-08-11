@@ -176,6 +176,31 @@ export function safeJsonParse<T>(value: string | null | undefined, fallback: T):
   }
 }
 
+/**
+ * Convex document IDs are compact, table-encoded strings (e.g. catalogItems
+ * IDs look like `k975w87y2njk22dtq5g29zxpxn8c1gdc` — NOT `catalogItems_...`).
+ * A cart item must reference a catalogItems document; combos, party packs and
+ * products keep their own tables and are synced into catalogItems separately.
+ *
+ * This is a cheap structural pre-filter: it accepts any well-formed Convex
+ * document ID and rejects clearly-invalid values (empty, non-strings, legacy
+ * `combos_...`/`partyPacks_...` references). Authoritative, table-aware
+ * validation that an ID really belongs to the catalogItems table is done
+ * server-side via `catalogItems:verifyCatalogItemIds` whenever a value enters
+ * or is restored into the cart.
+ */
+export function isCatalogItemId(id: unknown): id is string {
+  return (
+    typeof id === "string" &&
+    id.length >= 16 &&
+    /^[a-z0-9]+$/.test(id)
+  );
+}
+
+export function filterCatalogItemIds(ids: string[]): string[] {
+  return Array.from(new Set(ids.filter(isCatalogItemId)));
+}
+
 export {
   toCSV,
   downloadCSV,

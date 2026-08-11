@@ -736,6 +736,15 @@ export interface CartItem {
   image?: string;
 }
 
+/**
+ * One-time, in-memory cart notice shown after stale references are removed
+ * from a persisted cart, so the customer is told what changed.
+ */
+export interface CartNotice {
+  type: "items_removed";
+  itemNames: string[];
+}
+
 export interface CartState {
   items: CartItem[];
   businessUnitIds: string[];
@@ -745,6 +754,7 @@ export interface CartState {
   tax: number;
   total: number;
   note?: string;
+  notice?: CartNotice;
 }
 
 // ============================================================================

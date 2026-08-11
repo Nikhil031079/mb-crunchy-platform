@@ -73,11 +73,11 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
   const firstBuSlug = businessUnits[0]?.slug;
 
   const handleAddToCart = useCallback(
-    (product: CatalogItem | CardProduct) => {
+    async (product: CatalogItem | CardProduct) => {
       const item = product as CatalogItem;
-      addItem({
+      const added = await addItem({
         catalogItemId: item._id,
-        itemType: "product",
+        itemType: item.itemType,
         businessUnitId: item.businessUnitId,
         name: item.name,
         variantName: "Default",
@@ -85,7 +85,9 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
         unitPrice: item.price ?? 0,
         image: item.coverImage || item.thumbnail,
       });
-      toast.success("Added to cart", { description: item.name });
+      if (added) {
+        toast.success("Added to cart", { description: item.name });
+      }
     },
     [addItem],
   );

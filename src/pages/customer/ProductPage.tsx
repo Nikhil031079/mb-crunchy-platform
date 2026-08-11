@@ -184,33 +184,42 @@ export default function ProductPage() {
   const isProductLoading = product === undefined;
   const isProductNotFound = product === null && !isBuLoading;
 
+  // Resolve the authoritative catalogItems record for this product.
+  // All downstream references (recently viewed, cart, recommendations) must use catalogItems._id.
+  const catalogItem = useQuery(
+    api.catalogItems.getBySourceId,
+    product?._id && businessUnit?._id
+      ? { sourceId: product._id }
+      : "skip"
+  ) as CatalogItem | null | undefined;
+
   const buSettings = useQuery(api.settings.getBusinessUnitSettings, {
     businessUnitId: businessUnit?._id ?? ("" as any),
   }) as BusinessUnitSettings | null | undefined;
 
   const inventoryItems = useQuery(
     api.inventory.getByCatalogItem,
-    product?._id ? { catalogItemId: product._id as any } : "skip"
+    catalogItem?._id ? { catalogItemId: catalogItem._id as Id<"catalogItems"> } : "skip"
   ) as InventoryItem[] | undefined;
 
   const relatedItems = useQuery(
     api.catalogItems.getRelatedByTags,
-    product?._id
-      ? { catalogItemId: product._id as any, tags: product.tags ?? [], limit: 4 }
+    catalogItem?._id
+      ? { catalogItemId: catalogItem._id as Id<"catalogItems">, tags: product?.tags ?? [], limit: 4 }
       : "skip"
   ) as CatalogItem[] | undefined;
 
   const trendingItems = useQuery(
     api.catalogItems.getTrending,
     businessUnit?._id
-      ? { businessUnitId: businessUnit._id as any, limit: 4 }
+      ? { businessUnitId: businessUnit._id as Id<"businessUnits">, limit: 4 }
       : "skip"
   ) as CatalogItem[] | undefined;
 
   const reviewStats = useQuery(
     api.reviews.getStats,
-    product?._id
-      ? { catalogItemId: product._id as any }
+    catalogItem?._id
+      ? { catalogItemId: catalogItem._id as Id<"catalogItems"> }
       : "skip"
   ) as ReviewStats | undefined;
 
@@ -394,7 +403,7 @@ export default function ProductPage() {
     }
   }, [productSlug, product?.variants]);
 
-  const handleAddToCart = useCallback(() => {
+  const handleAddToCart = useCallback(async () => {
     if (!product || !selectedVariant || !businessUnit) return;
     if (!storeIsOpen) {
       toast.error("Store is currently closed", {
@@ -411,8 +420,8 @@ export default function ProductPage() {
       return;
     }
 
-    addItem({
-      catalogItemId: product._id,
+    const added = await addItem({
+      catalogItemId: catalogItem!._id as Id<"catalogItems">,
       itemType: "product",
       businessUnitId: businessUnit._id,
       name: product.name,
@@ -422,37 +431,39 @@ export default function ProductPage() {
       image: coverSrc,
     });
 
-    toast.success("Added to cart", {
-      description: `${product.name} (${selectedVariant.optionValue}) x${quantity}`,
-    });
+    if (added) {
+      toast.success("Added to cart", {
+        description: `${product.name} (${selectedVariant.optionValue}) x${quantity}`,
+      });
+    }
   }, [product, selectedVariant, businessUnit, quantity, addItem, coverSrc, storeIsOpen, nextOpenTime, isOutOfStock]);
 
   // Record recently viewed
   useEffect(() => {
-    if (customer?._id && product?._id) {
+    if (customer?._id && catalogItem?._id) {
       recordRecentlyViewed({
         customerId: customer._id as Id<"customers">,
         itemType: "product",
-        itemId: product._id as Id<"catalogItems">,
+        itemId: catalogItem._id as Id<"catalogItems">,
       }).catch(() => {});
     }
-  }, [customer?._id, product?._id, recordRecentlyViewed]);
+  }, [customer?._id, catalogItem?._id, recordRecentlyViewed]);
 
   // LocalStorage recently-viewed (guest + signed-in) — capped & deduped
   const { recordView } = useRecentlyViewed();
   useEffect(() => {
-    if (product && businessUnit) {
+    if (catalogItem && businessUnit) {
       recordView({
-        catalogItemId: product._id,
+        catalogItemId: catalogItem._id,
         businessUnitId: businessUnit._id,
         itemType: "product",
-        name: product.name,
-        slug: product.slug,
-        image: product.coverImage ?? product.images?.[0],
-        price: product.variants?.[0]?.price ?? 0,
+        name: catalogItem.name,
+        slug: catalogItem.slug,
+        image: catalogItem.coverImage ?? catalogItem.thumbnail,
+        price: catalogItem.price,
       });
     }
-  }, [product, businessUnit, recordView]);
+  }, [catalogItem, businessUnit, recordView]);
 
   // Browsing preference (BU personalization on the homepage)
   const { setPreference } = useBrowsingPreference();
@@ -1231,7 +1242,7 @@ export default function ProductPage() {
           />
           <CrossSellSections
             businessUnit={businessUnit}
-            excludeIds={[product._id as Id<"catalogItems">]}
+            excludeIds={catalogItem ? [catalogItem._id] : []}
           />
         </>
       )}
@@ -1241,10 +1252,12 @@ export default function ProductPage() {
       {/* ================================================================== */}
 
       <div id="reviews-section" className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-12 sm:px-6 lg:px-8">
-        <ReviewSection
-          catalogItemId={prod._id}
-          businessUnitId={bu._id}
-        />
+        {catalogItem ? (
+          <ReviewSection
+            catalogItemId={catalogItem._id}
+            businessUnitId={bu._id}
+          />
+        ) : null}
       </div>
 
       {/* ================================================================== */}

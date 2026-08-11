@@ -59,9 +59,9 @@ function BusinessUnitSection({
   const { addItem } = useCart();
 
   const handleAddToCart = useCallback(
-    (product: CatalogItem | CardProduct) => {
+    async (product: CatalogItem | CardProduct) => {
       const item = product as CatalogItem;
-      addItem({
+      await addItem({
         catalogItemId: item._id,
         itemType: "product",
         businessUnitId: bu._id,

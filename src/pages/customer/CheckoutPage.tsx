@@ -17,6 +17,8 @@ import {
   Star,
   User,
   CircleDot,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -108,7 +110,7 @@ function clearIdempotencyKey() {
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, clearCart, itemCount } = useCart();
+  const { cart, clearCart, itemCount, dismissNotice } = useCart();
   const createOrder = useMutation(api.orders.create);
   const claimPayment = useMutation(api.orders.claimPayment);
   const redeemPointsMutation = useMutation(api.loyalty.redeemPoints);
@@ -497,9 +499,13 @@ export default function CheckoutPage() {
         const message =
           error instanceof Error ? error.message : "Order creation failed";
         console.error("Checkout failed:", error);
+        const isAvailabilityError =
+          message.includes("stock") ||
+          message.includes("catalogItems") ||
+          message.includes("does not match the expected Convex");
         toast.error("Checkout failed", {
-          description: message.includes("stock")
-            ? "Some items are out of stock. Please review your cart."
+          description: isAvailabilityError
+            ? "Some items in your cart are no longer available. Please review your cart."
             : "Please try again or contact support.",
         });
       } finally {
@@ -1197,6 +1203,27 @@ export default function CheckoutPage() {
                     {itemCount} item{itemCount !== 1 ? "s" : ""}
                   </span>
                 </div>
+
+                {/* One-time notice: stale cart references were removed on load */}
+                {cart.notice?.type === "items_removed" && cart.notice.itemNames.length > 0 && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <p className="flex-1 text-xs text-amber-800">
+                      {cart.notice.itemNames.join(", ")}{" "}
+                      {cart.notice.itemNames.length === 1 ? "was" : "were"} removed
+                      because {cart.notice.itemNames.length === 1 ? "it is" : "they are"} no
+                      longer available.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={dismissNotice}
+                      className="shrink-0 text-amber-600 hover:text-amber-800"
+                      aria-label="Dismiss notice"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
 
                 {/* Items */}
                 <div className="max-h-48 space-y-3 overflow-y-auto">

@@ -5,6 +5,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
 import type { CatalogItem, Product } from "@/types";
+import { filterCatalogItemIds } from "@/utils";
 
 // ============================================================================
 // Category Signals — derive the categories that a set of catalog items belong
@@ -12,7 +13,10 @@ import type { CatalogItem, Product } from "@/types";
 // ============================================================================
 
 export function useCategorySignals(catalogItemIds: string[]) {
-  const ids = useMemo(() => Array.from(new Set(catalogItemIds)), [catalogItemIds]);
+  // Only catalogItems references are valid here. A stale source-table ID (e.g.
+  // a legacy `combos_...` cart entry) would fail Convex `v.id("catalogItems")`
+  // validation and crash the whole homepage — filter before querying.
+  const ids = useMemo(() => filterCatalogItemIds(catalogItemIds), [catalogItemIds]);
 
   const catalogItems = useQuery(
     api.catalogItems.getByIds,
@@ -22,7 +26,7 @@ export function useCategorySignals(catalogItemIds: string[]) {
   const sourceIds = useMemo(() => {
     if (!catalogItems) return [];
     return (catalogItems as Array<CatalogItem | null>)
-      .filter((item): item is CatalogItem => item !== null)
+      .filter((item): item is CatalogItem => item !== null && item.itemType === "product")
       .map((item) => item.sourceId);
   }, [catalogItems]);
 

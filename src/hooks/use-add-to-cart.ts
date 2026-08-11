@@ -12,8 +12,8 @@ export function useAddToCart() {
   const { addItem } = useCart();
 
   return useCallback(
-    (product: CatalogItem) => {
-      addItem({
+    async (product: CatalogItem) => {
+      const added = await addItem({
         catalogItemId: product._id,
         itemType: product.itemType,
         businessUnitId: product.businessUnitId,
@@ -23,7 +23,9 @@ export function useAddToCart() {
         unitPrice: product.price ?? 0,
         image: product.coverImage || product.thumbnail,
       });
-      toast.success("Added to cart", { description: product.name });
+      if (added) {
+        toast.success("Added to cart", { description: product.name });
+      }
     },
     [addItem],
   );

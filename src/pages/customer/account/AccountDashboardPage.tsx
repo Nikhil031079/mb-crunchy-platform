@@ -470,11 +470,11 @@ export default function AccountDashboardPage() {
 
   // Reorder handler
   const handleReorder = useCallback(
-    (order: Order) => {
+    async (order: Order) => {
       if (!order.businessUnitId) return;
       let addedCount = 0;
       for (const item of order.items) {
-        addItem({
+        const added = await addItem({
           catalogItemId: item.catalogItemId,
           itemType: item.itemType,
           businessUnitId: order.businessUnitId,
@@ -484,7 +484,7 @@ export default function AccountDashboardPage() {
           unitPrice: item.unitPrice,
           image: item.image,
         });
-        addedCount += item.quantity;
+        if (added) addedCount += item.quantity;
       }
       toast.success("Items added to cart", {
         description: `${addedCount} item${addedCount === 1 ? "" : "s"} from ${order.orderNumber}`,

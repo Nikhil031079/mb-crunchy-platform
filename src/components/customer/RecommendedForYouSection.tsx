@@ -10,7 +10,7 @@ import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCategorySignals } from "@/hooks/use-category-signals";
-import { rankCatalogItems } from "@/utils";
+import { filterCatalogItemIds, rankCatalogItems } from "@/utils";
 
 import { ProductGridSection } from "./ProductGridSection";
 
@@ -43,7 +43,7 @@ export function RecommendedForYouSection({
     [cart.items],
   );
   const signalIds = useMemo(
-    () => Array.from(new Set([...viewedIds, ...cartIds])),
+    () => filterCatalogItemIds(Array.from(new Set([...viewedIds, ...cartIds]))),
     [viewedIds, cartIds],
   );
 

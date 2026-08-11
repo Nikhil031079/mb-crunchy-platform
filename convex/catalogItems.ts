@@ -96,6 +96,31 @@ export const getByIds = query({
   },
 });
 
+/**
+ * Authoritative, format-agnostic check that a list of raw strings are real
+ * catalogItems document IDs. Uses Convex's own table-aware ID normalization
+ * (IDs encode their table as a prefix), so it correctly rejects combos,
+ * party packs and product source IDs without hardcoding any ID format.
+ * Shared by the cart store (add-time guard + hydration sanitize).
+ */
+export const verifyCatalogItemIds = query({
+  args: { ids: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const uniqueIds = Array.from(new Set(args.ids));
+    const results: Record<string, boolean> = {};
+    for (const rawId of uniqueIds) {
+      const id = ctx.db.normalizeId("catalogItems", rawId);
+      if (!id) {
+        results[rawId] = false;
+        continue;
+      }
+      const doc = await ctx.db.get(id);
+      results[rawId] = !!doc && !doc.deletedAt;
+    }
+    return results;
+  },
+});
+
 export const search = query({
   args: {
     businessUnitId: v.id("businessUnits"),

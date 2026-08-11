@@ -14,13 +14,15 @@ import {
   Tag,
   CheckCircle2,
   Clock,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/utils";
+import { filterCatalogItemIds, formatCurrency } from "@/utils";
 
 // Hooks
 import { useCart } from "@/stores/cart";
@@ -48,13 +50,13 @@ import type { CardProduct } from "@/components/customer/ProductCard";
 
 export default function CartPage() {
   const navigate = useNavigate();
-  const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem } = useCart();
+  const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem, dismissNotice } = useCart();
   const addToCartHook = useAddToCart();
 
   // Wrapper to convert CatalogItem to the format expected by addItem
-  const addToCart = useCallback((product: CatalogItem) => {
+  const addToCart = useCallback(async (product: CatalogItem) => {
     // CatalogItem has price directly, no variants array
-    addItem({
+    await addItem({
       catalogItemId: product._id,
       itemType: "product",
       businessUnitId: product.businessUnitId,
@@ -100,7 +102,7 @@ export default function CartPage() {
 
   // Fetch recommended products for the current BU, excluding items already in cart
   const cartItemIds = useMemo(
-    () => cart.items.map((item) => item.catalogItemId),
+    () => filterCatalogItemIds(cart.items.map((item) => item.catalogItemId)),
     [cart.items],
   );
   const recommendedItems = useQuery(
@@ -251,6 +253,38 @@ export default function CartPage() {
                 freeDeliveryProgress.reached && "[&>div]:bg-emerald-500"
               )}
             />
+          </motion.div>
+        )}
+
+        {/* One-time notice: stale cart references were removed on load */}
+        {cart.notice?.type === "items_removed" && cart.notice.itemNames.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.05 }}
+            className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4"
+          >
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-900">
+                Some items in your cart are no longer available
+              </p>
+              <p className="mt-0.5 text-xs text-amber-800">
+                {cart.notice.itemNames.join(", ")}{" "}
+                {cart.notice.itemNames.length === 1 ? "was" : "were"} removed because{" "}
+                {cart.notice.itemNames.length === 1 ? "it is" : "they are"} no longer
+                available.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={dismissNotice}
+              aria-label="Dismiss notice"
+              className="h-8 w-8 shrink-0 p-0 text-amber-700 hover:text-amber-900"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </motion.div>
         )}
 

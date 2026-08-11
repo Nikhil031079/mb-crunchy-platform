@@ -2,13 +2,15 @@ import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { AdminAuthProvider } from "@/hooks/use-admin-auth";
 import { KitchenAuthProvider } from "@/hooks/use-kitchen-auth";
 import { BrandingProvider } from "@/hooks/use-branding";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation, useNavigationType } from "react-router";
+import { convexClient } from "@/lib/convex";
+import { sanitizeCartForStaleReferences } from "@/stores/cart";
+import { sanitizeRecentlyViewed } from "@/hooks/use-recently-viewed";
 import "./index.css";
 
 // ============================================================================
@@ -139,7 +141,7 @@ class RootErrorBoundary extends React.Component<
 // Convex Client
 // ============================================================================
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const convex = convexClient;
 
 // ============================================================================
 // Route Syncer (for iframe communication)
@@ -174,6 +176,30 @@ function RouteSyncer() {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  return null;
+}
+
+// ============================================================================
+// Cart store init - authoritatively sanitizes the hydrated cart (drops stale
+// source-table references that no longer resolve to catalogItems docs).
+// ============================================================================
+
+function CartStoreSanitizer() {
+  useEffect(() => {
+    sanitizeCartForStaleReferences();
+  }, []);
+  return null;
+}
+
+// ============================================================================
+// Recently-viewed sanitizer - authoritatively removes stale source-table IDs
+// from localStorage before they reach catalogItems.getByIds validators.
+// ============================================================================
+
+function RecentlyViewedSanitizer() {
+  useEffect(() => {
+    sanitizeRecentlyViewed();
+  }, []);
   return null;
 }
 
@@ -269,6 +295,8 @@ createRoot(document.getElementById("root")!).render(
         <BrandingProvider>
           <BrowserRouter>
             <RouteSyncer />
+            <CartStoreSanitizer />
+            <RecentlyViewedSanitizer />
             <AppRoutes />
           </BrowserRouter>
           <Toaster />

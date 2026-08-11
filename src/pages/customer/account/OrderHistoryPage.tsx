@@ -123,7 +123,7 @@ export default function OrderHistoryPage() {
   };
 
   const handleReorder = useCallback(
-    (order: Order) => {
+    async (order: Order) => {
       const availableItems = order.items.filter((item) => {
         const catalogItem = reorderCatalogItems?.find(
           (c) => c._id === item.catalogItemId,
@@ -146,7 +146,7 @@ export default function OrderHistoryPage() {
       }
 
       for (const item of availableItems) {
-        addItem({
+        await addItem({
           catalogItemId: item.catalogItemId,
           itemType: item.itemType,
           businessUnitId: order.businessUnitId,
@@ -166,9 +166,9 @@ export default function OrderHistoryPage() {
   // "Order Again" for cancelled / expired reservations — same cart restore,
   // without availability checks (stock is re-validated at checkout).
   const handleOrderAgain = useCallback(
-    (order: Order) => {
+    async (order: Order) => {
       for (const item of order.items) {
-        addItem({
+        await addItem({
           catalogItemId: item.catalogItemId,
           itemType: item.itemType,
           businessUnitId: order.businessUnitId,

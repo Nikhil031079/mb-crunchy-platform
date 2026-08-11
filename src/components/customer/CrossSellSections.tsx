@@ -9,6 +9,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useCart } from "@/stores/cart";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
+import { filterCatalogItemIds } from "@/utils";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard } from "./ProductCard";
@@ -38,9 +39,16 @@ export function CrossSellSections({
 
   const buId = businessUnit._id as Id<"businessUnits">;
 
+  // Only catalogItems references are valid for getRecommended's excludeIds —
+  // stale source-table IDs would fail v.id("catalogItems") validation.
+  const safeExcludeIds = useMemo(
+    () => filterCatalogItemIds(excludeIds),
+    [excludeIds],
+  );
+
   const mayAlsoLike = useQuery(
     api.catalogItems.getRecommended,
-    { businessUnitId: buId, excludeIds: excludeIds as Id<"catalogItems">[], limit: 4 },
+    { businessUnitId: buId, excludeIds: safeExcludeIds as Id<"catalogItems">[], limit: 4 },
   ) as CatalogItem[] | undefined;
 
   const combos = useQuery(
@@ -53,10 +61,16 @@ export function CrossSellSections({
   ) as PartyPack[] | undefined;
 
   const handleAddCombo = useCallback(
-    (combo: Combo) => {
+    async (combo: Combo) => {
       const catalogItem = bySource.get(combo._id);
-      addItem({
-        catalogItemId: catalogItem?._id ?? combo._id,
+      if (!catalogItem) {
+        toast.error("Item unavailable", {
+          description: `${combo.name} is temporarily unavailable. Please try again.`,
+        });
+        return;
+      }
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
         itemType: "combo",
         businessUnitId: combo.businessUnitId,
         name: combo.name,
@@ -65,16 +79,24 @@ export function CrossSellSections({
         unitPrice: combo.price,
         image: combo.coverImage || combo.thumbnail || combo.images?.[0],
       });
-      toast.success("Added to cart", { description: combo.name });
+      if (added) {
+        toast.success("Added to cart", { description: combo.name });
+      }
     },
     [addItem, bySource],
   );
 
   const handleAddPartyPack = useCallback(
-    (partyPack: PartyPack) => {
+    async (partyPack: PartyPack) => {
       const catalogItem = bySource.get(partyPack._id);
-      addItem({
-        catalogItemId: catalogItem?._id ?? partyPack._id,
+      if (!catalogItem) {
+        toast.error("Item unavailable", {
+          description: `${partyPack.name} is temporarily unavailable. Please try again.`,
+        });
+        return;
+      }
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
         itemType: "partyPack",
         businessUnitId: partyPack.businessUnitId,
         name: partyPack.name,
@@ -83,7 +105,9 @@ export function CrossSellSections({
         unitPrice: partyPack.price,
         image: partyPack.coverImage || partyPack.thumbnail || partyPack.images?.[0],
       });
-      toast.success("Added to cart", { description: partyPack.name });
+      if (added) {
+        toast.success("Added to cart", { description: partyPack.name });
+      }
     },
     [addItem, bySource],
   );

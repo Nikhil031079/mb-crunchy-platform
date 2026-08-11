@@ -311,7 +311,7 @@ export default function BusinessUnitPage() {
   }, []);
 
   const handleAddToCart = useCallback(
-    (product: any) => {
+    async (product: any) => {
       if (!businessUnit) return;
       if (!storeIsOpen) {
         toast.error("Store is currently closed", {
@@ -322,7 +322,7 @@ export default function BusinessUnitPage() {
         return;
       }
       const defaultVariant = product.variants?.[0];
-      addItem({
+      const added = await addItem({
         catalogItemId: product._id,
         itemType: "product",
         businessUnitId: businessUnit._id,
@@ -332,9 +332,11 @@ export default function BusinessUnitPage() {
         unitPrice: product.price ?? defaultVariant?.price ?? 0,
         image: product.coverImage || product.thumbnail,
       });
-      toast.success("Added to cart", {
-        description: `${product.name}`,
-      });
+      if (added) {
+        toast.success("Added to cart", {
+          description: `${product.name}`,
+        });
+      }
     },
     [addItem, businessUnit, storeIsOpen, nextOpenTime]
   );

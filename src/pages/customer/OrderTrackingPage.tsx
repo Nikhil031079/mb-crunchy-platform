@@ -360,9 +360,9 @@ export default function OrderTrackingPage() {
   // Re-add a previous order's items to the cart so the customer can order again
   // (e.g. after a reservation expired). Stock is validated again at checkout.
   const handleOrderAgain = useCallback(
-    (order: Order) => {
+    async (order: Order) => {
       for (const item of order.items) {
-        addItem({
+        await addItem({
           catalogItemId: item.catalogItemId,
           itemType: item.itemType,
           businessUnitId: order.businessUnitId,

@@ -81,10 +81,16 @@ export function PartyPacksSection({
   }, [r0, r1, r2, r3]);
 
   const handleAddToCart = useCallback(
-    (pack: PartyPack) => {
+    async (pack: PartyPack) => {
       const catalogItem = bySource.get(pack._id);
-      addItem({
-        catalogItemId: catalogItem?._id ?? pack._id,
+      if (!catalogItem) {
+        toast.error("Item unavailable", {
+          description: `${pack.name} is temporarily unavailable. Please try again.`,
+        });
+        return;
+      }
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
         itemType: "partyPack",
         businessUnitId: pack.businessUnitId,
         name: pack.name,
@@ -93,7 +99,9 @@ export function PartyPacksSection({
         unitPrice: pack.price,
         image: pack.coverImage || pack.thumbnail || pack.images?.[0],
       });
-      toast.success("Added to cart", { description: pack.name });
+      if (added) {
+        toast.success("Added to cart", { description: pack.name });
+      }
     },
     [addItem, bySource]
   );

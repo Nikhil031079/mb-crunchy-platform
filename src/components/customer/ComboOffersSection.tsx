@@ -72,10 +72,16 @@ export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
   const firstBuSlug = combosEnabled[0]?.slug;
 
   const handleAddToCart = useCallback(
-    (combo: Combo) => {
+    async (combo: Combo) => {
       const catalogItem = bySource.get(combo._id);
-      addItem({
-        catalogItemId: catalogItem?._id ?? combo._id,
+      if (!catalogItem) {
+        toast.error("Item unavailable", {
+          description: `${combo.name} is temporarily unavailable. Please try again.`,
+        });
+        return;
+      }
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
         itemType: "combo",
         businessUnitId: combo.businessUnitId,
         name: combo.name,
@@ -84,7 +90,9 @@ export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
         unitPrice: combo.price,
         image: combo.coverImage || combo.thumbnail || combo.images?.[0],
       });
-      toast.success("Added to cart", { description: combo.name });
+      if (added) {
+        toast.success("Added to cart", { description: combo.name });
+      }
     },
     [addItem, bySource]
   );

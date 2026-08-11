@@ -136,7 +136,7 @@ export default function FavouritesPage() {
 
   // Handle add to cart from collection
   const handleAddToCart = useCallback(
-    (item: CustomerCollection) => {
+    async (item: CustomerCollection) => {
       const catalogItem = catalogItemMap.get(item.itemId);
       if (!catalogItem) {
         toast.info("Open the product page to add to cart", {
@@ -145,7 +145,7 @@ export default function FavouritesPage() {
         return;
       }
       const enriched = item as any;
-      addItem({
+      const added = await addItem({
         catalogItemId: catalogItem._id,
         itemType: item.itemType,
         businessUnitId: catalogItem.businessUnitId,
@@ -155,9 +155,11 @@ export default function FavouritesPage() {
         unitPrice: enriched.price ?? catalogItem.price,
         image: enriched.image ?? catalogItem.coverImage ?? catalogItem.thumbnail,
       });
-      toast.success("Added to cart", {
-        description: enriched.name ?? catalogItem.name,
-      });
+      if (added) {
+        toast.success("Added to cart", {
+          description: enriched.name ?? catalogItem.name,
+        });
+      }
     },
     [addItem, catalogItemMap],
   );

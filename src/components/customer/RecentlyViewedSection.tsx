@@ -7,6 +7,7 @@ import type { Id } from "@convex/_generated/dataModel";
 
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { filterCatalogItemIds } from "@/utils";
 
 import { ProductGridSection } from "./ProductGridSection";
 
@@ -28,8 +29,10 @@ export function RecentlyViewedSection({
   const { entries } = useRecentlyViewed();
   const handleAddToCart = useAddToCart();
 
+  // Only catalogItems references are valid for getByIds — stale source-table
+  // IDs (from older local history) must never reach a v.id("catalogItems") arg.
   const entryIds = useMemo(
-    () => entries.map((entry) => entry.catalogItemId),
+    () => filterCatalogItemIds(entries.map((entry) => entry.catalogItemId)),
     [entries],
   );
 
