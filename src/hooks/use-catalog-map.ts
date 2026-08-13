@@ -42,7 +42,8 @@ export function useCatalogItemMap(
   const results = [r0, r1, r2, r3];
   const expected = buIds.length;
   const isLoading =
-    expected > 0 && results.slice(0, expected).some((result) => result === undefined);
+    expected > 0 &&
+    results.slice(0, expected).some((result) => result === undefined || result === null);
 
   const bySource = useMemo(() => {
     const map = new Map<string, CatalogItem>();

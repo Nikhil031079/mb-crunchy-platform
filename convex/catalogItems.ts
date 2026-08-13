@@ -279,6 +279,39 @@ export const getTrending = query({
   },
 });
 
+/**
+ * Returns recommended catalog items across ALL active business units,
+ * excluding the provided item IDs. This is used for cross-BU recommendations
+ * so that a cart containing only Kitchen items can still recommend Mart items,
+ * and vice versa.
+ *
+ * The frontend should use this with a single stable useQuery call regardless
+ * of cart contents, fixing the dynamic hook count violation.
+ */
+export const getRecommendedAcrossBusinessUnits = query({
+  args: {
+    excludeIds: v.array(v.id("catalogItems")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    const excludeSet = new Set(args.excludeIds);
+    // Query across ALL active business units by not filtering on businessUnitId
+    const items = await ctx.db
+      .query("catalogItems")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+
+    return items.filter((item) => !excludeSet.has(item._id)).slice(0, limit);
+  },
+});
+
 export const getByCategoryIds = query({
   args: {
     businessUnitId: v.id("businessUnits"),

@@ -35,7 +35,7 @@ export interface PartyPackFormValues {
   minServings: number;
   maxServings: number;
   price: number;
-  compareAtPrice: string;
+  compareAtPrice: number;
   status: PartyPackStatus;
   featured: boolean;
   displayOrder: number;

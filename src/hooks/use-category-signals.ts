@@ -46,6 +46,7 @@ export function useCategorySignals(catalogItemIds: string[]) {
 
   return {
     categoryIds,
-    isLoading: ids.length > 0 && (catalogItems === undefined || products === undefined),
+    isLoading:
+      ids.length > 0 && (catalogItems === undefined || (sourceIds.length > 0 && products === undefined)),
   };
 }

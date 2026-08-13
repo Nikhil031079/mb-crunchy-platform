@@ -64,6 +64,7 @@ import {
 
 import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product } from "@/types";
 import type { Id } from "@convex/_generated/dataModel";
+import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 // ============================================================================
 // Sort Options
@@ -181,6 +182,9 @@ export default function BusinessUnitPage() {
 
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
+
+  // Catalog item map for combos/party packs → resolves sourceId to catalogItem._id
+  const { bySource } = useCatalogItemMap([businessUnit!].filter(Boolean) as BusinessUnit[]);
 
   // ==========================================================================
   // Derived State
@@ -339,6 +343,76 @@ export default function BusinessUnitPage() {
       }
     },
     [addItem, businessUnit, storeIsOpen, nextOpenTime]
+  );
+
+  const handleAddCombo = useCallback(
+    async (combo: Combo) => {
+      if (!businessUnit) return;
+      if (!storeIsOpen) {
+        toast.error("Store is currently closed", {
+          description: nextOpenTime
+            ? `Orders resume ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
+            : "Please try again during business hours.",
+        });
+        return;
+      }
+      const catalogItem = bySource.get(combo._id);
+      if (!catalogItem) {
+        toast.error("Item unavailable", {
+          description: `${combo.name} is temporarily unavailable. Please try again.`,
+        });
+        return;
+      }
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
+        itemType: "combo",
+        businessUnitId: combo.businessUnitId,
+        name: combo.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: combo.price,
+        image: combo.coverImage || combo.thumbnail || combo.images?.[0],
+      });
+      if (added) {
+        toast.success("Added to cart", { description: combo.name });
+      }
+    },
+    [addItem, bySource, businessUnit, storeIsOpen, nextOpenTime]
+  );
+
+  const handleAddPartyPack = useCallback(
+    async (pack: PartyPack) => {
+      if (!businessUnit) return;
+      if (!storeIsOpen) {
+        toast.error("Store is currently closed", {
+          description: nextOpenTime
+            ? `Orders resume ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
+            : "Please try again during business hours.",
+        });
+        return;
+      }
+      const catalogItem = bySource.get(pack._id);
+      if (!catalogItem) {
+        toast.error("Item unavailable", {
+          description: `${pack.name} is temporarily unavailable. Please try again.`,
+        });
+        return;
+      }
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
+        itemType: "partyPack",
+        businessUnitId: pack.businessUnitId,
+        name: pack.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: pack.price,
+        image: pack.coverImage || pack.thumbnail || pack.images?.[0],
+      });
+      if (added) {
+        toast.success("Added to cart", { description: pack.name });
+      }
+    },
+    [addItem, bySource, businessUnit, storeIsOpen, nextOpenTime]
   );
 
   // Set page title
@@ -800,6 +874,7 @@ export default function BusinessUnitPage() {
                   key={combo._id}
                   combo={combo}
                   index={index}
+                  onAddToCart={handleAddCombo}
                 />
               ))}
             </div>
@@ -834,6 +909,7 @@ export default function BusinessUnitPage() {
                   key={pack._id}
                   partyPack={pack}
                   index={index}
+                  onAddToCart={handleAddPartyPack}
                 />
               ))}
             </div>

@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, useMemo, useEffect } from "react";
 import { Minus, Plus, GripVertical } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,8 @@ const emptyValues: ComboFormValues = {
   imageUrl: "",
   items: [],
   price: 0,
-  compareAtPrice: "",
-  savingsPercentage: "",
+  compareAtPrice: 0,
+  savingsPercentage: 0,
   status: "active",
   featured: false,
   displayOrder: 1,
@@ -47,8 +47,8 @@ const toFormValues = (combo?: Combo): ComboFormValues =>
           quantity: item.quantity,
         })),
         price: combo.price,
-        compareAtPrice: combo.compareAtPrice?.toString() ?? "",
-        savingsPercentage: combo.savingsPercentage?.toString() ?? "",
+        compareAtPrice: combo.compareAtPrice ?? 0,
+        savingsPercentage: combo.savingsPercentage ?? 0,
         status: combo.status,
         featured: combo.featured,
         displayOrder: combo.displayOrder,
@@ -61,6 +61,7 @@ interface CatalogItem {
   name: string;
   businessUnitId: string;
   price: number;
+  compareAtPrice?: number;
   itemType: string;
 }
 
@@ -139,30 +140,52 @@ function ComboForm({
     value: ComboFormValues[K]
   ) => setValues((current) => ({ ...current, [key]: value }));
 
+  const calculatePricing = useMemo(() => {
+    // Calculate compareAtPrice from combo items
+    let totalCompareAtPrice = 0;
+    for (const item of values.items) {
+      if (!item.catalogItemId) continue;
+      const catalogItem = catalogItems.find(
+        (ci) => ci.id === item.catalogItemId
+      );
+      if (!catalogItem) continue;
+      // Use compareAtPrice ?? price for the component.
+      // If compareAtPrice is 0 (not meaningfully set), fall back to price.
+      const componentCompareAtPrice =
+        catalogItem.compareAtPrice !== 0 && catalogItem.compareAtPrice !== undefined
+          ? catalogItem.compareAtPrice
+          : catalogItem.price;
+      totalCompareAtPrice += componentCompareAtPrice * item.quantity;
+    }
+
+    // Calculate savings and savingsPercentage
+    const savings = Math.max(0, totalCompareAtPrice - values.price);
+    const savingsPercentage =
+      totalCompareAtPrice > 0 ? (savings / totalCompareAtPrice) * 100 : 0;
+
+    return { totalCompareAtPrice, savings, savingsPercentage };
+  }, [values.items, values.price, catalogItems]);
+
   const handleNameChange = (name: string) => {
     update("name", name);
     if (!slugEdited) update("slug", slugify(name));
   };
 
-  const handleBuChange = (buId: string) => {
+const handleBuChange = (buId: string) => {
     update("businessUnitId", buId);
     // Clear items when BU changes since catalog items are BU-specific
     update("items", []);
   };
 
-  const filteredCatalogItems = catalogItems.filter(
-    (item) => item.businessUnitId === values.businessUnitId
-  );
-
-  const addItem = () => {
-    update("items", [...values.items, { catalogItemId: "", quantity: 1 }]);
-  };
-
-  const removeItem = (index: number) => {
+const removeItem = (index: number) => {
     update(
       "items",
       values.items.filter((_, i) => i !== index)
     );
+  };
+
+  const addItem = () => {
+    update("items", [...values.items, { catalogItemId: "", quantity: 1 }]);
   };
 
   const updateItem = (
@@ -330,7 +353,7 @@ function ComboForm({
                     <SelectValue placeholder="Select an item" />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredCatalogItems
+                    {catalogItems
                       .filter(
                         (ci) =>
                           !usedItemIds.has(ci.id) ||
@@ -389,7 +412,7 @@ function ComboForm({
             <Label htmlFor={`${formId}-compare`}>
               Compare at Price{" "}
               <span className="font-normal text-muted-foreground">
-                (optional)
+                (auto-calculated from components)
               </span>
             </Label>
             <Input
@@ -398,17 +421,15 @@ function ComboForm({
               min="0"
               step="0.01"
               value={values.compareAtPrice}
-              onChange={(event) =>
-                update("compareAtPrice", event.target.value)
-              }
-              placeholder="Strikethrough price"
+              readOnly
+              disabled
             />
           </div>
           <div className="grid gap-2">
             <Label htmlFor={`${formId}-savings`}>
               Savings %{" "}
               <span className="font-normal text-muted-foreground">
-                (optional)
+                (auto-calculated)
               </span>
             </Label>
             <Input
@@ -418,10 +439,8 @@ function ComboForm({
               max="100"
               step="0.5"
               value={values.savingsPercentage}
-              onChange={(event) =>
-                update("savingsPercentage", event.target.value)
-              }
-              placeholder="0"
+              readOnly
+              disabled
             />
           </div>
         </div>

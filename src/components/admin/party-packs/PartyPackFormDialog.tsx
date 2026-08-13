@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, useMemo, useEffect } from "react";
 import { Minus, Plus, GripVertical } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ const emptyValues: PartyPackFormValues = {
   minServings: 10,
   maxServings: 20,
   price: 0,
-  compareAtPrice: "",
+  compareAtPrice: 0,
   status: "active",
   featured: false,
   displayOrder: 1,
@@ -49,7 +49,7 @@ const toFormValues = (pack?: PartyPack): PartyPackFormValues =>
         minServings: pack.minServings,
         maxServings: pack.maxServings,
         price: pack.price,
-        compareAtPrice: pack.compareAtPrice?.toString() ?? "",
+        compareAtPrice: pack.compareAtPrice ?? 0,
         status: pack.status,
         featured: pack.featured,
         displayOrder: pack.displayOrder,
@@ -61,6 +61,7 @@ interface CatalogItem {
   name: string;
   businessUnitId: string;
   price: number;
+  compareAtPrice?: number;
   itemType: string;
 }
 
@@ -139,6 +140,34 @@ function PartyPackForm({
     value: PartyPackFormValues[K]
   ) => setValues((current) => ({ ...current, [key]: value }));
 
+  const calculatePricing = useMemo(() => {
+    // Calculate compareAtPrice from party pack items
+    let totalCompareAtPrice = 0;
+    for (const item of values.items) {
+      if (!item.catalogItemId) continue;
+      const catalogItem = catalogItems.find(
+        (ci) => ci.id === item.catalogItemId
+      );
+      if (!catalogItem) continue;
+      // Use compareAtPrice ?? price for the component.
+      // If compareAtPrice is 0 (not meaningfully set), fall back to price.
+      const componentCompareAtPrice =
+        catalogItem.compareAtPrice !== 0 && catalogItem.compareAtPrice !== undefined
+          ? catalogItem.compareAtPrice
+          : catalogItem.price;
+      totalCompareAtPrice += componentCompareAtPrice * item.quantity;
+    }
+
+    // Calculate savings (compareAtPrice - price), prevent negative
+    const savings = Math.max(0, totalCompareAtPrice - values.price);
+
+    // Note: savingsPercentage is NOT stored in Party Pack schema.
+    // It is derived at display time from compareAtPrice and price.
+    // savingsPercentage = totalCompareAtPrice > 0 ? (savings / totalCompareAtPrice) * 100 : 0
+
+    return { totalCompareAtPrice, savings };
+  }, [values.items, values.price, catalogItems]);
+
   const handleNameChange = (name: string) => {
     update("name", name);
     if (!slugEdited) update("slug", slugify(name));
@@ -148,10 +177,6 @@ function PartyPackForm({
     update("businessUnitId", buId);
     update("items", []);
   };
-
-  const filteredCatalogItems = catalogItems.filter(
-    (item) => item.businessUnitId === values.businessUnitId
-  );
 
   const addItem = () => {
     update("items", [...values.items, { catalogItemId: "", quantity: 1 }]);
@@ -329,7 +354,7 @@ function PartyPackForm({
                     <SelectValue placeholder="Select an item" />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredCatalogItems
+                    {catalogItems
                       .filter(
                         (ci) =>
                           !usedItemIds.has(ci.id) ||
@@ -418,7 +443,7 @@ function PartyPackForm({
             <Label htmlFor={`${formId}-compare`}>
               Compare at Price{" "}
               <span className="font-normal text-muted-foreground">
-                (optional)
+                (auto-calculated from components)
               </span>
             </Label>
             <Input
@@ -427,10 +452,8 @@ function PartyPackForm({
               min="0"
               step="0.01"
               value={values.compareAtPrice}
-              onChange={(event) =>
-                update("compareAtPrice", event.target.value)
-              }
-              placeholder="Strikethrough price"
+              readOnly
+              disabled
             />
           </div>
         </div>

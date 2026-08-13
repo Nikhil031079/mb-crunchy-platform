@@ -8,6 +8,7 @@ import { api } from "@convex/_generated/api";
 
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
+import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard, type CardProduct } from "./ProductCard";
@@ -55,6 +56,8 @@ function BusinessUnitSection({
     bu.enablePartyPacks ? { businessUnitId: bu._id } : "skip",
   ) as PartyPack[] | undefined;
 
+  const { bySource } = useCatalogItemMap([bu]);
+
   const navigate = useNavigate();
   const { addItem } = useCart();
 
@@ -76,6 +79,32 @@ function BusinessUnitSection({
       });
     },
     [addItem, bu._id]
+  );
+
+  const handleAddPartyPack = useCallback(
+    async (partyPack: PartyPack) => {
+      const catalogItem = bySource.get(partyPack._id);
+      if (!catalogItem) {
+        toast.error("Item unavailable", {
+          description: `${partyPack.name} is temporarily unavailable. Please try again.`,
+        });
+        return;
+      }
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
+        itemType: "partyPack",
+        businessUnitId: partyPack.businessUnitId,
+        name: partyPack.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: partyPack.price,
+        image: partyPack.coverImage || partyPack.thumbnail || partyPack.images?.[0],
+      });
+      if (added) {
+        toast.success("Added to cart", { description: partyPack.name });
+      }
+    },
+    [addItem, bySource]
   );
 
   const isDataLoaded =
@@ -180,7 +209,12 @@ function BusinessUnitSection({
             />
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               {partyPacks!.slice(0, 4).map((pack, index) => (
-                <PartyPackCard key={pack._id} partyPack={pack} index={index} />
+                <PartyPackCard
+                  key={pack._id}
+                  partyPack={pack}
+                  index={index}
+                  onAddToCart={handleAddPartyPack}
+                />
               ))}
             </div>
           </div>

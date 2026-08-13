@@ -51,22 +51,7 @@ import type { CardProduct } from "@/components/customer/ProductCard";
 export default function CartPage() {
   const navigate = useNavigate();
   const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem, dismissNotice } = useCart();
-  const addToCartHook = useAddToCart();
-
-  // Wrapper to convert CatalogItem to the format expected by addItem
-  const addToCart = useCallback(async (product: CatalogItem) => {
-    // CatalogItem has price directly, no variants array
-    await addItem({
-      catalogItemId: product._id,
-      itemType: "product",
-      businessUnitId: product.businessUnitId,
-      name: product.name,
-      variantName: "Default",
-      quantity: 1,
-      unitPrice: product.price ?? 0,
-      image: product.coverImage || product.thumbnail,
-    });
-  }, [addItem]);
+  const addToCart = useAddToCart();
 
   // Page title
   useEffect(() => {
@@ -100,17 +85,24 @@ export default function CartPage() {
     | BusinessUnit[]
     | undefined;
 
-  // Fetch recommended products for the current BU, excluding items already in cart
+// Fetch recommended products for all BUs in cart, excluding items already in cart
   const cartItemIds = useMemo(
     () => filterCatalogItemIds(cart.items.map((item) => item.catalogItemId)),
     [cart.items],
   );
+
+  // Fetch recommendations across all active business units,
+  // excluding items already in the cart.
+  // This replaces the previous BU-local query loop that violated
+  // React's Rules of Hooks by dynamically changing the hook count
+  // based on cart contents (1 item → 1 query, empty cart → 0 queries).
   const recommendedItems = useQuery(
-    api.catalogItems.getRecommended,
-    primaryBusinessUnitId
-      ? { businessUnitId: primaryBusinessUnitId as any, excludeIds: cartItemIds as any, limit: 6 }
-      : "skip",
-  );
+    api.catalogItems.getRecommendedAcrossBusinessUnits,
+    {
+      excludeIds: cartItemIds,
+      limit: 6,
+    } as any,
+  ) as CatalogItem[] | undefined;
 
   // Free delivery threshold — check zone first, fall back to BU settings
   const freeDeliveryThreshold = useMemo(() => {
@@ -489,7 +481,7 @@ export default function CartPage() {
         {/* ================================================================ */}
         {/* RECOMMENDED PRODUCTS                                            */}
         {/* ================================================================ */}
-        {recommendedItems === undefined && cart.businessUnitIds[0] && (
+        {recommendedItems === undefined && cart.businessUnitIds.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -524,7 +516,7 @@ export default function CartPage() {
                   key={item._id}
                   product={item}
                   compact
-                  onAddToCart={addToCart as (product: CatalogItem | CardProduct) => void}
+                  onAddToCart={addToCart as (product: CatalogItem | CardProduct) => Promise<void>}
                 />
               ))}
             </div>
@@ -536,7 +528,7 @@ export default function CartPage() {
       {/* CROSS-SELL — Frequently Bought Together + Recently Viewed        */}
       {/* ================================================================ */}
 
-      {cart.businessUnitIds[0] && cart.items[0] && (
+      {cart.businessUnitIds.length > 0 && cart.items[0] && (
         <FrequentlyBoughtTogetherSection
           catalogItemId={cart.items[0].catalogItemId}
           businessUnitId={cart.businessUnitIds[0]}

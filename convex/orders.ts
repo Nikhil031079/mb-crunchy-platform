@@ -275,6 +275,7 @@ async function resolveOrderLine(
   if (!doc) {
     throw new Error("Item not found in catalog");
   }
+
   // Allow items from different business units in the same order
   // The order is created under the primary business unit, but can contain items from other BUs
   if (doc.itemType && doc.itemType !== item.itemType) {
@@ -289,7 +290,7 @@ async function resolveOrderLine(
   if (!source) {
     throw new Error("Item source not found");
   }
-  // Allow items from different business units in the same order
+
   if (doc.status !== "active" || doc.deletedAt) {
     throw new Error(`"${doc.name ?? "Item"}" is no longer available`);
   }

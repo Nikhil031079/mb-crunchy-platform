@@ -34,8 +34,8 @@ export interface ComboFormValues {
   imageUrl: string;
   items: ComboItemValue[];
   price: number;
-  compareAtPrice: string;
-  savingsPercentage: string;
+  compareAtPrice: number;
+  savingsPercentage: number;
   status: ComboStatus;
   featured: boolean;
   displayOrder: number;

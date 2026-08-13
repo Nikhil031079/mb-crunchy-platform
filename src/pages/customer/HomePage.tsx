@@ -26,6 +26,8 @@ import {
   HomepageInfoStrip,
   RecommendedForYouSection,
   TodaySpecialsSection,
+  ComboOffersSection,
+  PartyPacksSection,
 } from "@/components/customer";
 
 // Shared components
@@ -263,7 +265,17 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 2. EXPERIENCE CTA — below the hero for an early conversion       */}
+      {/* 2. COMBO OFFERS — Global merchandising section              */}
+      {/* ================================================================ */}
+      <ComboOffersSection businessUnits={activeBusinessUnits} />
+
+      {/* ================================================================ */}
+      {/* 3. PARTY PACKS — Global merchandising section                */}
+      {/* ================================================================ */}
+      <PartyPacksSection businessUnits={activeBusinessUnits} />
+
+      {/* ================================================================ */}
+      {/* 3. EXPERIENCE CTA — below the hero for an early conversion       */}
       {/* ================================================================ */}
 
       {!isLoading && (

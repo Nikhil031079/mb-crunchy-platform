@@ -438,7 +438,7 @@ export default function CheckoutPage() {
       setPaymentStatus("creating_order");
 
       try {
-        const primaryBusinessUnitId = cart.businessUnitIds[0];
+        const primaryBusinessUnitId = cart.items[0]?.businessUnitId;
         const orderResult = await createOrder({
           businessUnitId: primaryBusinessUnitId! as any,
           customerName: form.customerName.trim(),

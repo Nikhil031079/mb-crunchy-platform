@@ -79,10 +79,19 @@ function loadPersistedCart(): CartState | undefined {
     if (!parsed) return undefined;
 
     const { items: cleanItems, dropped } = sanitizeCartItems(parsed.items ?? []);
+
+    // Normalize businessUnitIds to always be an array — old cart data from
+    // before this feature was added may not have this key, resulting in undefined.
+    // This fixes the runtime crash: "Cannot read properties of undefined (reading 'length')"
+    // when CartPage accesses cart.businessUnitIds.length.
+    const rawBuIds = parsed.businessUnitIds;
+    const businessUnitIds = Array.isArray(rawBuIds)
+      ? rawBuIds
+      : rawBuIds
+        ? [rawBuIds]
+        : [];
+
     if (dropped.length > 0) {
-      const businessUnitIds = Array.from(
-        new Set(cleanItems.map((item) => item.businessUnitId)),
-      );
       const subtotal = calculateSubtotal(cleanItems);
       const discount = parsed.discount ?? 0;
       const deliveryFee = parsed.deliveryFee ?? 0;
@@ -99,7 +108,14 @@ function loadPersistedCart(): CartState | undefined {
       return cleaned;
     }
 
-    return parsed;
+    // Return the parsed state with normalized businessUnitIds.
+    // Spread ...parsed preserves all other fields (items, discount, etc.).
+    // We override businessUnitIds with the normalized version.
+    const safeState: CartState = {
+      ...parsed,
+      businessUnitIds,
+    };
+    return safeState;
   } catch {
     return undefined;
   }
