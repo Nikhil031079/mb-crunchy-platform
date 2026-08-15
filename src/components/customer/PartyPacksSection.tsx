@@ -5,14 +5,13 @@ import { PartyPopper } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
-
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
 import { PartyPackCard, PartyPackCardSkeleton } from "./PartyPackCard";
 
-import type { BusinessUnit, PartyPack } from "@/types";
+import type { BusinessUnit, PartyPack, CatalogItem } from "@/types";
 
 // ============================================================================
 // PartyPacksSection — featured party packs across business units.
@@ -22,6 +21,7 @@ interface PartyPacksSectionProps {
   businessUnits: BusinessUnit[];
   title?: string;
   subtitle?: string;
+  onOpenItemDetails?: (item: CatalogItem) => void;
 }
 
 const MAX_BUSINESS_UNITS = 4;
@@ -29,7 +29,8 @@ const MAX_BUSINESS_UNITS = 4;
 export function PartyPacksSection({
   businessUnits,
   title = "Party Packs",
-  subtitle = "Highlighted party packs perfect for gatherings and events",
+  subtitle = "Perfect for gatherings and events",
+  onOpenItemDetails,
 }: PartyPacksSectionProps) {
   const navigate = useNavigate();
   const { addItem } = useCart();
@@ -80,6 +81,8 @@ export function PartyPacksSection({
       .slice(0, 4);
   }, [r0, r1, r2, r3]);
 
+  const firstBuSlug = packsEnabled[0]?.slug;
+
   const handleAddToCart = useCallback(
     async (pack: PartyPack) => {
       const catalogItem = bySource.get(pack._id);
@@ -105,8 +108,6 @@ export function PartyPacksSection({
     },
     [addItem, bySource]
   );
-
-  const firstBuSlug = packsEnabled[0]?.slug;
 
   if (isLoading) {
     return (
@@ -138,14 +139,12 @@ export function PartyPacksSection({
         <SectionHeader
           title={title}
           subtitle={subtitle}
-          action={
-            firstBuSlug
-              ? {
-                  label: "View All Packs",
-                  onClick: () => navigate(`/${firstBuSlug}`),
-                }
-              : undefined
-          }
+          action={firstBuSlug
+            ? {
+                label: "View All Packs",
+                onClick: () => navigate(`/${firstBuSlug}`),
+              }
+            : undefined}
           size="sm"
         />
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -155,6 +154,10 @@ export function PartyPacksSection({
               partyPack={pack}
               index={index}
               onAddToCart={handleAddToCart}
+              onOpenItemDetails={() => {
+                const catalogItem = bySource.get(pack._id);
+                if (catalogItem && onOpenItemDetails) onOpenItemDetails(catalogItem);
+              }}
             />
           ))}
         </div>

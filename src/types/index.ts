@@ -378,6 +378,26 @@ export type CreateOfferInput = Omit<
 export type UpdateOfferInput = Partial<CreateOfferInput>;
 
 // ============================================================================
+// Delivery Policy
+// ============================================================================
+
+export interface DeliveryPolicy {
+  _id: string;
+  _creationTime: number;
+  name: string;
+  serviceType: "local_delivery" | "outside_area";
+  feeType: "fixed" | "variable";
+  fixedFee?: number;
+  minimumOrder?: number;
+  freeDeliveryThreshold?: number;
+  estimatedMinutes?: number;
+  requiresQuote: boolean;
+  instructions?: string;
+  isActive: boolean;
+  deletedAt?: number;
+}
+
+// ============================================================================
 // Order
 // ============================================================================
 
@@ -419,6 +439,12 @@ export interface Order extends Timestamps {
   deliveryAddress?: string;
   deliveryZoneId?: string;
   deliveryNotes?: string;
+  deliveryType?: "local" | "outside_area";
+  deliveryQuoteRequired?: boolean;
+  deliveryQuoteStatus?: "pending" | "quoted" | "accepted" | "rejected";
+  deliveryQuoteAmount?: number;
+  deliveryQuoteNotes?: string;
+  deliveryQuoteUpdatedAt?: number;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   paymentMethod?: string;
@@ -555,6 +581,7 @@ export interface DeliveryZone extends Timestamps {
   minOrder?: number;
   freeDeliveryThreshold?: number;
   estimatedMinutes?: number;
+  isDefault?: boolean;
   status: "active" | "inactive";
   deletedAt?: number;
 }

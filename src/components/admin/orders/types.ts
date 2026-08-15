@@ -71,8 +71,14 @@ export interface OrderRecord {
   tax: number;
   total: number;
   orderType: OrderType;
+  deliveryType?: "local" | "outside_area";
   deliveryAddress?: string;
   deliveryNotes?: string;
+  deliveryQuoteRequired?: boolean;
+  deliveryQuoteStatus?: "pending" | "quoted" | "accepted" | "rejected";
+  deliveryQuoteAmount?: number;
+  deliveryQuoteNotes?: string;
+  deliveryQuoteUpdatedAt?: number;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   paymentMethod?: string;
@@ -80,6 +86,7 @@ export interface OrderRecord {
   offerCode?: string;
   createdAt: number;
   updatedAt: number;
+  terminalAt?: number;
   elapsedMinutes: number;
 }
 
@@ -126,6 +133,16 @@ export interface OrderSummary {
 // Helpers
 // ---------------------------------------------------------------------------
 
+export const TERMINAL_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  "delivered",
+  "cancelled",
+  "refunded",
+]);
+
+export function isTerminalStatus(status: OrderStatus): boolean {
+  return TERMINAL_STATUSES.has(status);
+}
+
 export function getNextStatus(current: OrderStatus, orderType?: OrderType): OrderStatus | null {
   const transitions = getAllowedTransitions(current, orderType);
   // Filter out cancel - that's a separate action
@@ -151,3 +168,28 @@ export function canReopenPaymentVerification(order: OrderRecord): boolean {
 export function canBulkRefund(order: OrderRecord): boolean {
   return order.status === "delivered" && order.paymentStatus === "paid";
 }
+
+// ---------------------------------------------------------------------------
+// Delivery type helpers
+// ---------------------------------------------------------------------------
+
+export type DeliveryQuoteStatus = "pending" | "quoted" | "accepted" | "rejected";
+
+export const DELIVERY_TYPE_LABELS: Record<string, string> = {
+  local: "Local Delivery",
+  outside_area: "Outside Area",
+};
+
+export const DELIVERY_QUOTE_STATUS_LABELS: Record<DeliveryQuoteStatus, string> = {
+  pending: "Quote Required",
+  quoted: "Quote Sent",
+  accepted: "Quote Accepted",
+  rejected: "Quote Declined",
+};
+
+export const DELIVERY_QUOTE_STATUS_COLORS: Record<DeliveryQuoteStatus, string> = {
+  pending: "border-amber-200 bg-amber-500/10 text-amber-700",
+  quoted: "border-blue-200 bg-blue-500/10 text-blue-700",
+  accepted: "border-emerald-200 bg-emerald-500/10 text-emerald-700",
+  rejected: "border-red-200 bg-red-500/10 text-red-700",
+};

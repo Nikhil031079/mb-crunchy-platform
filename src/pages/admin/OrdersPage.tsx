@@ -15,7 +15,7 @@ import { BulkStatusUpdateDialog } from "@/components/admin/orders/BulkStatusUpda
 import { BulkCancelDialog } from "@/components/admin/orders/BulkCancelDialog";
 import { BulkRefundDialog } from "@/components/admin/orders/BulkRefundDialog";
 import type { OrderFilters, OrderRecord, OrderSortKey, OrderStatus, PaymentStatus, SortDirection } from "@/components/admin/orders/types";
-import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS } from "@/components/admin/orders/types";
+import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS, DELIVERY_QUOTE_STATUS_LABELS, DELIVERY_QUOTE_STATUS_COLORS } from "@/components/admin/orders/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,8 +63,14 @@ function enrichOrder(doc: any, buMap: Map<string, string>): OrderRecord {
     tax: doc.tax,
     total: doc.total,
     orderType: doc.orderType,
+    deliveryType: doc.deliveryType,
     deliveryAddress: doc.deliveryAddress,
     deliveryNotes: doc.deliveryNotes,
+    deliveryQuoteRequired: doc.deliveryQuoteRequired,
+    deliveryQuoteStatus: doc.deliveryQuoteStatus,
+    deliveryQuoteAmount: doc.deliveryQuoteAmount,
+    deliveryQuoteNotes: doc.deliveryQuoteNotes,
+    deliveryQuoteUpdatedAt: doc.deliveryQuoteUpdatedAt,
     status: doc.status,
     paymentStatus: doc.paymentStatus,
     paymentMethod: doc.paymentMethod,
@@ -72,7 +78,10 @@ function enrichOrder(doc: any, buMap: Map<string, string>): OrderRecord {
     offerCode: doc.offerCode,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
-    elapsedMinutes: Math.floor((Date.now() - doc.createdAt) / 60_000),
+    terminalAt: doc.terminalAt,
+    elapsedMinutes: doc.terminalAt
+      ? Math.floor((doc.terminalAt - doc.createdAt) / 60_000)
+      : Math.floor((Date.now() - doc.createdAt) / 60_000),
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -194,7 +203,9 @@ function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: {
             <h3 className="mb-3 text-sm font-semibold text-muted-foreground">{group.label} ({groupOrders.length})</h3>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {groupOrders.map((order) => {
-                const elapsedMinutes = Math.max(0, Math.floor((now - order.createdAt) / 60_000));
+                const elapsedMinutes = order.terminalAt
+                  ? Math.max(0, Math.floor((order.terminalAt - order.createdAt) / 60_000))
+                  : Math.max(0, Math.floor((now - order.createdAt) / 60_000));
                 const priority = elapsedMinutes >= 21 ? "critical" : elapsedMinutes >= 11 ? "warning" : "normal";
                 const ring = priority === "critical"
                   ? "ring-2 ring-red-200 dark:ring-red-800"
@@ -224,6 +235,11 @@ function KitchenView({ orders, onOpenOrder, onAdvanceStatus, pendingOrderId }: {
                       <Badge variant="outline" className={cn("text-xs", order.orderType === "delivery" ? "border-purple-200 bg-purple-500/10 text-purple-700" : "border-sky-200 bg-sky-500/10 text-sky-700")}>
                         {order.orderType === "delivery" ? "Delivery" : "Takeaway"}
                       </Badge>
+                      {order.deliveryType === "outside_area" && order.deliveryQuoteRequired && order.deliveryQuoteStatus && (
+                        <Badge variant="outline" className={cn("text-[10px]", DELIVERY_QUOTE_STATUS_COLORS[order.deliveryQuoteStatus])}>
+                          {DELIVERY_QUOTE_STATUS_LABELS[order.deliveryQuoteStatus]}
+                        </Badge>
+                      )}
                     </div>
                     <div className="mb-2 flex items-center justify-between text-xs">
                       <span className="font-medium text-foreground">{order.businessUnitName}</span>
@@ -297,6 +313,7 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
 
   const [detailTarget, setDetailTarget] = useState<OrderRecord | null>(null);
+  const [quoteFocusTarget, setQuoteFocusTarget] = useState(false);
   const [statusTarget, setStatusTarget] = useState<OrderRecord | null>(null);
   const [statusGoal, setStatusGoal] = useState<OrderStatus | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "kitchen">("table");
@@ -536,6 +553,11 @@ export default function OrdersPage() {
     setStatusGoal(next);
   };
 
+  const handleEnterQuote = (order: OrderRecord) => {
+    setQuoteFocusTarget(true);
+    setDetailTarget(order);
+  };
+
   const handleKitchenAdvance = async (order: OrderRecord, target: OrderStatus) => {
     if (target === "preparing" && order.paymentStatus !== "paid") {
       setError(`${order.orderNumber} — payment must be verified before preparation can begin`);
@@ -679,7 +701,7 @@ export default function OrdersPage() {
             isBusy={isBulkPending}
           />
           {isLoading ? (
-            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} onReopenPaymentVerification={() => undefined} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAllVisible} />
+            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} onReopenPaymentVerification={() => undefined} onEnterQuote={() => undefined} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAllVisible} />
           ) : visible.length === 0 ? (
             <EmptyState
               icon={ShoppingCart}
@@ -700,6 +722,7 @@ export default function OrdersPage() {
                 onCancel={handleCancel}
                 onUpdatePaymentStatus={handlePaymentStatusUpdate}
                 onReopenPaymentVerification={handleReopenPaymentVerification}
+                onEnterQuote={handleEnterQuote}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
                 onToggleSelectAll={toggleSelectAllVisible}
@@ -723,7 +746,8 @@ export default function OrdersPage() {
       <OrderDetailDialog
         open={Boolean(detailTarget)}
         order={detailTarget}
-        onOpenChange={(o) => { if (!o) setDetailTarget(null); }}
+        onOpenChange={(o) => { if (!o) { setDetailTarget(null); setQuoteFocusTarget(false); } }}
+        focusQuoteSection={quoteFocusTarget}
       />
       <StatusUpdateDialog
         open={Boolean(statusTarget && statusGoal)}

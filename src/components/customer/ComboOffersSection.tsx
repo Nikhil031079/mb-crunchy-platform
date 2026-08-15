@@ -5,14 +5,13 @@ import { Combine } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
-
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
 import { ComboCard, ComboCardSkeleton } from "./ComboCard";
 
-import type { BusinessUnit, Combo } from "@/types";
+import type { BusinessUnit, Combo, CatalogItem } from "@/types";
 
 // ============================================================================
 // ComboOffersSection — global "Combo Offers" row across active business units
@@ -20,9 +19,10 @@ import type { BusinessUnit, Combo } from "@/types";
 
 interface ComboOffersSectionProps {
   businessUnits: BusinessUnit[];
+  onOpenItemDetails?: (item: CatalogItem) => void;
 }
 
-export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
+export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOffersSectionProps) {
   const navigate = useNavigate();
   const { addItem } = useCart();
   const { bySource } = useCatalogItemMap(businessUnits);
@@ -127,14 +127,12 @@ export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
         <SectionHeader
           title="Combo Offers"
           subtitle="Curated bundles and party packs that give you more for less"
-          action={
-            firstBuSlug
-              ? {
-                  label: "View All Combos",
-                  onClick: () => navigate(`/${firstBuSlug}`),
-                }
-              : undefined
-          }
+          action={firstBuSlug
+            ? {
+                label: "View All Combos",
+                onClick: () => navigate(`/${firstBuSlug}`),
+              }
+            : undefined}
           size="sm"
         />
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -144,6 +142,10 @@ export function ComboOffersSection({ businessUnits }: ComboOffersSectionProps) {
               combo={combo}
               index={index}
               onAddToCart={handleAddToCart}
+              onOpenItemDetails={() => {
+                const catalogItem = bySource.get(combo._id);
+                if (catalogItem && onOpenItemDetails) onOpenItemDetails(catalogItem);
+              }}
             />
           ))}
         </div>

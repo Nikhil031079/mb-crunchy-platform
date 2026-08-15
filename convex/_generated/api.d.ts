@@ -21,6 +21,7 @@ import type * as combos from "../combos.js";
 import type * as content from "../content.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
+import type * as deliveryPolicies from "../deliveryPolicies.js";
 import type * as deliveryZones from "../deliveryZones.js";
 import type * as homepageSections from "../homepageSections.js";
 import type * as http from "../http.js";
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   content: typeof content;
   crons: typeof crons;
   customers: typeof customers;
+  deliveryPolicies: typeof deliveryPolicies;
   deliveryZones: typeof deliveryZones;
   homepageSections: typeof homepageSections;
   http: typeof http;

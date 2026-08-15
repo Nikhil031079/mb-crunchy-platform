@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Clock, Eye, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Clock, Eye, ChevronRight, PenLine } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,19 +10,22 @@ import { STATUS_COLORS } from "@/constants";
 import { cn } from "@/lib/utils";
 
 import type { OrderRecord, OrderSortKey, PaymentStatus, SortDirection } from "./types";
-import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS, canReopenPaymentVerification } from "./types";
+import { getNextStatus, isTerminalStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS, DELIVERY_TYPE_LABELS, DELIVERY_QUOTE_STATUS_LABELS, DELIVERY_QUOTE_STATUS_COLORS, canReopenPaymentVerification } from "./types";
 
 // ---------------------------------------------------------------------------
 // Elapsed timer (kitchen queue)
 // ---------------------------------------------------------------------------
 
-function ElapsedTimer({ createdAt }: { createdAt: number }) {
-  const [elapsed, setElapsed] = useState(() => Date.now() - createdAt);
+function ElapsedTimer({ createdAt, terminalAt }: { createdAt: number; terminalAt?: number }) {
+  const [elapsed, setElapsed] = useState(() =>
+    terminalAt ? terminalAt - createdAt : Date.now() - createdAt
+  );
 
   useEffect(() => {
+    if (terminalAt) return;
     const id = setInterval(() => setElapsed(Date.now() - createdAt), 10_000);
     return () => clearInterval(id);
-  }, [createdAt]);
+  }, [createdAt, terminalAt]);
 
   const totalMinutes = Math.floor(elapsed / 60_000);
   const hours = Math.floor(totalMinutes / 60);
@@ -70,6 +73,7 @@ interface OrderTableProps {
   onCancel: (order: OrderRecord) => void;
   onUpdatePaymentStatus: (order: OrderRecord, paymentStatus: PaymentStatus) => void;
   onReopenPaymentVerification: (order: OrderRecord) => void;
+  onEnterQuote: (order: OrderRecord) => void;
   selectedIds?: ReadonlySet<string>;
   onToggleSelect?: (orderId: string) => void;
   onToggleSelectAll?: () => void;
@@ -79,7 +83,7 @@ interface OrderTableProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onUpdatePaymentStatus, onReopenPaymentVerification, selectedIds, onToggleSelect, onToggleSelectAll }: OrderTableProps) {
+export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onUpdatePaymentStatus, onReopenPaymentVerification, onEnterQuote, selectedIds, onToggleSelect, onToggleSelectAll }: OrderTableProps) {
   const hasSelection = Boolean(onToggleSelect);
   const skeletonCols = hasSelection ? 10 : 9;
 
@@ -142,9 +146,21 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                 <TableCell className="text-sm tabular-nums">{order.itemCount}</TableCell>
                 <TableCell className="text-right text-sm font-medium tabular-nums">₹{order.total.toLocaleString()}</TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={cn("text-xs capitalize", order.orderType === "delivery" ? "border-purple-200 bg-purple-500/10 text-purple-700" : "border-sky-200 bg-sky-500/10 text-sky-700")}>
-                    {order.orderType}
-                  </Badge>
+                  <div className="flex flex-col gap-1">
+                    <Badge variant="outline" className={cn("text-xs capitalize", order.orderType === "delivery" ? "border-purple-200 bg-purple-500/10 text-purple-700" : "border-sky-200 bg-sky-500/10 text-sky-700")}>
+                      {order.orderType === "delivery" ? "Delivery" : "Takeaway"}
+                    </Badge>
+                    {order.deliveryType === "outside_area" && order.deliveryQuoteRequired && order.deliveryQuoteStatus && (
+                      <Badge variant="outline" className={cn("text-[10px]", DELIVERY_QUOTE_STATUS_COLORS[order.deliveryQuoteStatus])}>
+                        {DELIVERY_QUOTE_STATUS_LABELS[order.deliveryQuoteStatus]}
+                      </Badge>
+                    )}
+                    {order.deliveryType === "local" && order.orderType === "delivery" && (
+                      <Badge variant="outline" className="text-[10px] border-emerald-200 bg-emerald-500/10 text-emerald-700">
+                        {DELIVERY_TYPE_LABELS.local}
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={cn("text-xs", STATUS_COLORS[order.status])}>
@@ -158,7 +174,7 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-0.5">
-                    <ElapsedTimer createdAt={order.createdAt} />
+                    <ElapsedTimer createdAt={order.createdAt} terminalAt={order.terminalAt} />
                     <span className="text-xs text-muted-foreground">
                       {new Date(order.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
@@ -184,7 +200,7 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                         Cancel
                       </Button>
                     )}
-                    {order.paymentStatus === "pending_verification" && (
+                    {order.paymentStatus === "pending_verification" && !isTerminalStatus(order.status) && (
                       <>
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-emerald-600" onClick={() => onUpdatePaymentStatus(order, "paid")}>
                           Pay
@@ -203,6 +219,18 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                         onClick={() => onReopenPaymentVerification(order)}
                       >
                         Re-open
+                      </Button>
+                    )}
+                    {order.deliveryType === "outside_area" && order.deliveryQuoteRequired && order.deliveryQuoteStatus === "pending" && !isTerminalStatus(order.status) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs text-amber-600"
+                        title="Enter delivery quote for this outside-area order"
+                        onClick={() => onEnterQuote(order)}
+                      >
+                        <PenLine aria-hidden="true" className="size-3" />
+                        Enter Quote
                       </Button>
                     )}
                     <Button variant="ghost" size="icon" className="size-7" onClick={() => onViewDetail(order)}>

@@ -33,21 +33,26 @@ export function FrequentlyBoughtTogetherSection({
 }: FrequentlyBoughtTogetherSectionProps) {
   const handleAddToCart = useAddToCart();
 
+  const validBusinessUnitId =
+    businessUnitId && businessUnitId.length > 0 ? businessUnitId : undefined;
+
   const coPurchased = useQuery(
     api.catalogItems.getCoPurchased,
-    {
-      catalogItemId: catalogItemId as Id<"catalogItems">,
-      businessUnitId: businessUnitId as Id<"businessUnits">,
-      excludeIds: [catalogItemId as Id<"catalogItems">],
-      limit: 4,
-    },
+    validBusinessUnitId
+      ? {
+          catalogItemId: catalogItemId as Id<"catalogItems">,
+          businessUnitId: validBusinessUnitId as Id<"businessUnits">,
+          excludeIds: [catalogItemId as Id<"catalogItems">],
+          limit: 4,
+        }
+      : "skip",
   ) as CatalogItem[] | undefined;
 
   const fallbackBest = useQuery(
     api.catalogItems.getBestSellers,
-    coPurchased !== undefined && coPurchased.length === 0
+    validBusinessUnitId && coPurchased !== undefined && coPurchased.length === 0
       ? {
-          businessUnitId: businessUnitId as Id<"businessUnits">,
+          businessUnitId: validBusinessUnitId as Id<"businessUnits">,
           limit: 4,
         }
       : "skip",

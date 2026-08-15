@@ -328,6 +328,28 @@ const offers = defineTable({
   .index("by_active_period", ["startsAt", "endsAt"]);
 
 // ============================================================================
+// DELIVERY POLICIES (Global — not BU-owned)
+// ============================================================================
+
+const deliveryPolicies = defineTable({
+  name: v.string(),
+  scope: v.union(v.literal("global")),
+  serviceType: v.union(v.literal("local"), v.literal("manual")),
+  status: v.union(v.literal("active"), v.literal("inactive")),
+  feeType: v.union(v.literal("fixed"), v.literal("quote")),
+  fixedFee: v.optional(v.number()),
+  minimumOrder: v.optional(v.number()),
+  freeDeliveryThreshold: v.optional(v.number()),
+  estimatedMinutes: v.optional(v.number()),
+  radius: v.optional(v.number()),
+  requiresQuote: v.boolean(),
+  instructions: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+});
+
+// ============================================================================
 // ORDERS
 // ============================================================================
 
@@ -356,9 +378,22 @@ const orders = defineTable({
   tax: v.number(),
   total: v.number(),
   orderType: v.union(v.literal("delivery"), v.literal("pickup")),
+  deliveryType: v.optional(v.union(v.literal("local"), v.literal("outside_area"))),
   deliveryAddress: v.optional(v.string()),
   deliveryZoneId: v.optional(v.id("deliveryZones")),
   deliveryNotes: v.optional(v.string()),
+  deliveryQuoteRequired: v.optional(v.boolean()),
+  deliveryQuoteStatus: v.optional(
+    v.union(
+      v.literal("pending"),
+      v.literal("quoted"),
+      v.literal("accepted"),
+      v.literal("rejected")
+    )
+  ),
+  deliveryQuoteAmount: v.optional(v.number()),
+  deliveryQuoteNotes: v.optional(v.string()),
+  deliveryQuoteUpdatedAt: v.optional(v.number()),
   status: v.union(
     v.literal("awaiting_payment"), v.literal("pending"), v.literal("confirmed"), v.literal("preparing"),
     v.literal("ready"), v.literal("out_for_delivery"), v.literal("delivered"),
@@ -372,6 +407,7 @@ const orders = defineTable({
   offerId: v.optional(v.id("offers")),
   offerCode: v.optional(v.string()),
   idempotencyKey: v.optional(v.string()),
+  terminalAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -589,12 +625,14 @@ const deliveryZones = defineTable({
   minOrder: v.optional(v.number()),
   freeDeliveryThreshold: v.optional(v.number()),
   estimatedMinutes: v.optional(v.number()),
+  isDefault: v.optional(v.boolean()),
   status: v.union(v.literal("active"), v.literal("inactive")),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
 })
-  .index("by_business_unit", ["businessUnitId"]);
+  .index("by_business_unit", ["businessUnitId"])
+  .index("by_is_default", ["isDefault"]);
 
 // ============================================================================
 // CONTENT (Generic — replaces banners with hero, promo, announcement, etc.)
@@ -887,6 +925,7 @@ export default defineSchema({
   loyaltyTransactions,
   customerCollections,
   deliveryZones,
+  deliveryPolicies,
   content,
   homepageSections,
   notifications,

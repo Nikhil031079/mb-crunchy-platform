@@ -17,6 +17,8 @@ interface PartyPackCardProps {
   onFavorite?: (partyPack: PartyPack) => void;
   isFavorited?: boolean;
   className?: string;
+  /** Called when the card body is clicked - opens Item Details Modal */
+  onOpenItemDetails?: (partyPack: PartyPack) => void;
 }
 
 export const PartyPackCard = memo(function PartyPackCard({
@@ -26,6 +28,7 @@ export const PartyPackCard = memo(function PartyPackCard({
   onFavorite,
   isFavorited = false,
   className,
+  onOpenItemDetails,
 }: PartyPackCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -36,14 +39,22 @@ export const PartyPackCard = memo(function PartyPackCard({
   const coverSrc = partyPack.coverImage || partyPack.images?.[0];
 
   const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
     e.preventDefault();
     onAddToCart?.(partyPack);
   };
 
   const handleFavorite = (e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
+    e.preventDefault();
     onFavorite?.(partyPack);
+  };
+
+  // Card body click — opens modal if onOpenItemDetails is provided
+  const cardOnClick = () => {
+    if (onOpenItemDetails) {
+      onOpenItemDetails(partyPack);
+    }
   };
 
   return (
@@ -54,9 +65,10 @@ export const PartyPackCard = memo(function PartyPackCard({
     >
       <Card
         className={cn(
-          "group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
+          "group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer",
           className
         )}
+        onClick={cardOnClick}
       >
         <div className="flex flex-col sm:flex-row">
           {/* Image Section */}

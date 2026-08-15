@@ -18,6 +18,7 @@ import {
   User,
   CircleDot,
   AlertTriangle,
+  MessageCircle,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ import { useAuth } from "@/hooks/use-auth";
 // Customer components
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
 import { PaymentQR } from "@/components/customer/PaymentQR";
+import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 
 // Shared components
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -50,7 +52,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import type {
   BusinessUnitSettings,
-  DeliveryZone,
   Customer,
   CustomerAddress,
   LoyaltySettings,
@@ -67,6 +68,7 @@ interface CheckoutForm {
   customerPhone: string;
   customerEmail: string;
   orderType: "delivery" | "pickup";
+  deliveryType: "local" | "outside_area";
   deliveryAddress: string;
   deliveryNotes: string;
   selectedZoneId: string;
@@ -78,6 +80,7 @@ const INITIAL_FORM: CheckoutForm = {
   customerPhone: "",
   customerEmail: "",
   orderType: "delivery",
+  deliveryType: "local",
   deliveryAddress: "",
   deliveryNotes: "",
   selectedZoneId: "",
@@ -106,6 +109,336 @@ function getOrCreateIdempotencyKey(): string {
 
 function clearIdempotencyKey() {
   sessionStorage.removeItem(IDEMPOTENCY_KEY_STORAGE);
+}
+
+// ============================================================================
+// Outside-area order persistence — survives browser refresh so the
+// confirmation page can recover the order via a reactive Convex query.
+// ============================================================================
+
+const OUTSIDE_AREA_ORDER_KEY = "mb_outside_area_order";
+
+function persistOutsideAreaOrder(orderNumber: string, phone: string) {
+  try {
+    localStorage.setItem(
+      OUTSIDE_AREA_ORDER_KEY,
+      JSON.stringify({ orderNumber, phone })
+    );
+  } catch {
+    // localStorage unavailable — non-critical, fallback to fresh state
+  }
+}
+
+function loadPersistedOutsideAreaOrder(): { orderNumber: string; phone: string } | null {
+  try {
+    const raw = localStorage.getItem(OUTSIDE_AREA_ORDER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.orderNumber && parsed?.phone) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPersistedOutsideAreaOrder() {
+  try {
+    localStorage.removeItem(OUTSIDE_AREA_ORDER_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// ============================================================================
+// OutsideAreaConfirmation — persistent, backend-driven order status page
+// for outside-area delivery orders. Uses a reactive Convex query so the
+// page updates in real-time when the admin sends a quote.
+// ============================================================================
+
+function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; phone: string }) {
+  const tracked = useQuery(api.orders.getByPhoneAndOrderNumber, { phone, orderNumber });
+  const globalSettings = useQuery(api.settings.getGlobalSettings);
+  const buSettings = useQuery(
+    api.settings.getBusinessUnitSettings,
+    tracked?.order?.businessUnitId
+      ? { businessUnitId: tracked.order.businessUnitId as any }
+      : "skip",
+  );
+
+  const order = tracked?.order;
+  const quoteStatus = order?.deliveryQuoteStatus;
+
+  // Clear persisted identity once the order reaches a terminal state
+  useEffect(() => {
+    if (!order) return;
+    if (order.status === "delivered" || order.status === "cancelled" || order.status === "refunded") {
+      clearPersistedOutsideAreaOrder();
+    }
+  }, [order?.status]);
+
+  // Loading state
+  if (tracked === undefined) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading your order...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Order not found
+  if (!order) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
+          <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+          <h1 className="text-2xl font-bold">Order not found</h1>
+          <p className="text-sm text-muted-foreground">
+            We couldn&apos;t find this order. Please check your order number and phone number.
+          </p>
+          <div className="flex gap-3 justify-center pt-2">
+            <Link to={ROUTES.TRACK_ORDER}>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Package className="h-3.5 w-3.5" />
+                Track Order
+              </Button>
+            </Link>
+            <Link to="/">
+              <Button size="sm" className="gap-2">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to Home
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Non-outside-area order — shouldn't happen, but fallback
+  if (order.deliveryType !== "outside_area") {
+    clearPersistedOutsideAreaOrder();
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
+          <h1 className="text-2xl font-bold">Order Placed</h1>
+          <p className="text-sm text-muted-foreground">
+            Your order has been placed successfully.
+          </p>
+          <Link to="/">
+            <Button size="sm" className="gap-2">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to Home
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const whatsappPhone = (globalSettings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
+  const orderSubtotal = order.subtotal - order.discount;
+  const whatsappMsg = encodeURIComponent(
+    `Hi MB Crunchy,\n\nI have requested outside-area delivery.\n\nOrder: ${order.orderNumber}\nOrder value: ${formatCurrency(orderSubtotal)}\n\nPlease check delivery availability and confirm the delivery charge.`
+  );
+
+  // ── QUOTE PENDING ────────────────────────────────────────────────────────
+  if (quoteStatus === "pending") {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="text-center space-y-6"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
+              className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-200 dark:shadow-amber-900/40"
+            >
+              <Clock className="h-12 w-12 text-white" />
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+              <h1 className="text-2xl font-bold tracking-tight">Delivery Request Received</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                We&apos;re checking delivery availability for your location. We&apos;ll confirm the delivery charge with you shortly.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="rounded-xl border border-border/60 bg-card p-6 space-y-3"
+            >
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Order Number</span>
+                <span className="font-mono font-semibold">{order.orderNumber}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Order Subtotal</span>
+                <span className="font-medium">{formatCurrency(orderSubtotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Delivery</span>
+                <span className="font-medium text-amber-600">Quote Required</span>
+              </div>
+              <div className="flex justify-between text-sm font-semibold">
+                <span>Total payable after quote</span>
+                <span>To be confirmed</span>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="rounded-xl border border-border/60 bg-card p-6 text-left space-y-3"
+            >
+              <h3 className="font-semibold text-sm">What happens next?</h3>
+              <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
+                <li>We&apos;ll check delivery availability for your location.</li>
+                <li>We&apos;ll confirm the courier/delivery charge with you.</li>
+                <li>You can accept or decline the quote.</li>
+                <li>If you accept, we&apos;ll provide the payment option.</li>
+                <li>Your order will be prepared after payment confirmation.</li>
+              </ol>
+              <p className="text-[11px] text-muted-foreground pt-1">
+                You will not be charged for delivery until we confirm the delivery cost with you.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="flex flex-col gap-3 items-center"
+            >
+              {whatsappPhone && (
+                <a
+                  href={`https://wa.me/${whatsappPhone}?text=${whatsappMsg}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-medium text-white hover:bg-emerald-700 transition-colors w-full justify-center"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Chat with {SITE_NAME} on WhatsApp
+                </a>
+              )}
+              <div className="flex gap-3 justify-center">
+                <Link to={ROUTES.TRACK_ORDER}>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Package className="h-3.5 w-3.5" />
+                    Track Order
+                  </Button>
+                </Link>
+                <Link to="/">
+                  <Button size="sm" className="gap-2">
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to Home
+                  </Button>
+                </Link>
+              </div>
+            </motion.div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── QUOTE QUOTED / ACCEPTED / REJECTED — delegate to PaymentPendingCard ──
+  // PaymentPendingCard handles: quote ready (accept/decline), quote accepted
+  // (payment flow), quote rejected (cancelled state).
+  const settings = (buSettings ?? null) as { paymentConfig?: { whatsappNumber?: string } } | null;
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="text-center space-y-6"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
+            className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40"
+          >
+            <CheckCircle2 className="h-12 w-12 text-white" />
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {quoteStatus === "quoted" && "Delivery Quote Ready"}
+              {quoteStatus === "accepted" && "Quote Accepted — Complete Payment"}
+              {quoteStatus === "rejected" && "Delivery Quote Declined"}
+              {!quoteStatus && "Order Confirmed"}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {quoteStatus === "quoted" && "We've confirmed the delivery charge for your location."}
+              {quoteStatus === "accepted" && "You accepted the delivery quote. Complete payment to confirm your order."}
+              {quoteStatus === "rejected" && "You declined the delivery quote. This order has been cancelled."}
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="rounded-xl border border-border/60 bg-card p-6"
+          >
+            <PaymentPendingCard
+              order={order as any}
+              phone={phone}
+              onOrderAgain={() => {}}
+            />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45 }}
+            className="flex flex-col gap-3 items-center"
+          >
+            {whatsappPhone && quoteStatus !== "rejected" && (
+              <a
+                href={`https://wa.me/${whatsappPhone}?text=${whatsappMsg}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-medium text-white hover:bg-emerald-700 transition-colors w-full justify-center"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Chat with {SITE_NAME} on WhatsApp
+              </a>
+            )}
+            <div className="flex gap-3 justify-center">
+              <Link to={ROUTES.TRACK_ORDER}>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Package className="h-3.5 w-3.5" />
+                  Track Order
+                </Button>
+              </Link>
+              <Link to="/">
+                <Button size="sm" className="gap-2">
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back to Home
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
+        </motion.div>
+      </div>
+    </div>
+  );
 }
 
 export default function CheckoutPage() {
@@ -144,10 +477,10 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
   // ==========================================================================
-  // Data Fetching — BU settings + delivery zones
+  // Data Fetching — BU settings + global delivery policy
   // ==========================================================================
 
-  // Use the first business unit from cart for settings/zones queries
+  // Use the first business unit from cart for settings queries
   const primaryBusinessUnitId = cart.businessUnitIds[0];
 
   const buSettings = useQuery(
@@ -157,12 +490,10 @@ export default function CheckoutPage() {
       : "skip"
   ) as BusinessUnitSettings | null | undefined;
 
-  const deliveryZones = useQuery(
-    api.deliveryZones.getActive,
-    primaryBusinessUnitId
-      ? { businessUnitId: primaryBusinessUnitId as any }
-      : "skip"
-  ) as DeliveryZone[] | undefined;
+  // Global delivery policy (not BU-owned)
+  const deliveryPolicy = useQuery(
+    api.deliveryPolicies.getActivePolicy,
+  ) as { _id: string; name: string; serviceType: string; feeType: string; fixedFee?: number; minimumOrder?: number; freeDeliveryThreshold?: number; estimatedMinutes?: number; requiresQuote: boolean; instructions?: string } | null | undefined;
 
   // Global settings for payment config
   const globalSettings = useQuery(api.settings.getGlobalSettings);
@@ -263,29 +594,32 @@ export default function CheckoutPage() {
     let freeDelivery = false;
     let estimatedMinutes: number | undefined;
 
-    if (form.orderType === "delivery" && deliveryZones) {
-      const selectedZone = deliveryZones.find((z) => z._id === form.selectedZoneId);
-      const zone = selectedZone ?? deliveryZones[0];
-
-      if (zone) {
-        // Check free delivery threshold
-        const threshold = zone.freeDeliveryThreshold ?? buSettings?.freeDeliveryThreshold;
+    if (form.orderType === "delivery" && form.deliveryType === "local" && deliveryPolicy) {
+      if (deliveryPolicy.feeType === "fixed" && deliveryPolicy.fixedFee !== undefined) {
+        const threshold = deliveryPolicy.freeDeliveryThreshold;
         if (threshold && afterDiscount >= threshold) {
           freeDelivery = true;
           deliveryFee = 0;
         } else {
-          deliveryFee = zone.charge ?? buSettings?.deliveryFee ?? 0;
+          deliveryFee = deliveryPolicy.fixedFee;
         }
-        estimatedMinutes = zone.estimatedMinutes;
-      } else {
-        deliveryFee = buSettings?.deliveryFee ?? 0;
+        estimatedMinutes = deliveryPolicy.estimatedMinutes;
       }
     }
+    // Outside-area and pickup: deliveryFee = 0
 
     const total = afterDiscount + deliveryFee + tax;
 
     return { subtotal, discount, afterDiscount, tax, taxRate, deliveryFee, freeDelivery, estimatedMinutes, total };
-  }, [cart.subtotal, cart.discount, form.orderType, form.selectedZoneId, buSettings, deliveryZones, couponApplied, loyaltyDiscount]);
+  }, [cart.subtotal, cart.discount, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount]);
+
+  // ==========================================================================
+  // Defensive normalization — deliveryType is only meaningful for delivery orders.
+  // When orderType is "pickup", effectiveDeliveryType is undefined so stale
+  // outside_area state can never leak into pricing, validation, or submission.
+  // ==========================================================================
+  const effectiveDeliveryType =
+    form.orderType === "delivery" ? form.deliveryType : undefined;
 
   // ==========================================================================
   // Coupon Validation
@@ -332,15 +666,6 @@ export default function CheckoutPage() {
   }, []);
 
   // ==========================================================================
-  // Auto-select first delivery zone
-  // ==========================================================================
-
-  useEffect(() => {
-    if (deliveryZones && deliveryZones.length > 0 && !form.selectedZoneId) {
-      setForm((prev) => ({ ...prev, selectedZoneId: deliveryZones[0]._id }));
-    }
-  }, [deliveryZones, form.selectedZoneId]);
-
   // ==========================================================================
   // Page Title
   // ==========================================================================
@@ -369,7 +694,15 @@ export default function CheckoutPage() {
 
   const updateField = useCallback(
     <K extends keyof CheckoutForm>(field: K, value: CheckoutForm[K]) => {
-      setForm((prev) => ({ ...prev, [field]: value }));
+      setForm((prev) => {
+        const next = { ...prev, [field]: value };
+        // When switching to pickup, clear deliveryType so stale outside_area
+        // state never leaks into the pickup flow.
+        if (field === "orderType" && value === "pickup") {
+          next.deliveryType = "local";
+        }
+        return next;
+      });
       // Clear error on edit
       if (errors[field]) {
         setErrors((prev) => {
@@ -400,14 +733,11 @@ export default function CheckoutPage() {
     if (form.orderType === "delivery" && !form.deliveryAddress.trim()) {
       newErrors.deliveryAddress = "Delivery address is required";
     }
-    if (form.orderType === "delivery" && deliveryZones && deliveryZones.length > 0 && !form.selectedZoneId) {
-      newErrors.selectedZoneId = "Please select a delivery zone";
-    }
-    // Delivery minimum order validation
-    if (form.orderType === "delivery" && deliveryZones && form.selectedZoneId) {
-      const selectedZone = deliveryZones.find((z) => z._id === form.selectedZoneId);
-      if (selectedZone?.minOrder && pricing.afterDiscount < selectedZone.minOrder) {
-        newErrors.selectedZoneId = `Minimum order for delivery is ${formatCurrency(selectedZone.minOrder)}. Add ${formatCurrency(selectedZone.minOrder - pricing.afterDiscount)} more to your cart.`;
+
+    // Local delivery minimum order check
+    if (form.orderType === "delivery" && form.deliveryType === "local" && deliveryPolicy?.minimumOrder) {
+      if (pricing.afterDiscount < deliveryPolicy.minimumOrder) {
+        newErrors.deliveryAddress = `Minimum order for local delivery is ${formatCurrency(deliveryPolicy.minimumOrder)}. Add ${formatCurrency(deliveryPolicy.minimumOrder - pricing.afterDiscount)} more to your cart.`;
       }
     }
 
@@ -460,14 +790,12 @@ export default function CheckoutPage() {
           tax: pricing.tax,
           total: pricing.total,
           orderType: form.orderType,
+          deliveryType: effectiveDeliveryType,
           deliveryAddress:
             form.orderType === "delivery"
               ? form.deliveryAddress.trim()
               : undefined,
-          deliveryZoneId:
-            form.orderType === "delivery" && form.selectedZoneId
-              ? (form.selectedZoneId as Id<"deliveryZones">)
-              : undefined,
+          deliveryZoneId: undefined,
           deliveryNotes: form.deliveryNotes.trim() || undefined,
           offerCode: couponApplied?.valid ? form.couponCode.trim() : undefined,
           paymentMethod: "upi_qr",
@@ -478,7 +806,7 @@ export default function CheckoutPage() {
 
         clearIdempotencyKey();
 
-        if (redeemPoints > 0 && customer?._id) {
+        if (redeemPoints > 0 && customer?._id && effectiveDeliveryType !== "outside_area") {
           redeemPointsMutation({
             customerId: customer._id as Id<"customers">,
             orderId: newOrderId as unknown as Id<"orders">,
@@ -494,7 +822,22 @@ export default function CheckoutPage() {
           amount: pricing.total,
           phone: form.customerPhone.trim(),
         });
-        setShowPaymentQR(true);
+
+        // Outside-area orders: show "Delivery Request Received" immediately,
+        // no payment QR. Customer will be contacted for delivery quote.
+        if (effectiveDeliveryType === "outside_area") {
+          setOrderSuccess({
+            orderNumber: newOrderNumber,
+            orderId: newOrderId,
+          });
+          clearCart();
+          clearIdempotencyKey();
+          toast.success("Delivery request submitted!", {
+            description: "We'll contact you with a delivery quote shortly.",
+          });
+        } else {
+          setShowPaymentQR(true);
+        }
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Order creation failed";
@@ -550,10 +893,23 @@ export default function CheckoutPage() {
   }, [pendingOrder, clearCart, claimPayment]);
 
   // ==========================================================================
+  // Persisted outside-area order — recovers confirmation page on refresh
+  // ==========================================================================
+
+  const [persistedOrder] = useState(() => loadPersistedOutsideAreaOrder());
+
+  // ==========================================================================
   // Order Success State
   // ==========================================================================
 
   if (orderSuccess) {
+    // Outside-area orders use the backend-driven confirmation page
+    if (effectiveDeliveryType === "outside_area") {
+      persistOutsideAreaOrder(orderSuccess.orderNumber, form.customerPhone.trim());
+      return <OutsideAreaConfirmation orderNumber={orderSuccess.orderNumber} phone={form.customerPhone.trim()} />;
+    }
+
+    // Non-outside-area: show the existing payment-submitted success screen
     return (
       <div className="min-h-screen bg-background">
         <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
@@ -563,7 +919,6 @@ export default function CheckoutPage() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className="text-center space-y-6"
           >
-            {/* Animated success icon */}
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -582,8 +937,7 @@ export default function CheckoutPage() {
                 Payment Submitted for Verification
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Payment recorded — we&apos;ll verify it and start preparing
-                your order shortly.
+                Payment recorded — we&apos;ll verify it and start preparing your order shortly.
               </p>
             </motion.div>
 
@@ -600,6 +954,16 @@ export default function CheckoutPage() {
                 </span>
               </div>
               <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Order Subtotal</span>
+                <span className="font-medium">{formatCurrency(pricing.subtotal - pricing.discount)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Delivery</span>
+                <span className="font-medium">
+                  {pricing.freeDelivery ? "Free" : formatCurrency(pricing.deliveryFee)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Payment</span>
                 <span className="flex items-center gap-1.5 text-amber-600 font-medium">
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -613,42 +977,28 @@ export default function CheckoutPage() {
                   Awaiting Payment Verification
                 </span>
               </div>
-              {pricing.estimatedMinutes && form.orderType === "delivery" && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Estimated Delivery</span>
-                  <span className="font-medium">~{pricing.estimatedMinutes} min</span>
-                </div>
-              )}
             </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.45 }}
-              className="text-xs text-muted-foreground"
-            >
-              You&apos;ll receive updates on your order status. For any
-              questions, please contact support.
-            </motion.p>
 
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="flex gap-3 justify-center"
+              className="flex flex-col gap-3 items-center"
             >
-              <Link to={ROUTES.TRACK_ORDER}>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Package className="h-3.5 w-3.5" />
-                  Track Order
-                </Button>
-              </Link>
-              <Link to="/">
-                <Button size="sm" className="gap-2">
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back to Home
-                </Button>
-              </Link>
+              <div className="flex gap-3 justify-center">
+                <Link to={ROUTES.TRACK_ORDER}>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Package className="h-3.5 w-3.5" />
+                    Track Order
+                  </Button>
+                </Link>
+                <Link to="/">
+                  <Button size="sm" className="gap-2">
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to Home
+                  </Button>
+                </Link>
+              </div>
             </motion.div>
           </motion.div>
         </div>
@@ -659,6 +1009,12 @@ export default function CheckoutPage() {
   // ==========================================================================
   // Empty Cart Redirect
   // ==========================================================================
+
+  // If cart is empty but we have a persisted outside-area order, show the
+  // confirmation page instead of the empty cart state (survives browser refresh).
+  if (cart.items.length === 0 && persistedOrder) {
+    return <OutsideAreaConfirmation orderNumber={persistedOrder.orderNumber} phone={persistedOrder.phone} />;
+  }
 
   if (cart.items.length === 0) {
     return (
@@ -947,115 +1303,144 @@ export default function CheckoutPage() {
                     <div className="rounded-xl border border-border/60 p-6 space-y-4">
                       <h2 className="font-semibold">Delivery Details</h2>
 
-                      {/* Delivery Zone Selection */}
-                      {deliveryZones && deliveryZones.length > 0 && (
-                        <div className="space-y-2">
-                          <Label>Delivery Zone</Label>
-                          <RadioGroup
-                            value={form.selectedZoneId}
-                            onValueChange={(val) =>
-                              updateField("selectedZoneId", val)
-                            }
-                            className="space-y-2"
+                      {/* Delivery Type Selection — Local vs Outside Area */}
+                      <div className="space-y-2">
+                        <Label>Delivery Area</Label>
+                        <RadioGroup
+                          value={effectiveDeliveryType ?? "local"}
+                          onValueChange={(val) =>
+                            updateField("deliveryType", val as "local" | "outside_area")
+                          }
+                          className="space-y-2"
+                        >
+                          {/* Local Delivery */}
+                           <label
+                            className={cn(
+                              "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-all",
+                              effectiveDeliveryType === "local"
+                                ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                : "border-border/60 bg-card hover:border-border"
+                            )}
                           >
-                            {deliveryZones.map((zone) => (
-                              <label
-                                key={zone._id}
-                                className={cn(
-                                  "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-all",
-                                  form.selectedZoneId === zone._id
-                                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                    : "border-border/60 bg-card hover:border-border"
-                                )}
-                              >
-                                <RadioGroupItem
-                                  value={zone._id}
-                                  className="sr-only"
-                                />
-                                <div
-                                  className={cn(
-                                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
-                                    form.selectedZoneId === zone._id
-                                      ? "bg-primary/10 text-primary"
-                                      : "bg-secondary text-muted-foreground"
-                                  )}
-                                >
-                                  <MapPin className="h-4 w-4" />
-                                </div>
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium">
-                                    {zone.name}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {zone.estimatedMinutes
-                                      ? `~${zone.estimatedMinutes} min delivery`
-                                      : "Delivery available"}
-                                  </p>
-                                </div>
-                                <span className="text-sm font-semibold">
-                                  {zone.freeDeliveryThreshold &&
-                                  pricing.afterDiscount >= zone.freeDeliveryThreshold
-                                    ? "Free"
-                                    : formatCurrency(zone.charge)}
-                                </span>
-                              </label>
-                            ))}
-                          </RadioGroup>
-                        </div>
-                      )}
+                            <RadioGroupItem value="local" className="sr-only" />
+                            <div
+                              className={cn(
+                                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                                effectiveDeliveryType === "local"
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-secondary text-muted-foreground"
+                              )}
+                            >
+                              <Truck className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">Local Delivery</p>
+                              <p className="text-xs text-muted-foreground">
+                                {deliveryPolicy?.fixedFee !== undefined
+                                  ? `${formatCurrency(deliveryPolicy.fixedFee)}${deliveryPolicy.estimatedMinutes ? ` \u00B7 ~${deliveryPolicy.estimatedMinutes} min` : ""}`
+                                  : "Delivery available"}
+                                {deliveryPolicy?.minimumOrder ? ` \u00B7 Min ${formatCurrency(deliveryPolicy.minimumOrder)}` : ""}
+                                {deliveryPolicy?.freeDeliveryThreshold ? ` \u00B7 Free above ${formatCurrency(deliveryPolicy.freeDeliveryThreshold)}` : ""}
+                              </p>
+                            </div>
+                            {deliveryPolicy?.fixedFee !== undefined && (
+                              <span className="text-sm font-semibold">
+                                {pricing.freeDelivery ? "Free" : formatCurrency(deliveryPolicy.fixedFee)}
+                              </span>
+                            )}
+                          </label>
 
-                      {/* Delivery Info Summary */}
-                      {deliveryZones && deliveryZones.length > 0 && (
+                           {/* Outside Local Area */}
+                          <label
+                            className={cn(
+                              "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-all",
+                              effectiveDeliveryType === "outside_area"
+                                ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                : "border-border/60 bg-card hover:border-border"
+                            )}
+                          >
+                            <RadioGroupItem value="outside_area" className="sr-only" />
+                            <div
+                              className={cn(
+                                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                                effectiveDeliveryType === "outside_area"
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-secondary text-muted-foreground"
+                              )}
+                            >
+                              <MapPin className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">Outside Local Area</p>
+                              <p className="text-xs text-muted-foreground">
+                                Delivery charge confirmed separately \u00B7 Courier/delivery partner may be used
+                              </p>
+                            </div>
+                            <span className="text-sm text-muted-foreground">Quote</span>
+                          </label>
+                        </RadioGroup>
+                      </div>
+
+                      {/* Local Delivery Info */}
+                      {effectiveDeliveryType === "local" && deliveryPolicy && (
                         <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 space-y-2">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <Truck className="h-4 w-4 text-primary" />
-                            <span>Delivery Info</span>
+                            <span>{deliveryPolicy.name}</span>
                           </div>
                           <div className="space-y-1.5 text-xs text-muted-foreground">
-                            {(() => {
-                              const selectedZone = deliveryZones.find((z) => z._id === form.selectedZoneId) ?? deliveryZones[0];
-                              if (!selectedZone) return null;
-                              return (
-                                <>
-                                  <div className="flex justify-between">
-                                    <span>Zone</span>
-                                    <span className="font-medium text-foreground">{selectedZone.name}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span>Delivery fee</span>
-                                    <span className={cn("font-medium", pricing.freeDelivery ? "text-emerald-600" : "text-foreground")}>
-                                      {pricing.freeDelivery ? "Free" : formatCurrency(selectedZone.charge)}
-                                    </span>
-                                  </div>
-                                  {selectedZone.estimatedMinutes && (
-                                    <div className="flex justify-between">
-                                      <span>Estimated time</span>
-                                      <span className="font-medium text-foreground">~{selectedZone.estimatedMinutes} min</span>
-                                    </div>
-                                  )}
-                                  {selectedZone.minOrder && (
-                                    <div className="flex justify-between">
-                                      <span>Minimum order</span>
-                                      <span className={cn("font-medium", pricing.afterDiscount >= selectedZone.minOrder ? "text-emerald-600" : "text-foreground")}>
-                                        {formatCurrency(selectedZone.minOrder)}
-                                        {pricing.afterDiscount >= selectedZone.minOrder ? " (met)" : ""}
-                                      </span>
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
+                            <div className="flex justify-between">
+                              <span>Delivery fee</span>
+                              <span className={cn("font-medium", pricing.freeDelivery ? "text-emerald-600" : "text-foreground")}>
+                                {pricing.freeDelivery ? "Free" : formatCurrency(deliveryPolicy.fixedFee ?? 0)}
+                              </span>
+                            </div>
+                            {deliveryPolicy.estimatedMinutes && (
+                              <div className="flex justify-between">
+                                <span>Estimated time</span>
+                                <span className="font-medium text-foreground">~{deliveryPolicy.estimatedMinutes} min</span>
+                              </div>
+                            )}
+                            {deliveryPolicy.minimumOrder && (
+                              <div className="flex justify-between">
+                                <span>Minimum order</span>
+                                <span className={cn("font-medium", pricing.afterDiscount >= deliveryPolicy.minimumOrder ? "text-emerald-600" : "text-foreground")}>
+                                  {formatCurrency(deliveryPolicy.minimumOrder)}
+                                  {pricing.afterDiscount >= deliveryPolicy.minimumOrder ? " (met)" : ""}
+                                </span>
+                              </div>
+                            )}
+                            {deliveryPolicy.freeDeliveryThreshold && (
+                              <div className="flex justify-between">
+                                <span>Free delivery above</span>
+                                <span className="font-medium text-foreground">{formatCurrency(deliveryPolicy.freeDeliveryThreshold)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
 
-                      {/* No zones configured fallback */}
-                      {deliveryZones && deliveryZones.length === 0 && (
-                        <div className="rounded-lg bg-secondary/50 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            Delivery zones not configured. A default fee may
-                            apply.
-                          </p>
+                      {/* Outside Area Info */}
+                      {effectiveDeliveryType === "outside_area" && (
+                        <div className="rounded-lg bg-secondary/50 p-4 space-y-3">
+                          <div className="flex items-start gap-2">
+                            <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium">Outside our local delivery area</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                We currently provide local delivery in our service area. If you&apos;re outside our local area, we may still be able to arrange delivery through a courier or delivery partner. Delivery charges will be confirmed based on your location.
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href="https://wa.me/7842032879?text=Hi%20MB%20Crunchy%2C%20I%27d%20like%20to%20arrange%20delivery%20for%20my%20order."
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            Request Delivery Assistance
+                          </a>
                         </div>
                       )}
 
@@ -1410,9 +1795,11 @@ export default function CheckoutPage() {
                     </span>
                     <span className={cn("font-medium", pricing.freeDelivery && "text-emerald-600")}>
                       {form.orderType === "delivery"
-                        ? pricing.freeDelivery
-                          ? "Free"
-                          : formatCurrency(pricing.deliveryFee)
+                        ? effectiveDeliveryType === "outside_area"
+                          ? "To be confirmed"
+                          : pricing.freeDelivery
+                            ? "Free"
+                            : formatCurrency(pricing.deliveryFee)
                         : "Free"}
                     </span>
                   </div>
@@ -1461,9 +1848,14 @@ export default function CheckoutPage() {
                 )}
 
                 <div className="flex justify-between text-lg font-bold">
-                  <span>Total</span>
-                  <span>{formatCurrency(pricing.total)}</span>
+                  <span>{effectiveDeliveryType === "outside_area" ? "Payable Now" : "Total"}</span>
+                  <span>{effectiveDeliveryType === "outside_area" ? formatCurrency(pricing.subtotal - pricing.discount + pricing.tax) : formatCurrency(pricing.total)}</span>
                 </div>
+                {effectiveDeliveryType === "outside_area" && (
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Delivery charge will be confirmed separately
+                  </p>
+                )}
 
                 {/* Submit */}
                 <Button
@@ -1486,6 +1878,11 @@ export default function CheckoutPage() {
                     </>
                   ) : !storeIsOpen ? (
                     "Store is Closed"
+                  ) : effectiveDeliveryType === "outside_area" ? (
+                    <>
+                      <MessageCircle className="mr-2 h-5 w-5" />
+                      Request Delivery Quote
+                    </>
                   ) : (
                     <>
                       <CreditCard className="mr-2 h-5 w-5" />

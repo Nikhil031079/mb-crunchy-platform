@@ -31,6 +31,8 @@ interface ProductGridSectionProps {
   loading?: boolean;
   skeletonCount?: number;
   variant?: "default" | "secondary";
+  /** Called when a card body is clicked — opens universal ItemDetailsModal */
+  onOpenItemDetails?: (item: CatalogItem) => void;
 }
 
 export function ProductGridSection({
@@ -46,6 +48,7 @@ export function ProductGridSection({
   loading = false,
   skeletonCount = 5,
   variant = "default",
+  onOpenItemDetails,
 }: ProductGridSectionProps) {
   const itemIds = useMemo(
     () => items.map((item) => item._id as Id<"catalogItems">),
@@ -103,6 +106,7 @@ export function ProductGridSection({
               compact
               onAddToCart={onAddToCart}
               rating={ratingsMap?.[item._id]}
+              onOpenItemDetails={onOpenItemDetails}
               className={cn(index >= 4 && "hidden sm:block")}
             />
           ))}

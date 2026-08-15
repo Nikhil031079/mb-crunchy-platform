@@ -345,22 +345,50 @@ type DeliveryZoneSettings = {
 };
 
 /**
- * Recompute the delivery fee from current settings / zones. Pickup is free.
+ * Recompute the delivery fee from current settings / zones / global policy.
+ * Pickup is free. Outside-area delivery has fee=0 (quote required).
  * When a deliveryZoneId is provided it is validated and used; otherwise the
- * first active zone is assumed (matching the checkout default).
+ * global delivery policy is used for local delivery.
  */
 async function computeDeliveryFee(
   ctx: MutationCtx,
   args: {
     businessUnitId: Id<"businessUnits">;
     orderType: "delivery" | "pickup";
+    deliveryType?: "local" | "outside_area";
     deliveryZoneId?: Id<"deliveryZones">;
     afterDiscount: number;
     settings?: DeliveryZoneSettings | null;
   },
 ): Promise<number> {
+  if (args.orderType !== "pickup" && args.deliveryType === "outside_area") {
+    // Outside-area delivery: fee is determined later by admin. Charge 0 now.
+    return 0;
+  }
+
   if (args.orderType !== "delivery") return 0;
 
+  // Local delivery: use the global delivery policy
+  const policy = await ctx.db
+    .query("deliveryPolicies")
+    .filter((q) =>
+      q.and(
+        q.eq(q.field("serviceType"), "local"),
+        q.eq(q.field("status"), "active"),
+        q.eq(q.field("deletedAt"), undefined)
+      )
+    )
+    .first();
+
+  if (policy && policy.feeType === "fixed" && policy.fixedFee !== undefined) {
+    // Check free delivery threshold
+    if (policy.freeDeliveryThreshold && args.afterDiscount >= policy.freeDeliveryThreshold) {
+      return 0;
+    }
+    return policy.fixedFee;
+  }
+
+  // Legacy fallback: if no global policy, try deliveryZones
   const settings = args.settings;
 
   const feeForZone = (zone: {
@@ -376,15 +404,12 @@ async function computeDeliveryFee(
     const zone = await ctx.db.get(args.deliveryZoneId);
     if (
       !zone ||
-      zone.businessUnitId !== args.businessUnitId ||
+      (zone.businessUnitId !== args.businessUnitId && !zone.isDefault) ||
       zone.status !== "active" ||
       zone.deletedAt
     ) {
       throw new Error("Delivery zone is not valid for this store");
     }
-    // Operating rule: the zone's minimum order must be met on the discounted
-    // subtotal (the amount the customer actually pays for goods). Enforced
-    // server-side so a stale or tampered checkout can't bypass the rule.
     if (zone.minOrder && args.afterDiscount < zone.minOrder) {
       throw new Error(
         `Delivery to "${zone.name}" requires a minimum order of ₹${zone.minOrder}`,
@@ -393,22 +418,8 @@ async function computeDeliveryFee(
     return feeForZone(zone);
   }
 
-  const zones = await ctx.db
-    .query("deliveryZones")
-    .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
-    .filter((q) =>
-      q.and(
-        q.eq(q.field("status"), "active"),
-        q.eq(q.field("deletedAt"), undefined),
-      )
-    )
-    .collect();
-
-  if (zones.length > 0) {
-    return feeForZone(zones[0]);
-  }
-
-  return settings?.deliveryFee ?? 0;
+  // No delivery zone found — do not silently apply a fee.
+  return 0;
 }
 
 // ============================================================================
@@ -444,6 +455,7 @@ export const create = mutation({
     tax: v.number(),
     total: v.number(),
     orderType: v.union(v.literal("delivery"), v.literal("pickup")),
+    deliveryType: v.optional(v.union(v.literal("local"), v.literal("outside_area"))),
     deliveryAddress: v.optional(v.string()),
     deliveryZoneId: v.optional(v.id("deliveryZones")),
     deliveryNotes: v.optional(v.string()),
@@ -580,15 +592,30 @@ export const create = mutation({
 
     const afterDiscount = Math.max(0, subtotal - discount);
 
-    const deliveryFee = await computeDeliveryFee(ctx, {
-      businessUnitId: args.businessUnitId,
-      orderType: args.orderType,
-      deliveryZoneId: args.deliveryZoneId,
-      afterDiscount,
-      settings: buSettings,
-    });
-    if (Math.abs(args.deliveryFee - deliveryFee) > PRICE_TOLERANCE) {
-      throw new Error("Delivery fee is out of date. Please review your cart.");
+    const deliveryType = args.deliveryType ?? "local";
+    const deliveryQuoteRequired = deliveryType === "outside_area";
+
+    // Outside-area orders: delivery fee is 0 until admin quotes.
+    // Local/pickup: use existing server-computed fee.
+    let deliveryFee: number;
+    if (deliveryQuoteRequired) {
+      deliveryFee = 0;
+      // Validate client also sent 0
+      if (Math.abs(args.deliveryFee) > PRICE_TOLERANCE) {
+        throw new Error("Delivery fee must be 0 for outside-area orders before quote");
+      }
+    } else {
+      deliveryFee = await computeDeliveryFee(ctx, {
+        businessUnitId: args.businessUnitId,
+        orderType: args.orderType,
+        deliveryType,
+        deliveryZoneId: args.deliveryZoneId,
+        afterDiscount,
+        settings: buSettings,
+      });
+      if (Math.abs(args.deliveryFee - deliveryFee) > PRICE_TOLERANCE) {
+        throw new Error("Delivery fee is out of date. Please review your cart.");
+      }
     }
 
     const taxRate = buSettings?.taxRate ?? 0;
@@ -613,6 +640,12 @@ export const create = mutation({
 
     const paymentStatus = args.paymentMethod === "upi_qr" ? "pending_verification" as const : "pending" as const;
 
+    // Outside-area orders: no payment yet, quote pending. No NEW_ORDER notification
+    // or inventory reservation until customer accepts quote and claims payment.
+    const isOutsideArea = deliveryQuoteRequired;
+    const orderPaymentStatus = isOutsideArea ? "pending" as const : paymentStatus;
+    const deliveryQuoteStatus = isOutsideArea ? "pending" as const : undefined;
+
     const orderId = await ctx.db.insert("orders", {
       businessUnitId: args.businessUnitId,
       orderNumber,
@@ -627,11 +660,14 @@ export const create = mutation({
       tax,
       total,
       orderType: args.orderType,
+      deliveryType,
       deliveryAddress: args.deliveryAddress,
       deliveryZoneId: args.deliveryZoneId,
       deliveryNotes: args.deliveryNotes,
+      deliveryQuoteRequired,
+      deliveryQuoteStatus,
       status: "awaiting_payment",
-      paymentStatus,
+      paymentStatus: orderPaymentStatus,
       paymentMethod: args.paymentMethod,
       offerId,
       offerCode: args.offerCode,
@@ -649,78 +685,92 @@ export const create = mutation({
       visibleToCustomer: true,
     });
 
-    // Don't send NEW_ORDER notification or reserve inventory for awaiting_payment orders
-    // These happen when payment is verified (claimPayment -> admin verification)
+    // Outside-area orders: no notification or inventory reservation yet.
+    // These happen when customer accepts quote and claims payment.
+    if (!isOutsideArea) {
+      // Don't send NEW_ORDER notification or reserve inventory for awaiting_payment orders
+      // These happen when payment is verified (claimPayment -> admin verification)
 
-    // Coupon usage — incremented exactly once per successfully created order.
-    // `create` is idempotency-keyed (a retry returns the existing order above),
-    // so a network retry or double submit can never double-count a redemption.
-    // Failed/cancelled orders never reach this point and never consume usage.
-    if (offerId) {
-      await ctx.runMutation(internal.offers.incrementUsage, { id: offerId });
-    }
-
-    // Reserve stock for each item. Done inline in the create transaction so
-    // the reservation and order insert are atomic — a failed reservation rolls
-    // the whole order back instead of leaving an order with no stock held.
-    for (const item of items) {
-      const inventory = await findInventoryForOrderItem(
-        ctx,
-        item.catalogItemId,
-        item.variantName,
-      );
-
-      if (!inventory) continue;
-
-      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-        throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+      // Coupon usage — incremented exactly once per successfully created order.
+      // `create` is idempotency-keyed (a retry returns the existing order above),
+      // so a network retry or double submit can never double-count a redemption.
+      // Failed/cancelled orders never reach this point and never consume usage.
+      if (offerId) {
+        await ctx.runMutation(internal.offers.incrementUsage, { id: offerId });
       }
 
-      const reserved = inventory.reservedStock ?? 0;
-      const avail = inventory.stockQuantity - reserved;
-      if (avail < item.quantity) {
-        throw new Error(
-          `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
+      // Reserve stock for each item. Done inline in the create transaction so
+      // the reservation and order insert are atomic — a failed reservation rolls
+      // the whole order back instead of leaving an order with no stock held.
+      for (const item of items) {
+        const inventory = await findInventoryForOrderItem(
+          ctx,
+          item.catalogItemId,
+          item.variantName,
         );
+
+        if (!inventory) continue;
+
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+        }
+
+        const reserved = inventory.reservedStock ?? 0;
+        const avail = inventory.stockQuantity - reserved;
+        if (avail < item.quantity) {
+          throw new Error(
+            `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
+          );
+        }
+
+        const newReserved = reserved + item.quantity;
+        await ctx.db.patch(inventory._id, {
+          reservedStock: newReserved,
+          available: (inventory.stockQuantity - newReserved) > 0,
+          updatedAt: now,
+        });
+
+        await logMovement(ctx, {
+          inventoryId: inventory._id,
+          businessUnitId: inventory.businessUnitId,
+          type: "reservation",
+          quantity: item.quantity,
+          previousStock: inventory.stockQuantity,
+          newStock: inventory.stockQuantity,
+          orderId,
+        });
+
+        await logActivity(ctx, {
+          orderId,
+          businessUnitId: inventory.businessUnitId,
+          action: "inventory_reserved",
+          newValue: `${item.quantity} × ${inventory.variantName}`,
+          actor: "system",
+          visibleToCustomer: true,
+        });
       }
 
-      const newReserved = reserved + item.quantity;
-      await ctx.db.patch(inventory._id, {
-        reservedStock: newReserved,
-        available: (inventory.stockQuantity - newReserved) > 0,
-        updatedAt: now,
-      });
-
-      await logMovement(ctx, {
-        inventoryId: inventory._id,
-        businessUnitId: inventory.businessUnitId,
-        type: "reservation",
-        quantity: item.quantity,
-        previousStock: inventory.stockQuantity,
-        newStock: inventory.stockQuantity,
+      const businessUnit = await ctx.db.get(args.businessUnitId);
+      await notify("NEW_ORDER", {
         orderId,
+        orderNumber,
+        businessUnitName: businessUnit?.name ?? "",
+        orderType: args.orderType,
+        total,
+        itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+        customerName: args.customerName,
       });
-
+    } else {
+      // Outside-area: log that quote is pending, skip coupon/inventory for now.
       await logActivity(ctx, {
         orderId,
-        businessUnitId: inventory.businessUnitId,
-        action: "inventory_reserved",
-        newValue: `${item.quantity} × ${inventory.variantName}`,
+        businessUnitId: args.businessUnitId,
+        action: "payment_pending",
+        newValue: "delivery_quote_pending",
         actor: "system",
         visibleToCustomer: true,
       });
     }
-
-    const businessUnit = await ctx.db.get(args.businessUnitId);
-    await notify("NEW_ORDER", {
-      orderId,
-      orderNumber,
-      businessUnitName: businessUnit?.name ?? "",
-      orderType: args.orderType,
-      total,
-      itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-      customerName: args.customerName,
-    });
 
     return { orderId, orderNumber, existing: false };
   },
@@ -865,7 +915,14 @@ export const updateStatus = mutation({
       });
     }
 
-    await ctx.db.patch(args.id, { ...patchArgs, updatedAt: now });
+    await ctx.db.patch(args.id, {
+      ...patchArgs,
+      updatedAt: now,
+      ...(args.status !== previousStatus &&
+        (args.status === "delivered" || args.status === "cancelled" || args.status === "refunded")
+        ? { terminalAt: now }
+        : {}),
+    });
 
     // ------------------------------------------------------------------
     // Audit timeline: record status / payment changes
@@ -1038,6 +1095,14 @@ export const claimPayment = mutation({
       return { outcome: "not_pending" as const };
     }
 
+    // Outside-area orders: block payment claim until quote is accepted.
+    if (
+      order.deliveryQuoteRequired &&
+      order.deliveryQuoteStatus !== "accepted"
+    ) {
+      return { outcome: "quote_not_accepted" as const };
+    }
+
     // For awaiting_payment orders, transition to pending and pending_verification
     if (order.status === "awaiting_payment") {
       const now = Date.now();
@@ -1127,6 +1192,89 @@ export const claimPayment = mutation({
       });
     }
 
+    // Outside-area orders: reserve inventory, send notification and increment
+    // coupon on the customer's first payment claim (after quote acceptance).
+    // This is idempotent — if inventory was already reserved for this order
+    // we skip the entire block.
+    if (
+      order.deliveryQuoteRequired &&
+      order.deliveryQuoteStatus === "accepted" &&
+      order.status === "pending"
+    ) {
+      const alreadyReserved = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .filter((q) => q.eq(q.field("action"), "inventory_reserved"))
+        .first();
+
+      if (!alreadyReserved) {
+        const now = Date.now();
+
+        const businessUnit = await ctx.db.get(order.businessUnitId);
+        await notify("NEW_ORDER", {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          businessUnitName: businessUnit?.name ?? "",
+          orderType: order.orderType,
+          total: order.total,
+          itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+          customerName: order.customerName,
+        });
+
+        for (const item of order.items) {
+          const inventory = await findInventoryForOrderItem(
+            ctx,
+            item.catalogItemId,
+            item.variantName,
+          );
+
+          if (!inventory) continue;
+
+          if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+          }
+
+          const reserved = inventory.reservedStock ?? 0;
+          const avail = inventory.stockQuantity - reserved;
+          if (avail < item.quantity) {
+            throw new Error(
+              `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
+            );
+          }
+
+          const newReserved = reserved + item.quantity;
+          await ctx.db.patch(inventory._id, {
+            reservedStock: newReserved,
+            available: (inventory.stockQuantity - newReserved) > 0,
+            updatedAt: now,
+          });
+
+          await logMovement(ctx, {
+            inventoryId: inventory._id,
+            businessUnitId: inventory.businessUnitId,
+            type: "reservation",
+            quantity: item.quantity,
+            previousStock: inventory.stockQuantity,
+            newStock: inventory.stockQuantity,
+            orderId: order._id,
+          });
+
+          await logActivity(ctx, {
+            orderId: order._id,
+            businessUnitId: inventory.businessUnitId,
+            action: "inventory_reserved",
+            newValue: `${item.quantity} × ${inventory.variantName}`,
+            actor: "system",
+            visibleToCustomer: true,
+          });
+        }
+
+        if (order.offerId) {
+          await ctx.runMutation(internal.offers.incrementUsage, { id: order.offerId });
+        }
+      }
+    }
+
     // Optionally record the customer's UPI transaction reference (UTR) so the
     // admin can match the transfer while verifying. The first reference wins
     // so a retry or later edit never overwrites what the customer submitted
@@ -1171,6 +1319,162 @@ export const claimPayment = mutation({
     return {
       outcome: alreadyClaimed ? ("already_claimed" as const) : ("claimed" as const),
     };
+  },
+});
+
+// ============================================================================
+// Delivery Quote Mutations (Outside Local Area)
+// ============================================================================
+
+export const updateDeliveryQuote = mutation({
+  args: {
+    sessionToken: v.string(),
+    orderId: v.id("orders"),
+    deliveryQuoteAmount: v.number(),
+    deliveryQuoteNotes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.deletedAt) throw new Error("Order not found");
+    if (!order.deliveryQuoteRequired) {
+      throw new Error("This order does not require a delivery quote");
+    }
+    if (order.deliveryQuoteStatus !== "pending" && order.deliveryQuoteStatus !== "quoted") {
+      throw new Error("Delivery quote has already been accepted or rejected");
+    }
+    if (args.deliveryQuoteAmount <= 0) {
+      throw new Error("Delivery quote amount must be greater than 0");
+    }
+
+    const now = Date.now();
+    const previousQuoteAmount = order.deliveryQuoteAmount ?? 0;
+
+    // Recalculate total: subtotal - discount + new delivery fee + tax
+    const afterDiscount = Math.max(0, order.subtotal - order.discount);
+    const newTotal = afterDiscount + args.deliveryQuoteAmount + order.tax;
+
+    await ctx.db.patch(order._id, {
+      deliveryQuoteStatus: "quoted",
+      deliveryQuoteAmount: args.deliveryQuoteAmount,
+      deliveryQuoteNotes: args.deliveryQuoteNotes,
+      deliveryQuoteUpdatedAt: now,
+      deliveryFee: args.deliveryQuoteAmount,
+      total: newTotal,
+      updatedAt: now,
+    });
+
+    await logActivity(ctx, {
+      orderId: order._id,
+      businessUnitId: order.businessUnitId,
+      action: "payment_pending",
+      previousValue: previousQuoteAmount > 0 ? `₹${previousQuoteAmount}` : "not_quoted",
+      newValue: `₹${args.deliveryQuoteAmount}`,
+      actor: "admin",
+      visibleToCustomer: true,
+    });
+
+    return { success: true, newTotal };
+  },
+});
+
+export const acceptDeliveryQuote = mutation({
+  args: {
+    orderId: v.id("orders"),
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.deletedAt) throw new Error("Order not found");
+    if (order.customerPhone !== args.phone) {
+      throw new Error("Order not found for this phone number");
+    }
+    if (!order.deliveryQuoteRequired) {
+      throw new Error("This order does not have a delivery quote");
+    }
+    if (order.deliveryQuoteStatus !== "quoted") {
+      throw new Error("No delivery quote to accept");
+    }
+
+    const now = Date.now();
+
+    // Accept quote. Transition to pending + pending_verification so the
+    // PaymentPendingCard shows the correct "Quote Accepted — Complete Payment"
+    // UI with the payment QR flow.
+    //
+    // Inventory reservation, coupon usage and NEW_ORDER notification are
+    // deliberately deferred to claimPayment — they must only happen once
+    // the customer has actually initiated payment, not merely on acceptance.
+    await ctx.db.patch(order._id, {
+      deliveryQuoteStatus: "accepted",
+      status: "pending",
+      paymentStatus: "pending_verification",
+      updatedAt: now,
+    });
+
+    await logActivity(ctx, {
+      orderId: order._id,
+      businessUnitId: order.businessUnitId,
+      action: "order_accepted",
+      newValue: "pending",
+      actor: "system",
+      visibleToCustomer: true,
+    });
+
+    await logActivity(ctx, {
+      orderId: order._id,
+      businessUnitId: order.businessUnitId,
+      action: "payment_pending",
+      newValue: "pending_verification",
+      actor: "system",
+      visibleToCustomer: true,
+    });
+
+    return { success: true };
+  },
+});
+
+export const rejectDeliveryQuote = mutation({
+  args: {
+    orderId: v.id("orders"),
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.deletedAt) throw new Error("Order not found");
+    if (order.customerPhone !== args.phone) {
+      throw new Error("Order not found for this phone number");
+    }
+    if (!order.deliveryQuoteRequired) {
+      throw new Error("This order does not have a delivery quote");
+    }
+    if (order.deliveryQuoteStatus !== "quoted") {
+      throw new Error("No delivery quote to reject");
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(order._id, {
+      deliveryQuoteStatus: "rejected",
+      status: "cancelled",
+      terminalAt: now,
+      updatedAt: now,
+    });
+
+    await logActivity(ctx, {
+      orderId: order._id,
+      businessUnitId: order.businessUnitId,
+      action: "cancelled",
+      newValue: "delivery_quote_rejected",
+      actor: order.customerName || order.customerPhone,
+      visibleToCustomer: true,
+    });
+
+    return { success: true };
   },
 });
 

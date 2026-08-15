@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -30,13 +30,16 @@ import {
   PartyPacksSection,
 } from "@/components/customer";
 
+// Modal
+import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
+
 // Shared components
 import { CategoryCard } from "@/components/shared/CategoryCard";
 import { getCategoryCatalog, enrichCategory } from "@/data/categories";
 
 import type { EnrichedCategory } from "@/data/categories";
 
-import type { BusinessUnit, Category, Content } from "@/types";
+import type { BusinessUnit, Category, Content, CatalogItem } from "@/types";
 
 // ============================================================================
 // Trust items — compact brand trust band
@@ -170,6 +173,10 @@ export default function HomePage() {
     [businessUnits]
   );
 
+  // --- Selected item state for universal ItemDetailsModal ---
+  const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
+  // -----------------------------------------------------
+
   // Build hero banners dynamically from active hero content (date-valid).
   const heroBanners = useMemo(() => {
     const contentBanners = (heroContent ?? [])
@@ -267,12 +274,12 @@ export default function HomePage() {
       {/* ================================================================ */}
       {/* 2. COMBO OFFERS — Global merchandising section              */}
       {/* ================================================================ */}
-      <ComboOffersSection businessUnits={activeBusinessUnits} />
+      <ComboOffersSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />
 
       {/* ================================================================ */}
       {/* 3. PARTY PACKS — Global merchandising section                */}
       {/* ================================================================ */}
-      <PartyPacksSection businessUnits={activeBusinessUnits} />
+      <PartyPacksSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />
 
       {/* ================================================================ */}
       {/* 3. EXPERIENCE CTA — below the hero for an early conversion       */}
@@ -325,31 +332,31 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 3. INFO STRIP — merged promo / announcement / trust points       */}
+      {/* 4. INFO STRIP — merged promo / announcement / trust points       */}
       {/* ================================================================ */}
 
       {!isLoading && <HomepageInfoStrip />}
 
       {/* ================================================================ */}
-      {/* 4. BROWSE BY CATEGORY — Premium category grid                    */}
+      {/* 5. BROWSE BY CATEGORY — Premium category grid                    */}
       {/* ================================================================ */}
 
       {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
-      {/* 5. TODAY'S SPECIALS — deduped featured products across stores    */}
+      {/* 6. TODAY'S SPECIALS — deduped featured products across stores    */}
       {/* ================================================================ */}
 
-      {!isLoading && <TodaySpecialsSection businessUnits={activeBusinessUnits} />}
+      {!isLoading && <TodaySpecialsSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
 
       {/* ================================================================ */}
-      {/* 6. RECOMMENDED FOR YOU — deterministic personalized picks        */}
+      {/* 7. RECOMMENDED FOR YOU — deterministic personalized picks        */}
       {/* ================================================================ */}
 
-      {!isLoading && <RecommendedForYouSection businessUnits={activeBusinessUnits} />}
+      {!isLoading && <RecommendedForYouSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
 
       {/* ================================================================ */}
-      {/* 7. TRUST BAND — compact brand trust points                       */}
+      {/* 8. TRUST BAND — compact brand trust points                       */}
       {/* ================================================================ */}
 
       <section className="border-t border-border/40 bg-secondary/20 py-10 sm:py-12">
@@ -379,6 +386,12 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ================================================================ */}
+      {/* UNIVERSAL ITEM DETAILS MODAL                                     */}
+      {/* ================================================================ */}
+
+      {selectedItem && <ItemDetailsModal selectedItem={selectedItem} onClose={() => setSelectedItem(null)} />}
     </div>
   );
 }

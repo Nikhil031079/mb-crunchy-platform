@@ -128,6 +128,7 @@ export const cleanupExpiredReservations = internalMutation({
 
       await ctx.db.patch(order._id, {
         status: "cancelled",
+        terminalAt: now,
         updatedAt: now,
       });
 

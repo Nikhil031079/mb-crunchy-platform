@@ -62,9 +62,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product } from "@/types";
+import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product, CatalogItem } from "@/types";
 import type { Id } from "@convex/_generated/dataModel";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
+import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
 
 // ============================================================================
 // Sort Options
@@ -95,6 +96,63 @@ export default function BusinessUnitPage() {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("default");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  // Modal state
+  const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
+  const onCloseModal = () => setSelectedItem(null);
+
+  // Mapping functions for Combo/PartyPack → CatalogItem
+  const mapComboToCatalogItem = useCallback((combo: Combo): CatalogItem => ({
+    _id: combo._id,
+    _creationTime: combo._creationTime,
+    createdAt: combo.createdAt,
+    updatedAt: combo.updatedAt,
+    businessUnitId: combo.businessUnitId,
+    itemType: "combo" as const,
+    sourceId: combo._id,
+    name: combo.name,
+    slug: combo.slug,
+    description: combo.description,
+    price: combo.price,
+    compareAtPrice: combo.compareAtPrice,
+    coverImage: combo.coverImage,
+    thumbnail: combo.thumbnail,
+    tags: [],
+    status: combo.status,
+    featured: combo.featured,
+    displayOrder: combo.displayOrder,
+    metaTitle: combo.metaTitle,
+    metaDescription: combo.metaDescription,
+    metaKeywords: combo.metaKeywords,
+    canonicalUrl: combo.canonicalUrl,
+    deletedAt: combo.deletedAt,
+  }), []);
+
+  const mapPartyPackToCatalogItem = useCallback((pack: PartyPack): CatalogItem => ({
+    _id: pack._id,
+    _creationTime: pack._creationTime,
+    createdAt: pack.createdAt,
+    updatedAt: pack.updatedAt,
+    businessUnitId: pack.businessUnitId,
+    itemType: "partyPack" as const,
+    sourceId: pack._id,
+    name: pack.name,
+    slug: pack.slug,
+    description: pack.description,
+    price: pack.price,
+    compareAtPrice: pack.compareAtPrice,
+    coverImage: pack.coverImage,
+    thumbnail: pack.thumbnail,
+    tags: [],
+    status: pack.status,
+    featured: pack.featured,
+    displayOrder: pack.displayOrder,
+    metaTitle: pack.metaTitle,
+    metaDescription: pack.metaDescription,
+    metaKeywords: pack.metaKeywords,
+    canonicalUrl: pack.canonicalUrl,
+    deletedAt: pack.deletedAt,
+  }), []);
 
   // Cart
   const { addItem } = useCart();
@@ -744,6 +802,7 @@ export default function BusinessUnitPage() {
                     compact
                     onAddToCart={handleAddToCart}
                     stockInfo={getStockInfoForProduct(item)}
+                    onOpenItemDetails={setSelectedItem}
                   />
                 ))}
             </div>
@@ -785,6 +844,7 @@ export default function BusinessUnitPage() {
                   onAddToCart={handleAddToCart}
                   stockInfo={getStockInfoForProduct(item)}
                   rating={ratingsMap?.[item._id]}
+                  onOpenItemDetails={setSelectedItem}
                 />
               ))}
             </div>
@@ -875,6 +935,7 @@ export default function BusinessUnitPage() {
                   combo={combo}
                   index={index}
                   onAddToCart={handleAddCombo}
+                  onOpenItemDetails={() => setSelectedItem(mapComboToCatalogItem(combo))}
                 />
               ))}
             </div>
@@ -910,10 +971,19 @@ export default function BusinessUnitPage() {
                   partyPack={pack}
                   index={index}
                   onAddToCart={handleAddPartyPack}
+                  onOpenItemDetails={() => setSelectedItem(mapPartyPackToCatalogItem(pack))}
                 />
               ))}
             </div>
           </motion.section>
+        )}
+
+        {/* Item Details Modal */}
+        {selectedItem && (
+          <ItemDetailsModal
+            selectedItem={selectedItem}
+            onClose={onCloseModal}
+          />
         )}
       </div>
     </div>

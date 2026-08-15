@@ -17,6 +17,8 @@ interface ComboCardProps {
   onFavorite?: (combo: Combo) => void;
   isFavorited?: boolean;
   className?: string;
+  /** Called when the card body is clicked - opens Item Details Modal */
+  onOpenItemDetails?: (combo: Combo) => void;
 }
 
 export const ComboCard = memo(function ComboCard({
@@ -26,6 +28,7 @@ export const ComboCard = memo(function ComboCard({
   onFavorite,
   isFavorited = false,
   className,
+  onOpenItemDetails,
 }: ComboCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -36,14 +39,22 @@ export const ComboCard = memo(function ComboCard({
   const coverSrc = combo.coverImage || combo.images?.[0];
 
   const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
     e.preventDefault();
     onAddToCart?.(combo);
   };
 
   const handleFavorite = (e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
+    e.preventDefault();
     onFavorite?.(combo);
+  };
+
+  // Card body click — opens modal if onOpenItemDetails is provided
+  const cardOnClick = () => {
+    if (onOpenItemDetails) {
+      onOpenItemDetails(combo);
+    }
   };
 
   return (
@@ -54,9 +65,10 @@ export const ComboCard = memo(function ComboCard({
     >
       <Card
         className={cn(
-          "group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
+          "group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer",
           className
         )}
+        onClick={cardOnClick}
       >
         <div className="flex flex-col sm:flex-row">
           {/* Image Section */}

@@ -41,6 +41,21 @@ export const getActive = query({
   },
 });
 
+export const getDefaultActive = query({
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("deliveryZones")
+      .withIndex("by_is_default", (q) => q.eq("isDefault", true))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================
@@ -55,6 +70,7 @@ export const create = mutation({
     minOrder: v.optional(v.number()),
     freeDeliveryThreshold: v.optional(v.number()),
     estimatedMinutes: v.optional(v.number()),
+    isDefault: v.optional(v.boolean()),
     status: v.union(v.literal("active"), v.literal("inactive")),
   },
   handler: async (ctx, args) => {
@@ -81,6 +97,7 @@ export const update = mutation({
     minOrder: v.optional(v.number()),
     freeDeliveryThreshold: v.optional(v.number()),
     estimatedMinutes: v.optional(v.number()),
+    isDefault: v.optional(v.boolean()),
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
   },
   handler: async (ctx, args) => {

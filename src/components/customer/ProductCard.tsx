@@ -1,5 +1,4 @@
 import { useState, useCallback, memo } from "react";
-import { Link } from "react-router";
 import { motion } from "framer-motion";
 import { Heart, ImageOff, Star, Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -35,6 +34,8 @@ interface ProductCardProps {
   stockInfo?: StockInfo;
   /** Optional rating summary (average + count) */
   rating?: { average: number; count: number };
+  /** Called when the card body is clicked - opens Item Details Modal */
+  onOpenItemDetails?: (item: CatalogItem) => void;
 }
 
 export const ProductCard = memo(function ProductCard({
@@ -50,6 +51,7 @@ export const ProductCard = memo(function ProductCard({
   compact = false,
   stockInfo,
   rating,
+  onOpenItemDetails,
 }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
   const [hoverImageError, setHoverImageError] = useState(false);
@@ -148,11 +150,12 @@ export const ProductCard = memo(function ProductCard({
     });
   }, [onFavorite, product, isAuthenticated]);
 
-  const productUrl = businessUnitSlug
-    ? categorySlug
-      ? `/${businessUnitSlug}/${categorySlug}/${product.slug}`
-      : `/${businessUnitSlug}/${product.slug}`
-    : null;
+  // Card body click — opens modal if onOpenItemDetails is provided
+  const cardOnClick = () => {
+    if (onOpenItemDetails) {
+      onOpenItemDetails(product as CatalogItem);
+    }
+  };
 
   const inner = (
     <Card
@@ -160,9 +163,11 @@ export const ProductCard = memo(function ProductCard({
         "group relative overflow-hidden transition-all duration-300",
         "border border-border/50 hover:border-border",
         "hover:shadow-lg hover:-translate-y-0.5",
+        onOpenItemDetails && "cursor-pointer",
         isOutOfStock && "opacity-70",
         className
       )}
+      onClick={onOpenItemDetails ? cardOnClick : undefined}
     >
           {/* Image Container */}
           <div className="relative aspect-[4/3] overflow-hidden bg-secondary/50">
@@ -405,13 +410,7 @@ export const ProductCard = memo(function ProductCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.03 }}
     >
-      {productUrl ? (
-        <Link to={productUrl} className="group block">
-          {inner}
-        </Link>
-      ) : (
-        <div className="group block">{inner}</div>
-      )}
+      {inner}
     </motion.div>
   );
 });

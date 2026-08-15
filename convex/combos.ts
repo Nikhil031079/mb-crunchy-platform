@@ -229,6 +229,20 @@ export const softDelete = mutation({
   },
 });
 
+export const getByIds = query({
+  args: { ids: v.array(v.id("combos")) },
+  handler: async (ctx, args) => {
+    const results = await Promise.all(
+      args.ids.map(async (id) => {
+        const doc = await ctx.db.get(id);
+        if (!doc || doc.deletedAt) return null;
+        return doc;
+      }),
+    );
+    return results.filter(Boolean);
+  },
+});
+
 export const getAll = query({
   handler: async (ctx) => {
     return await ctx.db

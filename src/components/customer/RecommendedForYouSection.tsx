@@ -24,10 +24,12 @@ import type { CardProduct } from "./ProductCard";
 
 interface RecommendedForYouSectionProps {
   businessUnits: BusinessUnit[];
+  onOpenItemDetails?: (item: CatalogItem) => void;
 }
 
 export function RecommendedForYouSection({
   businessUnits,
+  onOpenItemDetails,
 }: RecommendedForYouSectionProps) {
   const { entries } = useRecentlyViewed();
   const { cart } = useCart();
@@ -132,6 +134,7 @@ export function RecommendedForYouSection({
       items={rankedItems}
       buSlugsById={buSlugsById}
       onAddToCart={handleAdd}
+      onOpenItemDetails={onOpenItemDetails}
       loading={isLoading}
     />
   );

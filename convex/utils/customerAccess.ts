@@ -91,6 +91,12 @@ export function sanitizeOrderForCustomer(
   status: Doc<"orders">["status"];
   paymentStatus: Doc<"orders">["paymentStatus"];
   paymentMethod?: string;
+  deliveryType?: "local" | "outside_area";
+  deliveryQuoteRequired?: boolean;
+  deliveryQuoteStatus?: "pending" | "quoted" | "accepted" | "rejected";
+  deliveryQuoteAmount?: number;
+  deliveryQuoteNotes?: string;
+  deliveryQuoteUpdatedAt?: number;
   createdAt: number;
   updatedAt: number;
 } {
@@ -109,6 +115,12 @@ export function sanitizeOrderForCustomer(
     status: order.status,
     paymentStatus: order.paymentStatus,
     paymentMethod: order.paymentMethod,
+    deliveryType: order.deliveryType,
+    deliveryQuoteRequired: order.deliveryQuoteRequired,
+    deliveryQuoteStatus: order.deliveryQuoteStatus,
+    deliveryQuoteAmount: order.deliveryQuoteAmount,
+    deliveryQuoteNotes: order.deliveryQuoteNotes,
+    deliveryQuoteUpdatedAt: order.deliveryQuoteUpdatedAt,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };

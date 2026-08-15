@@ -19,10 +19,12 @@ import type { CardProduct } from "./ProductCard";
 
 interface TodaySpecialsSectionProps {
   businessUnits: BusinessUnit[];
+  onOpenItemDetails?: (item: CatalogItem) => void;
 }
 
 export function TodaySpecialsSection({
   businessUnits,
+  onOpenItemDetails,
 }: TodaySpecialsSectionProps) {
   const handleAddToCart = useAddToCart();
 
@@ -90,6 +92,7 @@ export function TodaySpecialsSection({
       items={items}
       buSlugsById={buSlugsById}
       onAddToCart={handleAdd}
+      onOpenItemDetails={onOpenItemDetails}
       loading={isLoading}
     />
   );
