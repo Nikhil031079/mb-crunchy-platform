@@ -19,6 +19,8 @@ import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { useNavigate } from "react-router";
 import { ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
+import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
+import { PhoneInput } from "@/components/customer/PhoneInput";
 
 import type { Id } from "@convex/_generated/dataModel";
 
@@ -135,11 +137,11 @@ function GlobalSettingsSection() {
         favicon: globalSettings.favicon ?? "",
         primaryColor: globalSettings.primaryColor ?? "#000000",
         supportEmail: globalSettings.supportEmail ?? "",
-        supportPhone: globalSettings.supportPhone ?? "",
+        supportPhone: extractDigitsForInput(globalSettings.supportPhone ?? ""),
         paymentMode: globalSettings.paymentConfig?.mode ?? "upi_qr",
         upiId: globalSettings.paymentConfig?.upiId ?? "",
         merchantName: globalSettings.paymentConfig?.merchantName ?? "",
-        whatsappNumber: globalSettings.paymentConfig?.whatsappNumber ?? "",
+        whatsappNumber: extractDigitsForInput(globalSettings.paymentConfig?.whatsappNumber ?? ""),
         qrDisplayName: globalSettings.paymentConfig?.qrDisplayName ?? "",
         paymentInstructions: globalSettings.paymentConfig?.paymentInstructions ?? "",
       });
@@ -162,12 +164,12 @@ function GlobalSettingsSection() {
         favicon: form.favicon.trim() || undefined,
         primaryColor: form.primaryColor,
         supportEmail: form.supportEmail.trim() || undefined,
-        supportPhone: form.supportPhone.trim() || undefined,
+        supportPhone: normalizeIndianPhone(form.supportPhone) || undefined,
         paymentConfig: {
           mode: form.paymentMode,
           upiId: form.upiId.trim() || undefined,
           merchantName: form.merchantName.trim() || undefined,
-          whatsappNumber: form.whatsappNumber.trim() || undefined,
+          whatsappNumber: normalizeIndianPhone(form.whatsappNumber) || undefined,
           qrDisplayName: form.qrDisplayName.trim() || undefined,
           paymentInstructions: form.paymentInstructions.trim() || undefined,
         },
@@ -260,7 +262,12 @@ function GlobalSettingsSection() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="supportPhone">Support Phone <span className="font-normal text-muted-foreground">(optional)</span></Label>
-              <Input id="supportPhone" type="tel" value={form.supportPhone} onChange={(e) => setForm((f) => ({ ...f, supportPhone: e.target.value }))} placeholder="+1 (555) 000-0000" />
+              <PhoneInput
+                id="supportPhone"
+                value={form.supportPhone}
+                onChange={(val) => setForm((f) => ({ ...f, supportPhone: val }))}
+                placeholder="8801756151"
+              />
             </div>
           </div>
         </div>
@@ -306,7 +313,11 @@ function GlobalSettingsSection() {
                 </div>
                 <div className="grid gap-2">
                   <Label>WhatsApp Business Number <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                  <Input value={form.whatsappNumber} onChange={(e) => setForm((f) => ({ ...f, whatsappNumber: e.target.value }))} placeholder="+91 98765 43210" />
+                  <PhoneInput
+                    value={form.whatsappNumber}
+                    onChange={(val) => setForm((f) => ({ ...f, whatsappNumber: val }))}
+                    placeholder="8801756151"
+                  />
                 </div>
               </>
             )}
@@ -356,7 +367,7 @@ function BusinessUnitSettingsSection() {
         deliveryFee: buSettings.deliveryFee ?? 0,
         freeDeliveryThreshold: buSettings.freeDeliveryThreshold?.toString() ?? "",
         isOpen: buSettings.isOpen ?? true,
-        phone: buSettings.phone ?? "",
+        phone: extractDigitsForInput(buSettings.phone ?? ""),
         email: buSettings.email ?? "",
         address: buSettings.address ?? "",
         instagram: buSettings.socialLinks?.instagram ?? "",
@@ -384,7 +395,7 @@ function BusinessUnitSettingsSection() {
         freeDeliveryThreshold: form.freeDeliveryThreshold ? Number(form.freeDeliveryThreshold) : undefined,
         isOpen: form.isOpen,
         openingHours: form.openingHours,
-        phone: form.phone.trim() || undefined,
+        phone: normalizeIndianPhone(form.phone) || undefined,
         email: form.email.trim() || undefined,
         address: form.address.trim() || undefined,
         socialLinks: {
@@ -546,7 +557,11 @@ function BusinessUnitSettingsSection() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Phone <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                <Input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+1 (555) 000-0000" />
+                <PhoneInput
+                  value={form.phone}
+                  onChange={(val) => setForm((f) => ({ ...f, phone: val }))}
+                  placeholder="8801756151"
+                />
               </div>
               <div className="grid gap-2">
                 <Label>Email <span className="font-normal text-muted-foreground">(optional)</span></Label>

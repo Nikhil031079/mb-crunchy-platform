@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAdminSession } from "./utils/adminAuth";
+import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 
 // ============================================================================
 // Queries
@@ -62,6 +63,11 @@ export const upsertBusinessUnitSettings = mutation({
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
+    // Normalize and validate phone field
+    if (insertArgs.phone) {
+      insertArgs.phone = requireIndianPhone(insertArgs.phone);
+    }
+
     const existing = await ctx.db
       .query("settings")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -106,6 +112,18 @@ export const upsertGlobalSettings = mutation({
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
+
+    // Normalize and validate phone fields
+    if (insertArgs.supportPhone) {
+      insertArgs.supportPhone = requireIndianPhone(insertArgs.supportPhone);
+    }
+    if (insertArgs.paymentConfig?.whatsappNumber) {
+      insertArgs.paymentConfig = {
+        ...insertArgs.paymentConfig,
+        whatsappNumber: requireIndianPhone(insertArgs.paymentConfig.whatsappNumber),
+      };
+    }
+
     const existing = await ctx.db.query("globalSettings").first();
 
     if (existing) {

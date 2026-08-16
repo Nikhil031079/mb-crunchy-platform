@@ -7,6 +7,7 @@ import { query, mutation, internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
 import { requireAdminSession } from "./utils/adminAuth";
+import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 
 // ============================================================================
 // Helpers (reusable across Convex mutations)
@@ -17,7 +18,7 @@ export async function ensureCustomerByPhone(
   args: { name: string; phone: string; email?: string }
 ): Promise<Id<"customers">> {
   const now = Date.now();
-  const phone = args.phone.trim();
+  const phone = requireIndianPhone(args.phone);
 
   const existing = await ctx.db
     .query("customers")
@@ -99,9 +100,10 @@ export const getByPhone = query({
   args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+    const phone = normalizeIndianPhone(args.phone); // returns null on invalid → graceful empty result
     return await ctx.db
       .query("customers")
-      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .withIndex("by_phone", (q) => q.eq("phone", phone ?? ""))
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .first();
   },
@@ -609,9 +611,11 @@ export const create = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const phone = args.phone ? requireIndianPhone(args.phone) : undefined;
 
     return await ctx.db.insert("customers", {
       ...args,
+      phone,
       totalOrders: 0,
       totalSpent: 0,
       createdAt: now,
@@ -646,7 +650,12 @@ export const update = mutation({
       if (customer.authUserId !== identity.subject) throw new Error("Unauthorized");
     }
 
-    await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
+    const patch: Record<string, unknown> = { ...fields, updatedAt: Date.now() };
+    if (args.phone !== undefined) {
+      patch.phone = requireIndianPhone(args.phone);
+    }
+
+    await ctx.db.patch(id, patch);
   },
 });
 
@@ -685,7 +694,9 @@ export const updateProfile = mutation({
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (name !== undefined) patch.name = name;
     if (email !== undefined) patch.email = email;
-    if (phone !== undefined) patch.phone = phone;
+    if (phone !== undefined) {
+      patch.phone = requireIndianPhone(phone);
+    }
 
     await ctx.db.patch(customer._id, patch);
     return customer._id;

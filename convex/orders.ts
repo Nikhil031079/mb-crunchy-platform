@@ -18,6 +18,7 @@ import { getMaxRedeemableInternal } from "./loyalty";
 import { notify } from "./notificationService";
 import { getAllowedTransitions } from "./orderWorkflow";
 import { isStoreCurrentlyOpen } from "./utils/storeHours";
+import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 
 // ============================================================================
 // Constants
@@ -78,9 +79,10 @@ export const getByPhone = query({
   args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+    const phone = normalizeIndianPhone(args.phone); // returns null on invalid → graceful empty result
     return await ctx.db
       .query("orders")
-      .withIndex("by_phone", (q) => q.eq("customerPhone", args.phone))
+      .withIndex("by_phone", (q) => q.eq("customerPhone", phone ?? ""))
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("desc")
       .collect();
@@ -156,7 +158,7 @@ export const getById = query({
 export const getByPhoneAndOrderNumber = query({
   args: { phone: v.string(), orderNumber: v.string() },
   handler: async (ctx, args) => {
-    const phone = args.phone.trim();
+    const phone = normalizeIndianPhone(args.phone); // returns null on invalid
     const orderNumber = args.orderNumber.trim().toUpperCase();
     if (!phone || !orderNumber) return null;
 
@@ -469,6 +471,9 @@ export const create = mutation({
     // Allow guest checkout - authentication is optional for order creation
     // Customer is identified by phone/email via ensureCustomerByPhone
 
+    // Normalize phone to canonical +91XXXXXXXXXX format — reject invalid
+    const customerPhone = requireIndianPhone(args.customerPhone);
+
     // ----------------------------------------------------------------------
     // 0. Idempotency — reject duplicate submissions (network retry, browser
     //    refresh, double-click, repeated submit). If an order already exists
@@ -486,7 +491,7 @@ export const create = mutation({
 
       if (existingOrder) {
         if (
-          existingOrder.customerPhone !== args.customerPhone ||
+          existingOrder.customerPhone !== customerPhone ||
           Math.abs(existingOrder.total - args.total) > PRICE_TOLERANCE
         ) {
           throw new Error("This request key has already been used for a different order");
@@ -546,7 +551,7 @@ export const create = mutation({
     // ----------------------------------------------------------------------
     const customerId = await ensureCustomerByPhone(ctx, {
       name: args.customerName,
-      phone: args.customerPhone,
+      phone: customerPhone,
       email: args.customerEmail,
     });
 
@@ -651,7 +656,7 @@ export const create = mutation({
       orderNumber,
       customerId,
       customerName: args.customerName,
-      customerPhone: args.customerPhone,
+      customerPhone: customerPhone,
       customerEmail: args.customerEmail,
       items,
       subtotal,
@@ -1067,9 +1072,11 @@ export const claimPayment = mutation({
     const identity = await ctx.auth.getUserIdentity();
     // Allow guest payment claim - verified by phone number
 
+    const phone = requireIndianPhone(args.phone);
+
     const order = await ctx.db.get(args.orderId);
     if (!order || order.deletedAt) throw new Error("Order not found");
-    if (order.customerPhone !== args.phone) {
+    if (order.customerPhone !== phone) {
       throw new Error("Order not found for this phone number");
     }
 
@@ -1386,10 +1393,12 @@ export const acceptDeliveryQuote = mutation({
     phone: v.string(),
   },
   handler: async (ctx, args) => {
+    const phone = requireIndianPhone(args.phone);
+
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new Error("Order not found");
     if (order.deletedAt) throw new Error("Order not found");
-    if (order.customerPhone !== args.phone) {
+    if (order.customerPhone !== phone) {
       throw new Error("Order not found for this phone number");
     }
     if (!order.deliveryQuoteRequired) {
@@ -1443,10 +1452,12 @@ export const rejectDeliveryQuote = mutation({
     phone: v.string(),
   },
   handler: async (ctx, args) => {
+    const phone = requireIndianPhone(args.phone);
+
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new Error("Order not found");
     if (order.deletedAt) throw new Error("Order not found");
-    if (order.customerPhone !== args.phone) {
+    if (order.customerPhone !== phone) {
       throw new Error("Order not found for this phone number");
     }
     if (!order.deliveryQuoteRequired) {

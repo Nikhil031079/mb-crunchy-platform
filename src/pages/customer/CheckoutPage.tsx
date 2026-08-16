@@ -29,6 +29,7 @@ import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/utils";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
+import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 
 // Hooks
 import { useCart } from "@/stores/cart";
@@ -38,6 +39,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
 import { PaymentQR } from "@/components/customer/PaymentQR";
 import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
+import { PhoneInput } from "@/components/customer/PhoneInput";
 
 // Shared components
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -547,7 +549,7 @@ export default function CheckoutPage() {
     setForm((prev) => ({
       ...prev,
       customerName: prev.customerName || customer.name || "",
-      customerPhone: prev.customerPhone || customer.phone || "",
+      customerPhone: prev.customerPhone || extractDigitsForInput(customer.phone || ""),
       customerEmail: prev.customerEmail || customer.email || "",
     }));
     // Auto-select default address
@@ -727,8 +729,8 @@ export default function CheckoutPage() {
     }
     if (!form.customerPhone.trim()) {
       newErrors.customerPhone = "Phone number is required";
-    } else if (form.customerPhone.trim().length < 7) {
-      newErrors.customerPhone = "Please enter a valid phone number";
+    } else if (!validateIndianPhone(form.customerPhone)) {
+      newErrors.customerPhone = "Enter a valid 10-digit Indian mobile number";
     }
     if (form.orderType === "delivery" && !form.deliveryAddress.trim()) {
       newErrors.deliveryAddress = "Delivery address is required";
@@ -772,7 +774,7 @@ export default function CheckoutPage() {
         const orderResult = await createOrder({
           businessUnitId: primaryBusinessUnitId! as any,
           customerName: form.customerName.trim(),
-          customerPhone: form.customerPhone.trim(),
+          customerPhone: normalizeIndianPhone(form.customerPhone) ?? form.customerPhone.trim(),
           customerEmail: form.customerEmail.trim() || undefined,
           items: cart.items.map((item) => ({
             catalogItemId: item.catalogItemId as any,
@@ -1191,13 +1193,11 @@ export default function CheckoutPage() {
                       <Label htmlFor="customerPhone">
                         Phone Number <span className="text-destructive">*</span>
                       </Label>
-                      <Input
+                      <PhoneInput
                         id="customerPhone"
-                        type="tel"
-                        placeholder="+1 (555) 000-0000"
                         value={form.customerPhone}
-                        onChange={(e) => updateField("customerPhone", e.target.value)}
-                        className={cn(errors.customerPhone && "border-destructive")}
+                        onChange={(val) => updateField("customerPhone", val)}
+                        error={!!errors.customerPhone}
                       />
                       {errors.customerPhone && (
                         <p className="text-xs text-destructive">{errors.customerPhone}</p>

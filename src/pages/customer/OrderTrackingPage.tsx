@@ -10,7 +10,6 @@ import {
   Truck,
   XCircle,
   ArrowLeft,
-  Phone,
   CalendarClock,
   Store,
   Tag,
@@ -22,10 +21,12 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 
 import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
+import { PhoneInput } from "@/components/customer/PhoneInput";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate, formatDateTime } from "@/utils";
 import { useCart } from "@/stores/cart";
+import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 
 // UI components
 import { Button } from "@/components/ui/button";
@@ -335,17 +336,21 @@ export default function OrderTrackingPage() {
   const handleSearch = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      const cleanedPhone = phone.trim().replace(/[\s\-()]/g, "");
       const cleanedOrderNumber = orderNumber.trim().toUpperCase();
-      if (!cleanedPhone || cleanedPhone.length < 7) {
-        toast.error("Please enter a valid phone number");
+      if (!phone || !validateIndianPhone(phone)) {
+        toast.error("Please enter a valid 10-digit Indian mobile number");
         return;
       }
       if (!cleanedOrderNumber) {
         toast.error("Please enter your order number");
         return;
       }
-      setSearchedKey({ phone: cleanedPhone, orderNumber: cleanedOrderNumber });
+      const normalizedPhone = normalizeIndianPhone(phone);
+      if (!normalizedPhone) {
+        toast.error("Please enter a valid 10-digit Indian mobile number");
+        return;
+      }
+      setSearchedKey({ phone: normalizedPhone, orderNumber: cleanedOrderNumber });
     },
     [phone, orderNumber]
   );
@@ -417,17 +422,14 @@ export default function OrderTrackingPage() {
           <form onSubmit={handleSearch} className="space-y-4">
             <div>
               <Label htmlFor="track-phone" className="text-xs font-medium text-muted-foreground">
-                Phone Number
+                Mobile Number
               </Label>
-              <div className="relative mt-1.5">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
+              <div className="mt-1.5">
+                <PhoneInput
                   id="track-phone"
-                  type="tel"
-                  placeholder="Enter your phone number"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="pl-10"
+                  onChange={setPhone}
+                  placeholder="8801756151"
                 />
               </div>
             </div>

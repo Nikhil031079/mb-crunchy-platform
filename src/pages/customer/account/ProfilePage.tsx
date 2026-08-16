@@ -6,6 +6,7 @@ import { Loader2, Save } from "lucide-react";
 import { api } from "@convex/_generated/api";
 
 import { useAuth } from "@/hooks/use-auth";
+import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,8 @@ import { Separator } from "@/components/ui/separator";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/utils";
+
+import { PhoneInput } from "@/components/customer/PhoneInput";
 
 import type { Order } from "@/types";
 
@@ -42,7 +45,7 @@ export default function ProfilePage() {
 
   const [name, setName] = useState(customer?.name ?? "");
   const [email, setEmail] = useState(customer?.email ?? "");
-  const [phone, setPhone] = useState(customer?.phone ?? "");
+  const [phone, setPhone] = useState(extractDigitsForInput(customer?.phone ?? ""));
   const [errors, setErrors] = useState<{ name?: string; phone?: string; email?: string }>({});
   const [isSaving, setIsSaving] = useState(false);
 
@@ -51,7 +54,7 @@ export default function ProfilePage() {
     if (customer) {
       setName(customer.name ?? "");
       setEmail(customer.email ?? "");
-      setPhone(customer.phone ?? "");
+      setPhone(extractDigitsForInput(customer.phone ?? ""));
     }
   }, [customer]);
 
@@ -60,8 +63,8 @@ export default function ProfilePage() {
     if (!name.trim() || name.trim().length < 2) {
       newErrors.name = "Name must be at least 2 characters";
     }
-    if (!phone.trim() || phone.trim().length < 7) {
-      newErrors.phone = "Phone must be at least 7 characters";
+    if (!phone.trim() || !validateIndianPhone(phone)) {
+      newErrors.phone = "Enter a valid 10-digit Indian mobile number";
     }
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       newErrors.email = "Please enter a valid email";
@@ -77,7 +80,7 @@ export default function ProfilePage() {
       await updateProfile({
         name: name.trim(),
         email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
+        phone: normalizeIndianPhone(phone) || undefined,
       });
       toast.success("Profile updated successfully");
     } catch {
@@ -110,13 +113,11 @@ export default function ProfilePage() {
             <Label htmlFor="profile-phone">
               Phone Number <span className="text-destructive">*</span>
             </Label>
-            <Input
+            <PhoneInput
               id="profile-phone"
-              type="tel"
-              placeholder="+1 (555) 000-0000"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className={cn(errors.phone && "border-destructive")}
+              onChange={setPhone}
+              error={!!errors.phone}
             />
             {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
           </div>
