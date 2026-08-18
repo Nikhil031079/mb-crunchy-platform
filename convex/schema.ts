@@ -406,6 +406,7 @@ const orders = defineTable({
   paymentReference: v.optional(v.string()),
   offerId: v.optional(v.id("offers")),
   offerCode: v.optional(v.string()),
+  loyaltyPointsToRedeem: v.optional(v.number()),
   idempotencyKey: v.optional(v.string()),
   terminalAt: v.optional(v.number()),
   createdAt: v.number(),

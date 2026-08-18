@@ -5,7 +5,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { canReadCustomerData } from "./utils/customerAccess";
 
@@ -143,6 +143,82 @@ export async function getMaxRedeemableInternal(
     maxPoints: effectiveMax,
     maxValue: effectiveMax * settings.rupeesPerPointRedemption,
     reason: null,
+  };
+}
+
+/**
+ * Server-authoritative loyalty redemption. Called atomically during order
+ * creation (local/pickup) or at claimPayment (outside-area after quote
+ * acceptance). Validates the customer's available points, clamps the request
+ * to the maximum redeemable, deducts points, and creates a ledger entry.
+ *
+ * Returns the actual points redeemed and value applied. If the customer has
+ * insufficient points or the request is below the minimum, returns zeros
+ * without mutating anything.
+ */
+export async function redeemLoyaltyInternal(
+  ctx: { db: MutationCtx["db"] },
+  args: {
+    customerId: Id<"customers">;
+    orderId: Id<"orders">;
+    orderNumber: string;
+    points: number;
+    orderTotal: number;
+  },
+): Promise<{ pointsRedeemed: number; valueApplied: number }> {
+  if (args.points <= 0) {
+    return { pointsRedeemed: 0, valueApplied: 0 };
+  }
+
+  const settings = await ctx.db.query("loyaltySettings").first();
+  if (!settings) {
+    return { pointsRedeemed: 0, valueApplied: 0 };
+  }
+
+  const account = await ctx.db
+    .query("loyaltyAccounts")
+    .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .first();
+
+  if (!account || account.pointsBalance <= 0) {
+    return { pointsRedeemed: 0, valueApplied: 0 };
+  }
+
+  // Clamp to maximum redeemable
+  const maxRedeemable = await getMaxRedeemableInternal(ctx, {
+    customerId: args.customerId,
+    orderTotal: args.orderTotal,
+  });
+
+  const effectivePoints = Math.min(args.points, maxRedeemable.maxPoints);
+
+  if (effectivePoints < settings.minRedeemPoints) {
+    return { pointsRedeemed: 0, valueApplied: 0 };
+  }
+
+  const now = Date.now();
+  const newBalance = account.pointsBalance - effectivePoints;
+
+  await ctx.db.patch(account._id, {
+    pointsBalance: newBalance,
+    totalRedeemed: account.totalRedeemed + effectivePoints,
+    updatedAt: now,
+  });
+
+  await ctx.db.insert("loyaltyTransactions", {
+    customerId: args.customerId,
+    orderId: args.orderId,
+    type: "redeemed",
+    points: -effectivePoints,
+    description: `Redeemed for order #${args.orderNumber}`,
+    balanceAfter: newBalance,
+    createdAt: now,
+  });
+
+  return {
+    pointsRedeemed: effectivePoints,
+    valueApplied: effectivePoints * settings.rupeesPerPointRedemption,
   };
 }
 

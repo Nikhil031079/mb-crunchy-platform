@@ -140,33 +140,55 @@ function PartyPackForm({
     value: PartyPackFormValues[K]
   ) => setValues((current) => ({ ...current, [key]: value }));
 
+  // Only show products from the selected business unit
+  const eligibleItems = useMemo(
+    () =>
+      catalogItems.filter(
+        (ci) =>
+          ci.itemType === "product" &&
+          (!values.businessUnitId || ci.businessUnitId === values.businessUnitId)
+      ),
+    [catalogItems, values.businessUnitId]
+  );
+
   const calculatePricing = useMemo(() => {
-    // Calculate compareAtPrice from party pack items
+    // Calculate compareAtPrice from party pack items — only products WITH compareAtPrice contribute
     let totalCompareAtPrice = 0;
     for (const item of values.items) {
       if (!item.catalogItemId) continue;
-      const catalogItem = catalogItems.find(
+      const catalogItem = eligibleItems.find(
         (ci) => ci.id === item.catalogItemId
       );
       if (!catalogItem) continue;
-      // Use compareAtPrice ?? price for the component.
-      // If compareAtPrice is 0 (not meaningfully set), fall back to price.
-      const componentCompareAtPrice =
-        catalogItem.compareAtPrice !== 0 && catalogItem.compareAtPrice !== undefined
-          ? catalogItem.compareAtPrice
-          : catalogItem.price;
-      totalCompareAtPrice += componentCompareAtPrice * item.quantity;
+      // Only use the product's actual compareAtPrice — never fall back to price
+      if (catalogItem.compareAtPrice !== undefined && catalogItem.compareAtPrice > 0) {
+        totalCompareAtPrice += catalogItem.compareAtPrice * item.quantity;
+      }
     }
 
+    // Only show compare-at total if at least one component contributed
+    const finalCompareAtPrice = totalCompareAtPrice > 0 ? totalCompareAtPrice : undefined;
+
     // Calculate savings (compareAtPrice - price), prevent negative
-    const savings = Math.max(0, totalCompareAtPrice - values.price);
+    const savings = finalCompareAtPrice !== undefined ? Math.max(0, finalCompareAtPrice - values.price) : 0;
 
     // Note: savingsPercentage is NOT stored in Party Pack schema.
     // It is derived at display time from compareAtPrice and price.
-    // savingsPercentage = totalCompareAtPrice > 0 ? (savings / totalCompareAtPrice) * 100 : 0
 
-    return { totalCompareAtPrice, savings };
-  }, [values.items, values.price, catalogItems]);
+    return { totalCompareAtPrice: finalCompareAtPrice, savings };
+  }, [values.items, values.price, eligibleItems]);
+
+  // Sync server-authoritative compareAtPrice into the disabled form field
+  // so the admin sees live updates when items/quantities/price change.
+  useEffect(() => {
+    const nextCompareAt = calculatePricing.totalCompareAtPrice ?? 0;
+    if (values.compareAtPrice !== nextCompareAt) {
+      setValues((current) => ({
+        ...current,
+        compareAtPrice: nextCompareAt,
+      }));
+    }
+  }, [calculatePricing, values.compareAtPrice]);
 
   const handleNameChange = (name: string) => {
     update("name", name);
@@ -354,7 +376,7 @@ function PartyPackForm({
                     <SelectValue placeholder="Select an item" />
                   </SelectTrigger>
                   <SelectContent>
-                    {catalogItems
+                    {eligibleItems
                       .filter(
                         (ci) =>
                           !usedItemIds.has(ci.id) ||

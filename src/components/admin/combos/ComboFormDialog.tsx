@@ -140,31 +140,58 @@ function ComboForm({
     value: ComboFormValues[K]
   ) => setValues((current) => ({ ...current, [key]: value }));
 
+  // Only show products from the selected business unit
+  const eligibleItems = useMemo(
+    () =>
+      catalogItems.filter(
+        (ci) =>
+          ci.itemType === "product" &&
+          (!values.businessUnitId || ci.businessUnitId === values.businessUnitId)
+      ),
+    [catalogItems, values.businessUnitId]
+  );
+
   const calculatePricing = useMemo(() => {
-    // Calculate compareAtPrice from combo items
+    // Calculate compareAtPrice from combo items — only products WITH compareAtPrice contribute
     let totalCompareAtPrice = 0;
     for (const item of values.items) {
       if (!item.catalogItemId) continue;
-      const catalogItem = catalogItems.find(
+      const catalogItem = eligibleItems.find(
         (ci) => ci.id === item.catalogItemId
       );
       if (!catalogItem) continue;
-      // Use compareAtPrice ?? price for the component.
-      // If compareAtPrice is 0 (not meaningfully set), fall back to price.
-      const componentCompareAtPrice =
-        catalogItem.compareAtPrice !== 0 && catalogItem.compareAtPrice !== undefined
-          ? catalogItem.compareAtPrice
-          : catalogItem.price;
-      totalCompareAtPrice += componentCompareAtPrice * item.quantity;
+      // Only use the product's actual compareAtPrice — never fall back to price
+      if (catalogItem.compareAtPrice !== undefined && catalogItem.compareAtPrice > 0) {
+        totalCompareAtPrice += catalogItem.compareAtPrice * item.quantity;
+      }
     }
 
-    // Calculate savings and savingsPercentage
-    const savings = Math.max(0, totalCompareAtPrice - values.price);
-    const savingsPercentage =
-      totalCompareAtPrice > 0 ? (savings / totalCompareAtPrice) * 100 : 0;
+    // Only show compare-at total if at least one component contributed
+    const finalCompareAtPrice = totalCompareAtPrice > 0 ? totalCompareAtPrice : undefined;
 
-    return { totalCompareAtPrice, savings, savingsPercentage };
-  }, [values.items, values.price, catalogItems]);
+    // Calculate savings and savingsPercentage
+    const savings = finalCompareAtPrice !== undefined ? Math.max(0, finalCompareAtPrice - values.price) : 0;
+    const savingsPercentage =
+      finalCompareAtPrice !== undefined && finalCompareAtPrice > values.price
+        ? (savings / finalCompareAtPrice) * 100
+        : 0;
+
+    return { totalCompareAtPrice: finalCompareAtPrice, savings, savingsPercentage };
+  }, [values.items, values.price, eligibleItems]);
+
+  // Sync server-authoritative pricing values into the disabled form fields
+  // so the admin sees live updates when items/quantities/price change.
+  useEffect(() => {
+    const nextCompareAt = calculatePricing.totalCompareAtPrice ?? 0;
+    const nextSavings = calculatePricing.savingsPercentage;
+    if (values.compareAtPrice !== nextCompareAt || values.savingsPercentage !== nextSavings) {
+      setValues((current) => ({
+        ...current,
+        compareAtPrice: nextCompareAt,
+        savingsPercentage: nextSavings,
+      }));
+    }
+  }, [calculatePricing, values.compareAtPrice, values.savingsPercentage]);
 
   const handleNameChange = (name: string) => {
     update("name", name);
@@ -353,7 +380,7 @@ const removeItem = (index: number) => {
                     <SelectValue placeholder="Select an item" />
                   </SelectTrigger>
                   <SelectContent>
-                    {catalogItems
+                    {eligibleItems
                       .filter(
                         (ci) =>
                           !usedItemIds.has(ci.id) ||

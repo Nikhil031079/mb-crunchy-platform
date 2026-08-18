@@ -14,7 +14,7 @@ import type { ActivityAction } from "./orderActivities";
 import { logMovement } from "./inventory";
 import { ensureCustomerByPhone } from "./customers";
 import { validateCouponInternal } from "./offers";
-import { getMaxRedeemableInternal } from "./loyalty";
+import { getMaxRedeemableInternal, redeemLoyaltyInternal } from "./loyalty";
 import { notify } from "./notificationService";
 import { getAllowedTransitions } from "./orderWorkflow";
 import { isStoreCurrentlyOpen } from "./utils/storeHours";
@@ -465,6 +465,7 @@ export const create = mutation({
     offerCode: v.optional(v.string()),
     paymentMethod: v.optional(v.string()),
     idempotencyKey: v.optional(v.string()),
+    loyaltyPointsToRedeem: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -676,6 +677,7 @@ export const create = mutation({
       paymentMethod: args.paymentMethod,
       offerId,
       offerCode: args.offerCode,
+      loyaltyPointsToRedeem: args.loyaltyPointsToRedeem,
       idempotencyKey: args.idempotencyKey,
       createdAt: now,
       updatedAt: now,
@@ -765,6 +767,19 @@ export const create = mutation({
         itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
         customerName: args.customerName,
       });
+
+      // Atomic loyalty redemption — server-authoritative. Deducted within the
+      // same transaction as order creation so a failure rolls back the order.
+      const loyaltyPoints = args.loyaltyPointsToRedeem ?? 0;
+      if (loyaltyPoints > 0 && customerId) {
+        await redeemLoyaltyInternal(ctx, {
+          customerId,
+          orderId,
+          orderNumber,
+          points: loyaltyPoints,
+          orderTotal: subtotal,
+        });
+      }
     } else {
       // Outside-area: log that quote is pending, skip coupon/inventory for now.
       await logActivity(ctx, {
@@ -888,12 +903,13 @@ export const updateStatus = mutation({
     // On cancel/refund: release reserved stock. If the order had already been
     // confirmed, its stock was deducted from on-hand inventory and must be
     // added back; otherwise only the reservation needs to be released.
+    // awaiting_payment orders have reserved stock but NOT deducted on-hand.
     if (
       (args.status === "cancelled" || args.status === "refunded") &&
       order.status !== "cancelled" &&
       order.status !== "refunded"
     ) {
-      const deducted = order.status !== "pending";
+      const deducted = order.status === "confirmed";
       for (const item of order.items) {
         const inventory = await findInventoryForOrderItem(
           ctx,
@@ -907,6 +923,61 @@ export const updateStatus = mutation({
             orderId: args.id,
             deducted,
           });
+        }
+      }
+
+      // Reverse coupon usage if the order had a consumed coupon.
+      // The coupon is consumed exactly when inventory is reserved (logged as
+      // an "inventory_reserved" activity). For local orders this happens at
+      // orders.create; for outside-area orders at claimPayment. Checking for
+      // this activity is the authoritative signal that usage was incremented.
+      if (order.offerId) {
+        const reservedActivity = await ctx.db
+          .query("orderActivities")
+          .withIndex("by_order", (q) => q.eq("orderId", args.id))
+          .filter((q) => q.eq(q.field("action"), "inventory_reserved"))
+          .first();
+
+        if (reservedActivity) {
+          await ctx.runMutation(internal.offers.decrementUsage, { id: order.offerId });
+        }
+      }
+
+      // Reverse loyalty points if they were redeemed during order creation.
+      if (order.customerId) {
+        const loyaltyTxn = await ctx.db
+          .query("loyaltyTransactions")
+          .withIndex("by_order", (q) => q.eq("orderId", args.id))
+          .filter((q) => q.eq(q.field("type"), "redeemed"))
+          .first();
+
+        if (loyaltyTxn) {
+          const account = await ctx.db
+            .query("loyaltyAccounts")
+            .withIndex("by_customer", (q) => q.eq("customerId", order.customerId!))
+            .filter((q) => q.eq(q.field("deletedAt"), undefined))
+            .first();
+
+          if (account) {
+            const pointsToRestore = Math.abs(loyaltyTxn.points);
+            const settings = await ctx.db.query("loyaltySettings").first();
+
+            await ctx.db.patch(account._id, {
+              pointsBalance: account.pointsBalance + pointsToRestore,
+              totalRedeemed: Math.max(0, account.totalRedeemed - pointsToRestore),
+              updatedAt: now,
+            });
+
+            await ctx.db.insert("loyaltyTransactions", {
+              customerId: order.customerId,
+              orderId: args.id,
+              type: "adjusted",
+              points: pointsToRestore,
+              description: `Restored from cancelled order #${order.orderNumber}`,
+              balanceAfter: account.pointsBalance + pointsToRestore,
+              createdAt: now,
+            });
+          }
         }
       }
     }
@@ -1279,6 +1350,20 @@ export const claimPayment = mutation({
         if (order.offerId) {
           await ctx.runMutation(internal.offers.incrementUsage, { id: order.offerId });
         }
+
+        // Atomic loyalty redemption for outside-area orders — deferred from
+        // creation to payment claim because the final total (with delivery
+        // quote) was not known at creation time.
+        const loyaltyPoints = order.loyaltyPointsToRedeem ?? 0;
+        if (loyaltyPoints > 0 && order.customerId) {
+          await redeemLoyaltyInternal(ctx, {
+            customerId: order.customerId,
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            points: loyaltyPoints,
+            orderTotal: order.subtotal,
+          });
+        }
       }
     }
 
@@ -1501,8 +1586,9 @@ export const softDelete = mutation({
 
     // Release reserved stock if order hasn't been confirmed yet; if it had
     // been confirmed, restore the deducted stock to on-hand inventory.
+    // awaiting_payment orders have reserved stock but NOT deducted on-hand.
     if (order.status !== "cancelled" && order.status !== "refunded") {
-      const deducted = order.status !== "pending";
+      const deducted = order.status === "confirmed";
       for (const item of order.items) {
         const inventory = await findInventoryForOrderItem(
           ctx,
@@ -1516,6 +1602,60 @@ export const softDelete = mutation({
             orderId: args.id,
             deducted,
           });
+        }
+      }
+
+      // Reverse coupon usage if the order had a consumed coupon.
+      // The coupon is consumed exactly when inventory is reserved (logged as
+      // an "inventory_reserved" activity). For local orders this happens at
+      // orders.create; for outside-area orders at claimPayment. Checking for
+      // this activity is the authoritative signal that usage was incremented.
+      if (order.offerId) {
+        const reservedActivity = await ctx.db
+          .query("orderActivities")
+          .withIndex("by_order", (q) => q.eq("orderId", args.id))
+          .filter((q) => q.eq(q.field("action"), "inventory_reserved"))
+          .first();
+
+        if (reservedActivity) {
+          await ctx.runMutation(internal.offers.decrementUsage, { id: order.offerId });
+        }
+      }
+
+      // Reverse loyalty points if they were redeemed during order creation.
+      if (order.customerId) {
+        const loyaltyTxn = await ctx.db
+          .query("loyaltyTransactions")
+          .withIndex("by_order", (q) => q.eq("orderId", args.id))
+          .filter((q) => q.eq(q.field("type"), "redeemed"))
+          .first();
+
+        if (loyaltyTxn) {
+          const account = await ctx.db
+            .query("loyaltyAccounts")
+            .withIndex("by_customer", (q) => q.eq("customerId", order.customerId!))
+            .filter((q) => q.eq(q.field("deletedAt"), undefined))
+            .first();
+
+          if (account) {
+            const pointsToRestore = Math.abs(loyaltyTxn.points);
+
+            await ctx.db.patch(account._id, {
+              pointsBalance: account.pointsBalance + pointsToRestore,
+              totalRedeemed: Math.max(0, account.totalRedeemed - pointsToRestore),
+              updatedAt: now,
+            });
+
+            await ctx.db.insert("loyaltyTransactions", {
+              customerId: order.customerId,
+              orderId: args.id,
+              type: "adjusted",
+              points: pointsToRestore,
+              description: `Restored from cancelled order #${order.orderNumber}`,
+              balanceAfter: account.pointsBalance + pointsToRestore,
+              createdAt: now,
+            });
+          }
         }
       }
     }

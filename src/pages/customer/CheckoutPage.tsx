@@ -448,7 +448,6 @@ export default function CheckoutPage() {
   const { cart, clearCart, itemCount, dismissNotice } = useCart();
   const createOrder = useMutation(api.orders.create);
   const claimPayment = useMutation(api.orders.claimPayment);
-  const redeemPointsMutation = useMutation(api.loyalty.redeemPoints);
 
   // ==========================================================================
   // State
@@ -802,21 +801,12 @@ export default function CheckoutPage() {
           offerCode: couponApplied?.valid ? form.couponCode.trim() : undefined,
           paymentMethod: "upi_qr",
           idempotencyKey: getOrCreateIdempotencyKey(),
+          loyaltyPointsToRedeem: redeemPoints > 0 ? redeemPoints : undefined,
         });
 
         const { orderId: newOrderId, orderNumber: newOrderNumber } = orderResult as { orderId: string; orderNumber: string };
 
         clearIdempotencyKey();
-
-        if (redeemPoints > 0 && customer?._id && effectiveDeliveryType !== "outside_area") {
-          redeemPointsMutation({
-            customerId: customer._id as Id<"customers">,
-            orderId: newOrderId as unknown as Id<"orders">,
-            points: redeemPoints,
-          }).catch((err) => {
-            console.error("Loyalty redemption failed:", err);
-          });
-        }
 
         setPendingOrder({
           orderId: newOrderId,
@@ -858,7 +848,7 @@ export default function CheckoutPage() {
         setPaymentStatus("idle");
       }
     },
-    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, customer, redeemPointsMutation]
+    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, customer]
   );
 
   // ==========================================================================

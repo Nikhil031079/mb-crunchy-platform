@@ -105,11 +105,43 @@ export const create = mutation({
       throw new Error(`Slug "${args.slug}" is already in use`);
     }
 
+    // Validate each component item is a product in the same business unit
+    let serverCompareAtPrice = 0;
+    for (const item of args.items) {
+      const catalogItem = await ctx.db.get(item.catalogItemId);
+      if (!catalogItem) {
+        throw new Error(`Catalog item ${item.catalogItemId} not found`);
+      }
+      if (catalogItem.itemType !== "product") {
+        throw new Error(`Combo components must be products, got "${catalogItem.itemType}"`);
+      }
+      if (catalogItem.businessUnitId !== args.businessUnitId) {
+        throw new Error(
+          `Catalog item "${catalogItem.name}" belongs to a different business unit`
+        );
+      }
+      const componentCompareAt =
+        catalogItem.compareAtPrice !== undefined && catalogItem.compareAtPrice > 0
+          ? catalogItem.compareAtPrice
+          : 0;
+      serverCompareAtPrice += componentCompareAt * item.quantity;
+    }
+
+    // Only store compareAtPrice if at least one component has one
+    const finalCompareAtPrice = serverCompareAtPrice > 0 ? serverCompareAtPrice : undefined;
+
+    const serverSavingsPercentage =
+      finalCompareAtPrice !== undefined && finalCompareAtPrice > args.price
+        ? Math.round(((finalCompareAtPrice - args.price) / finalCompareAtPrice) * 10000) / 100
+        : undefined;
+
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
 
     const comboId = await ctx.db.insert("combos", {
       ...insertArgs,
+      compareAtPrice: finalCompareAtPrice,
+      savingsPercentage: serverSavingsPercentage,
       createdAt: now,
       updatedAt: now,
     });
@@ -123,7 +155,7 @@ export const create = mutation({
       slug: args.slug,
       description: args.description,
       price: args.price,
-      compareAtPrice: args.compareAtPrice,
+      compareAtPrice: finalCompareAtPrice,
       coverImage: args.coverImage,
       thumbnail: args.thumbnail,
       tags: [],
@@ -182,7 +214,46 @@ export const update = mutation({
       }
     }
 
-    await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
+    // If items are being updated, validate and recalculate pricing
+    const patchFields: Record<string, unknown> = { ...fields, updatedAt: Date.now() };
+    if (fields.items) {
+      const existingDoc = await ctx.db.get(id);
+      const businessUnitId = existingDoc?.businessUnitId;
+      if (!businessUnitId) throw new Error("Combo not found");
+
+      let serverCompareAtPrice = 0;
+      for (const item of fields.items) {
+        const catalogItem = await ctx.db.get(item.catalogItemId);
+        if (!catalogItem) {
+          throw new Error(`Catalog item ${item.catalogItemId} not found`);
+        }
+        if (catalogItem.itemType !== "product") {
+          throw new Error(`Combo components must be products, got "${catalogItem.itemType}"`);
+        }
+        if (catalogItem.businessUnitId !== businessUnitId) {
+          throw new Error(
+            `Catalog item "${catalogItem.name}" belongs to a different business unit`
+          );
+        }
+        const componentCompareAt =
+          catalogItem.compareAtPrice !== undefined && catalogItem.compareAtPrice > 0
+            ? catalogItem.compareAtPrice
+            : 0;
+        serverCompareAtPrice += componentCompareAt * item.quantity;
+      }
+
+      // Only store compareAtPrice if at least one component has one
+      const finalCompareAtPrice = serverCompareAtPrice > 0 ? serverCompareAtPrice : undefined;
+
+      const price = fields.price ?? existingDoc?.price ?? 0;
+      patchFields.compareAtPrice = finalCompareAtPrice;
+      patchFields.savingsPercentage =
+        finalCompareAtPrice !== undefined && finalCompareAtPrice > price
+          ? Math.round(((finalCompareAtPrice - price) / finalCompareAtPrice) * 10000) / 100
+          : undefined;
+    }
+
+    await ctx.db.patch(id, patchFields);
 
     // Sync to catalog
     const combo = await ctx.db.get(id);

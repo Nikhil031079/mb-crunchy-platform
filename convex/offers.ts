@@ -138,6 +138,23 @@ export const incrementUsage = internalMutation({
   },
 });
 
+/**
+ * Decrement coupon usage count exactly once per order cancellation/refund.
+ * Idempotent: clamps usedCount to 0 so double-reversal can never produce
+ * negative values.
+ */
+export const decrementUsage = internalMutation({
+  args: { id: v.id("offers") },
+  handler: async (ctx, args) => {
+    const offer = await ctx.db.get(args.id);
+    if (!offer) return;
+    await ctx.db.patch(args.id, {
+      usedCount: Math.max(0, offer.usedCount - 1),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("offers") },
   handler: async (ctx, args) => {

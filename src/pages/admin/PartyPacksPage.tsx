@@ -154,6 +154,7 @@ export default function PartyPacksPage() {
         businessUnitId: item.businessUnitId,
         name: item.name,
         price: item.price,
+        compareAtPrice: item.compareAtPrice,
         itemType: item.itemType,
       })),
     [allCatalogItems]
