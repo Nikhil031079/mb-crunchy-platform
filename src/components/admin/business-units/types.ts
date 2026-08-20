@@ -11,6 +11,8 @@ export interface BusinessUnit {
   themeColor: string;
   displayOrder: number;
   logoUrl?: string;
+  enableCombos?: boolean;
+  enablePartyPacks?: boolean;
 }
 
 export interface BusinessUnitFormValues {
@@ -21,6 +23,8 @@ export interface BusinessUnitFormValues {
   themeColor: string;
   displayOrder: number;
   logoUrl: string;
+  enableCombos?: boolean;
+  enablePartyPacks?: boolean;
 }
 
 export type BusinessUnitSortKey = "name" | "slug" | "status" | "displayOrder";

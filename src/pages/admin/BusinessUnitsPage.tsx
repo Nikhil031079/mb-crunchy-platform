@@ -33,6 +33,8 @@ function fromConvex(doc: any): BusinessUnit {
     themeColor: doc.themeColor,
     displayOrder: doc.displayOrder,
     logoUrl: doc.logo ?? undefined,
+    enableCombos: doc.enableCombos,
+    enablePartyPacks: doc.enablePartyPacks,
   };
 }
 
@@ -45,8 +47,8 @@ function toCreateArgs(values: BusinessUnitFormValues) {
     displayOrder: values.displayOrder,
     homepageVisible: values.homepageVisible,
     status: values.status,
-    enableCombos: false,
-    enablePartyPacks: false,
+    enableCombos: values.enableCombos ?? false,
+    enablePartyPacks: values.enablePartyPacks ?? false,
     enableOffers: false,
     enableSearch: false,
     enableCheckout: false,
@@ -65,6 +67,8 @@ function toUpdateArgs(id: string, values: BusinessUnitFormValues) {
     displayOrder: values.displayOrder,
     homepageVisible: values.homepageVisible,
     status: values.status,
+    enableCombos: values.enableCombos ?? false,
+    enablePartyPacks: values.enablePartyPacks ?? false,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
