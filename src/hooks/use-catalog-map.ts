@@ -45,6 +45,17 @@ export function useCatalogItemMap(
     expected > 0 &&
     results.slice(0, expected).some((result) => result === undefined || result === null);
 
+  const catalogItemMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>();
+    for (const result of results) {
+      for (const item of result ?? []) {
+        if (!map.has(item._id)) map.set(item._id, item);
+      }
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r0, r1, r2, r3]);
+
   const bySource = useMemo(() => {
     const map = new Map<string, CatalogItem>();
     for (const result of results) {
@@ -56,5 +67,5 @@ export function useCatalogItemMap(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [r0, r1, r2, r3]);
 
-  return { bySource, isLoading };
+  return { bySource, catalogItemMap, isLoading };
 }
