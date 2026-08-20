@@ -1001,6 +1001,7 @@ export default function BusinessUnitPage() {
                   index={index}
                   onAddToCart={handleAddCombo}
                   onOpenItemDetails={() => setSelectedItem(mapComboToCatalogItem(combo))}
+                  getItemName={(catalogItemId) => bySource.get(catalogItemId)?.name}
                 />
               ))}
             </div>
@@ -1052,6 +1053,7 @@ export default function BusinessUnitPage() {
                   index={index}
                   onAddToCart={handleAddPartyPack}
                   onOpenItemDetails={() => setSelectedItem(mapPartyPackToCatalogItem(pack))}
+                  getItemName={(catalogItemId) => bySource.get(catalogItemId)?.name}
                 />
               ))}
             </div>

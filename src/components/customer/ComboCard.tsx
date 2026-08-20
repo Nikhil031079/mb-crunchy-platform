@@ -19,6 +19,8 @@ interface ComboCardProps {
   className?: string;
   /** Called when the card body is clicked - opens Item Details Modal */
   onOpenItemDetails?: (combo: Combo) => void;
+  /** Maps catalogItemId to the item's display name */
+  getItemName?: (catalogItemId: string) => string | undefined;
 }
 
 export const ComboCard = memo(function ComboCard({
@@ -29,6 +31,7 @@ export const ComboCard = memo(function ComboCard({
   isFavorited = false,
   className,
   onOpenItemDetails,
+  getItemName,
 }: ComboCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -153,9 +156,9 @@ export const ComboCard = memo(function ComboCard({
                       className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       <Check className="h-3 w-3 text-emerald-500 shrink-0" />
-                      <span className="truncate">
-                        {item.quantity}x Item {item.catalogItemId.slice(0, 8)}
-                      </span>
+<span className="truncate">
+                          {item.quantity}x {getItemName?.(item.catalogItemId) ?? "Item"}
+                        </span>
                     </li>
                   ))}
                   {combo.items.length > 4 && (

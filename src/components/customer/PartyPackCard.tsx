@@ -19,6 +19,8 @@ interface PartyPackCardProps {
   className?: string;
   /** Called when the card body is clicked - opens Item Details Modal */
   onOpenItemDetails?: (partyPack: PartyPack) => void;
+  /** Maps catalogItemId to the item's display name */
+  getItemName?: (catalogItemId: string) => string | undefined;
 }
 
 export const PartyPackCard = memo(function PartyPackCard({
@@ -29,6 +31,7 @@ export const PartyPackCard = memo(function PartyPackCard({
   isFavorited = false,
   className,
   onOpenItemDetails,
+  getItemName,
 }: PartyPackCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -154,9 +157,9 @@ export const PartyPackCard = memo(function PartyPackCard({
                       className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       <Check className="h-3 w-3 text-accent shrink-0" />
-                      <span className="truncate">
-                        {item.quantity}x Item {item.catalogItemId.slice(0, 8)}
-                      </span>
+<span className="truncate">
+                          {item.quantity}x {getItemName?.(item.catalogItemId) ?? "Item"}
+                        </span>
                     </li>
                   ))}
                   {partyPack.items.length > 4 && (
