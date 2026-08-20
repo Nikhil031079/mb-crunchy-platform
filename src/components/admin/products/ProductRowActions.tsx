@@ -19,7 +19,7 @@ export function ProductRowActions({ product, onEdit, onDelete, onRestore }: Prod
     <DropdownMenuContent align="end" className="w-44">
       <DropdownMenuLabel>{product.name}</DropdownMenuLabel>
       <DropdownMenuSeparator />
-      <DropdownMenuItem onSelect={() => onEdit(product)} disabled={isArchived}><Pencil /> Edit</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onEdit(product)}><Pencil /> Edit</DropdownMenuItem>
       {isArchived ? <DropdownMenuItem onSelect={() => onRestore(product)}><ArchiveRestore /> Restore</DropdownMenuItem> : <DropdownMenuItem variant="destructive" onSelect={() => onDelete(product)}><Trash2 /> Archive</DropdownMenuItem>}
     </DropdownMenuContent>
   </DropdownMenu>;

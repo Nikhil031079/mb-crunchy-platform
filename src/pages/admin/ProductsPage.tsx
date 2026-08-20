@@ -70,6 +70,7 @@ function fromConvex(doc: any, buMap: Map<string, string>, catMap: Map<string, st
     status: doc.status,
     featured: doc.featured,
     displayOrder: doc.displayOrder,
+    deletedAt: doc.deletedAt,
   };
 }
 
@@ -157,6 +158,8 @@ function toUpdateArgs(id: string, values: ProductFormValues) {
 
   return {
     id: id as any,
+    businessUnitId: values.businessUnitId as any,
+    categoryId: values.categoryId as any,
     name: values.name,
     slug: values.slug,
     description: values.description || undefined,

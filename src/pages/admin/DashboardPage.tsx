@@ -114,7 +114,7 @@ export default function DashboardPage() {
       totalOrders: orders.length,
       totalCustomers: customers.length,
       newCustomersThisMonth,
-      totalProducts: products.length,
+      totalProducts: products.filter((p: { deletedAt?: number }) => !p.deletedAt).length,
       lowStockCount,
     };
   }, [orders, products, customers, inventory]);

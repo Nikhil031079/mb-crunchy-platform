@@ -189,15 +189,15 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor={`${formId}-bu`}>Business Unit</Label>
-              <Select value={values.businessUnitId} onValueChange={handleBuChange} disabled={isEditing}>
+              <Select value={values.businessUnitId} onValueChange={handleBuChange}>
                 <SelectTrigger id={`${formId}-bu`}><SelectValue placeholder="Select a business unit" /></SelectTrigger>
                 <SelectContent>{businessUnits.map((bu) => <SelectItem key={bu.id} value={bu.id}>{bu.name}</SelectItem>)}</SelectContent>
               </Select>
-              {isEditing && <p className="text-xs text-muted-foreground">Business unit cannot be changed after creation.</p>}
+              {isEditing && <p className="text-xs text-muted-foreground">Changing Business Unit may affect related combos, party packs, and offers.</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor={`${formId}-cat`}>Category</Label>
-              <Select value={values.categoryId} onValueChange={(v) => update("categoryId", v)} disabled={isEditing || !values.businessUnitId}>
+              <Select value={values.categoryId} onValueChange={(v) => update("categoryId", v)} disabled={!values.businessUnitId}>
                 <SelectTrigger id={`${formId}-cat`}><SelectValue placeholder={values.businessUnitId ? "Select a category" : "Select a business unit first"} /></SelectTrigger>
                 <SelectContent>{filteredCategories.map((cat) => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}</SelectContent>
               </Select>

@@ -75,6 +75,7 @@ export interface Product {
   status: ProductStatus;
   featured: boolean;
   displayOrder: number;
+  deletedAt?: number;
 }
 
 export interface ProductFormValues {
