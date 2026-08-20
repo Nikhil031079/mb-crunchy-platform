@@ -73,6 +73,8 @@ import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
 
 type SortOption = "default" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
 
+type CatalogMode = "all" | "products" | "combos" | "partyPacks";
+
 const SORT_OPTIONS: { label: string; value: SortOption }[] = [
   { label: "Default", value: "default" },
   { label: "Price: Low to High", value: "price-asc" },
@@ -92,6 +94,7 @@ export default function BusinessUnitPage() {
   // State
   // ==========================================================================
 
+  const [catalogMode, setCatalogMode] = useState<CatalogMode>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("default");
@@ -356,12 +359,42 @@ export default function BusinessUnitPage() {
     return items;
   }, [catalogItems, activeCategoryId, searchQuery, sortBy, allProducts]);
 
+  // Filtered combos for search in combos mode
+  const filteredCombos = useMemo(() => {
+    if (!searchQuery.trim()) return activeCombos;
+    const q = searchQuery.toLowerCase().trim();
+    return activeCombos.filter(
+      (combo) =>
+        combo.name.toLowerCase().includes(q) ||
+        combo.description?.toLowerCase().includes(q)
+    );
+  }, [activeCombos, searchQuery]);
+
+  // Filtered party packs for search in partyPacks mode
+  const filteredPartyPacks = useMemo(() => {
+    if (!searchQuery.trim()) return activePartyPacks;
+    const q = searchQuery.toLowerCase().trim();
+    return activePartyPacks.filter(
+      (pack) =>
+        pack.name.toLowerCase().includes(q) ||
+        pack.description?.toLowerCase().includes(q)
+    );
+  }, [activePartyPacks, searchQuery]);
+
   // ==========================================================================
   // Handlers
   // ==========================================================================
 
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
+  }, []);
+
+  const handleCatalogModeChange = useCallback((mode: CatalogMode) => {
+    setCatalogMode(mode);
+    if (mode === "combos" || mode === "partyPacks") {
+      setActiveCategoryId(null);
+      setSearchQuery("");
+    }
   }, []);
 
   const handleCategoryChange = useCallback((categoryId: string | null) => {
@@ -729,11 +762,41 @@ export default function BusinessUnitPage() {
       </div>
 
       {/* ================================================================ */}
+      {/* CATALOG MODE SELECTOR                                           */}
+      {/* ================================================================ */}
+
+      <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+          {(
+            [
+              { mode: "all" as CatalogMode, label: "All" },
+              { mode: "products" as CatalogMode, label: bu.slug === "mb-kitchen" || bu.slug === "kitchen" ? "Solo Meals" : "Products" },
+              { mode: "combos" as CatalogMode, label: "Combos" },
+              { mode: "partyPacks" as CatalogMode, label: "Party Packs" },
+            ] as const
+          ).map(({ mode, label }) => (
+            <button
+              key={mode}
+              onClick={() => handleCatalogModeChange(mode)}
+              className={cn(
+                "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all",
+                catalogMode === mode
+                  ? "bg-foreground text-background shadow-sm"
+                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ================================================================ */}
       {/* CATEGORY TABS                                                   */}
       {/* ================================================================ */}
 
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        {enrichedCategories.length > 0 && (
+        {(catalogMode === "all" || catalogMode === "products") && enrichedCategories.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             <Button
               variant={activeCategoryId === null ? "default" : "outline"}
@@ -781,7 +844,7 @@ export default function BusinessUnitPage() {
         {/* FEATURED PRODUCTS                                              */}
         {/* ================================================================ */}
 
-        {!isDataLoading && hasFeatured && !searchQuery && activeCategoryId === null && (
+        {!isDataLoading && hasFeatured && !searchQuery && activeCategoryId === null && catalogMode !== "combos" && catalogMode !== "partyPacks" && (
           <section className="mb-12">
             <SectionHeader
               title="Featured"
@@ -813,6 +876,7 @@ export default function BusinessUnitPage() {
         {/* PRODUCT GRID / SEARCH RESULTS                                  */}
         {/* ================================================================ */}
 
+        {(catalogMode === "all" || catalogMode === "products") && (
         <section>
           {searchQuery && (
             <p className="mb-4 text-sm text-muted-foreground">
@@ -864,12 +928,13 @@ export default function BusinessUnitPage() {
             />
           )}
         </section>
+        )}
 
 {/* ================================================================ */}
         {/* FLASH SALES (Feature Flag)                                         */}
         {/* ================================================================ */}
 
-        {!isDataLoading && bu.enableOffers && (
+        {!isDataLoading && bu.enableOffers && catalogMode === "all" && (
           <FlashSalesSection businessUnitId={bu._id} className="mt-16" />
         )}
 
@@ -877,7 +942,7 @@ export default function BusinessUnitPage() {
         {/* ACTIVE OFFERS                                                      */}
         {/* ================================================================ */}
 
-        {!isDataLoading && enableOffers && (
+        {!isDataLoading && enableOffers && catalogMode === "all" && (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -910,7 +975,7 @@ export default function BusinessUnitPage() {
         {/* COMBOS (Feature Flag)                                          */}
         {/* ================================================================ */}
 
-        {!isDataLoading && enableCombos && (
+        {!isDataLoading && enableCombos && (catalogMode === "all" || catalogMode === "combos") && (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -920,16 +985,16 @@ export default function BusinessUnitPage() {
           >
             <SectionHeader
               title={`${bu.name} Combos`}
-              subtitle="Curated bundles at great value"
-              action={{
+              subtitle={catalogMode === "combos" ? "Curated bundles at better value" : "Curated bundles at great value"}
+              action={catalogMode === "all" ? {
                 label: "View All Combos",
-                onClick: () => scrollToSection("combos-section"),
-              }}
+                onClick: () => handleCatalogModeChange("combos"),
+              } : undefined}
               size="sm"
             />
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {activeCombos.slice(0, 4).map((combo, index) => (
+              {(catalogMode === "combos" ? filteredCombos : activeCombos.slice(0, 4)).map((combo, index) => (
                 <ComboCard
                   key={combo._id}
                   combo={combo}
@@ -942,11 +1007,26 @@ export default function BusinessUnitPage() {
           </motion.section>
         )}
 
+        {catalogMode === "combos" && !isDataLoading && filteredCombos.length === 0 && (
+          <section className="mt-16">
+            <SectionHeader
+              title={`${bu.name} Combos`}
+              subtitle="Curated bundles at better value"
+              size="sm"
+            />
+            <EmptyState
+              title="No combos available"
+              description={`${bu.name} doesn't have any combos yet. Check back soon!`}
+              icon={Package}
+            />
+          </section>
+        )}
+
         {/* ================================================================ */}
         {/* PARTY PACKS (Feature Flag)                                     */}
         {/* ================================================================ */}
 
-        {!isDataLoading && enablePartyPacks && (
+        {!isDataLoading && enablePartyPacks && (catalogMode === "all" || catalogMode === "partyPacks") && (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -956,16 +1036,16 @@ export default function BusinessUnitPage() {
           >
             <SectionHeader
               title={`${bu.name} Party Packs`}
-              subtitle="Perfect for gatherings and events"
-              action={{
+              subtitle={catalogMode === "partyPacks" ? "Perfect for sharing, gatherings and celebrations" : "Perfect for gatherings and events"}
+              action={catalogMode === "all" ? {
                 label: "View All Packs",
-                onClick: () => scrollToSection("party-packs-section"),
-              }}
+                onClick: () => handleCatalogModeChange("partyPacks"),
+              } : undefined}
               size="sm"
             />
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {activePartyPacks.slice(0, 4).map((pack, index) => (
+              {(catalogMode === "partyPacks" ? filteredPartyPacks : activePartyPacks.slice(0, 4)).map((pack, index) => (
                 <PartyPackCard
                   key={pack._id}
                   partyPack={pack}
@@ -976,6 +1056,21 @@ export default function BusinessUnitPage() {
               ))}
             </div>
           </motion.section>
+        )}
+
+        {catalogMode === "partyPacks" && !isDataLoading && filteredPartyPacks.length === 0 && (
+          <section className="mt-16">
+            <SectionHeader
+              title={`${bu.name} Party Packs`}
+              subtitle="Perfect for sharing, gatherings and celebrations"
+              size="sm"
+            />
+            <EmptyState
+              title="No party packs available"
+              description={`${bu.name} doesn't have any party packs yet. Check back soon!`}
+              icon={Package}
+            />
+          </section>
         )}
 
         {/* Item Details Modal */}
