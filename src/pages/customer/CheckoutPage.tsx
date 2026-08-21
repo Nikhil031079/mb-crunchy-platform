@@ -19,6 +19,7 @@ import {
   CircleDot,
   AlertTriangle,
   MessageCircle,
+  BadgeCheck,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -114,16 +115,18 @@ function clearIdempotencyKey() {
 }
 
 // ============================================================================
-// Outside-area order persistence — survives browser refresh so the
+// Order confirmation persistence — survives browser refresh so the
 // confirmation page can recover the order via a reactive Convex query.
+// Used by ALL order flows (outside-area, local delivery, pickup).
 // ============================================================================
 
-const OUTSIDE_AREA_ORDER_KEY = "mb_outside_area_order";
+const ORDER_CONFIRMATION_KEY = "mb_order_confirmation";
+const LEGACY_OUTSIDE_AREA_KEY = "mb_outside_area_order";
 
-function persistOutsideAreaOrder(orderNumber: string, phone: string) {
+function persistOrderConfirmation(orderNumber: string, phone: string) {
   try {
     localStorage.setItem(
-      OUTSIDE_AREA_ORDER_KEY,
+      ORDER_CONFIRMATION_KEY,
       JSON.stringify({ orderNumber, phone })
     );
   } catch {
@@ -131,21 +134,33 @@ function persistOutsideAreaOrder(orderNumber: string, phone: string) {
   }
 }
 
-function loadPersistedOutsideAreaOrder(): { orderNumber: string; phone: string } | null {
+function loadPersistedOrderConfirmation(): { orderNumber: string; phone: string } | null {
   try {
-    const raw = localStorage.getItem(OUTSIDE_AREA_ORDER_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed?.orderNumber && parsed?.phone) return parsed;
+    const raw = localStorage.getItem(ORDER_CONFIRMATION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.orderNumber && parsed?.phone) return parsed;
+    }
+
+    // Fallback: migrate existing outside-area order from old key
+    const legacy = localStorage.getItem(LEGACY_OUTSIDE_AREA_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      if (parsed?.orderNumber && parsed?.phone) {
+        persistOrderConfirmation(parsed.orderNumber, parsed.phone);
+        return parsed;
+      }
+    }
+
     return null;
   } catch {
     return null;
   }
 }
 
-function clearPersistedOutsideAreaOrder() {
+function clearPersistedOrderConfirmation() {
   try {
-    localStorage.removeItem(OUTSIDE_AREA_ORDER_KEY);
+    localStorage.removeItem(ORDER_CONFIRMATION_KEY);
   } catch {
     // ignore
   }
@@ -174,7 +189,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
   useEffect(() => {
     if (!order) return;
     if (order.status === "delivered" || order.status === "cancelled" || order.status === "refunded") {
-      clearPersistedOutsideAreaOrder();
+      clearPersistedOrderConfirmation();
     }
   }, [order?.status]);
 
@@ -221,7 +236,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
 
   // Non-outside-area order — shouldn't happen, but fallback
   if (order.deliveryType !== "outside_area") {
-    clearPersistedOutsideAreaOrder();
+    clearPersistedOrderConfirmation();
     return (
       <div className="min-h-screen bg-background">
         <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
@@ -476,6 +491,21 @@ export default function CheckoutPage() {
   } | null>(null);
   const [redeemPoints, setRedeemPoints] = useState(0);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+
+  // Order confirmation lookup — after order creation, we subscribe to the
+  // authoritative order record from Convex so the confirmation screen always
+  // shows correct totals (not derived from the now-empty cart).
+  const [confirmLookup, setConfirmLookup] = useState<{ phone: string; orderNumber: string } | null>(null);
+
+  // On mount (browser refresh), restore the order lookup from localStorage.
+  const [persistedOrder] = useState(() => loadPersistedOrderConfirmation());
+  const activeLookup = confirmLookup ?? persistedOrder;
+  const confirmedOrder = useQuery(
+    api.orders.getByPhoneAndOrderNumber,
+    activeLookup
+      ? { phone: activeLookup.phone, orderNumber: activeLookup.orderNumber }
+      : "skip",
+  );
 
   // ==========================================================================
   // Data Fetching — BU settings + global delivery policy
@@ -822,6 +852,8 @@ export default function CheckoutPage() {
             orderNumber: newOrderNumber,
             orderId: newOrderId,
           });
+          setConfirmLookup({ phone: form.customerPhone.trim(), orderNumber: newOrderNumber });
+          persistOrderConfirmation(newOrderNumber, form.customerPhone.trim());
           clearCart();
           clearIdempotencyKey();
           toast.success("Delivery request submitted!", {
@@ -864,6 +896,8 @@ export default function CheckoutPage() {
       orderNumber: pendingOrder.orderNumber,
       orderId: pendingOrder.orderId,
     });
+    setConfirmLookup({ phone: pendingOrder.phone, orderNumber: pendingOrder.orderNumber });
+    persistOrderConfirmation(pendingOrder.orderNumber, pendingOrder.phone);
     clearCart();
     clearIdempotencyKey();
     toast.success("Order placed!", {
@@ -885,10 +919,9 @@ export default function CheckoutPage() {
   }, [pendingOrder, clearCart, claimPayment]);
 
   // ==========================================================================
-  // Persisted outside-area order — recovers confirmation page on refresh
+  // Persisted order confirmation — recovers confirmation page on refresh
+  // (initialized above via activeLookup = confirmLookup ?? persistedOrder)
   // ==========================================================================
-
-  const [persistedOrder] = useState(() => loadPersistedOutsideAreaOrder());
 
   // ==========================================================================
   // Order Success State
@@ -897,11 +930,71 @@ export default function CheckoutPage() {
   if (orderSuccess) {
     // Outside-area orders use the backend-driven confirmation page
     if (effectiveDeliveryType === "outside_area") {
-      persistOutsideAreaOrder(orderSuccess.orderNumber, form.customerPhone.trim());
       return <OutsideAreaConfirmation orderNumber={orderSuccess.orderNumber} phone={form.customerPhone.trim()} />;
     }
 
-    // Non-outside-area: show the existing payment-submitted success screen
+    // Non-outside-area: backend-driven confirmation screen.
+    // Uses the authoritative order record from Convex so totals are always
+    // correct even after clearCart(), on browser refresh, or after admin
+    // payment verification.
+    const order = confirmedOrder?.order;
+    const orderSubtotal = order ? order.subtotal - order.discount : 0;
+    const orderDeliveryFee = order?.deliveryFee ?? 0;
+    const paymentLabel = order
+      ? order.paymentStatus === "paid"
+        ? "Paid"
+        : order.paymentStatus === "pending_verification"
+          ? "Pending Verification"
+          : order.paymentStatus === "failed"
+            ? "Failed"
+            : order.paymentStatus === "rejected"
+              ? "Rejected"
+              : "Pending"
+      : "Pending Verification";
+    const paymentColor = order
+      ? order.paymentStatus === "paid"
+        ? "text-emerald-600"
+        : order.paymentStatus === "failed" || order.paymentStatus === "rejected"
+          ? "text-red-600"
+          : "text-amber-600"
+      : "text-amber-600";
+    const orderStatusLabel = order
+      ? order.status === "pending"
+        ? "Order Placed"
+        : order.status === "confirmed"
+          ? "Confirmed"
+          : order.status === "preparing"
+            ? "Preparing"
+            : order.status === "ready"
+              ? "Ready"
+              : order.status === "out_for_delivery"
+                ? "Out for Delivery"
+                : order.status === "delivered"
+                  ? "Delivered"
+                  : order.status === "cancelled"
+                    ? "Cancelled"
+                    : "Awaiting Payment Verification"
+      : "Awaiting Payment Verification";
+    const orderStatusColor = order
+      ? order.status === "confirmed" || order.status === "preparing" || order.status === "ready" || order.status === "out_for_delivery" || order.status === "delivered"
+        ? "text-emerald-600"
+        : order.status === "cancelled"
+          ? "text-red-600"
+          : "text-amber-600"
+      : "text-amber-600";
+
+    // Loading state while Convex query resolves
+    if (confirmedOrder === undefined) {
+      return (
+        <div className="min-h-screen bg-background">
+          <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Loading your order...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-background">
         <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
@@ -947,26 +1040,54 @@ export default function CheckoutPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Order Subtotal</span>
-                <span className="font-medium">{formatCurrency(pricing.subtotal - pricing.discount)}</span>
+                <span className="font-medium">
+                  {order ? formatCurrency(orderSubtotal) : "Loading..."}
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Delivery</span>
                 <span className="font-medium">
-                  {pricing.freeDelivery ? "Free" : formatCurrency(pricing.deliveryFee)}
+                  {order
+                    ? order.orderType === "pickup"
+                      ? "Pickup"
+                      : orderDeliveryFee === 0
+                        ? order.deliveryType === "outside_area" ? "Quote Required" : "Free"
+                        : formatCurrency(orderDeliveryFee)
+                    : "Loading..."}
                 </span>
               </div>
+              {order && order.tax > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tax</span>
+                  <span className="font-medium">{formatCurrency(order.tax)}</span>
+                </div>
+              )}
+              {order && (
+                <div className="flex justify-between text-sm font-semibold">
+                  <span>Total</span>
+                  <span>{formatCurrency(order.total)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Payment</span>
-                <span className="flex items-center gap-1.5 text-amber-600 font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                  Pending Verification
+                <span className={`flex items-center gap-1.5 font-medium ${paymentColor}`}>
+                  {paymentLabel === "Paid" ? (
+                    <BadgeCheck className="h-3.5 w-3.5" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                  )}
+                  {paymentLabel}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Order</span>
-                <span className="flex items-center gap-1.5 text-amber-600 font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                  Awaiting Payment Verification
+                <span className={`flex items-center gap-1.5 font-medium ${orderStatusColor}`}>
+                  {orderStatusColor === "text-emerald-600" ? (
+                    <BadgeCheck className="h-3.5 w-3.5" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                  )}
+                  {orderStatusLabel}
                 </span>
               </div>
             </motion.div>
@@ -999,16 +1120,187 @@ export default function CheckoutPage() {
   }
 
   // ==========================================================================
-  // Empty Cart Redirect
+  // Empty Cart Redirect / Persisted Order Recovery
   // ==========================================================================
 
-  // If cart is empty but we have a persisted outside-area order, show the
-  // confirmation page instead of the empty cart state (survives browser refresh).
-  if (cart.items.length === 0 && persistedOrder) {
-    return <OutsideAreaConfirmation orderNumber={persistedOrder.orderNumber} phone={persistedOrder.phone} />;
-  }
-
   if (cart.items.length === 0) {
+    // Backend-driven confirmation: show the order from Convex subscription.
+    // This handles fresh orders (after clearCart) AND browser refresh recovery
+    // (orderSuccess state is lost but persistedOrder + confirmedOrder work).
+    if (confirmedOrder?.order) {
+      const order = confirmedOrder.order;
+      const orderSubtotal = order.subtotal - order.discount;
+      const orderDeliveryFee = order.deliveryFee ?? 0;
+      const paymentLabel =
+        order.paymentStatus === "paid"
+          ? "Paid"
+          : order.paymentStatus === "pending_verification"
+            ? "Pending Verification"
+            : order.paymentStatus === "failed"
+              ? "Failed"
+              : order.paymentStatus === "rejected"
+                ? "Rejected"
+                : "Pending";
+      const paymentColor =
+        order.paymentStatus === "paid"
+          ? "text-emerald-600"
+          : order.paymentStatus === "failed" || order.paymentStatus === "rejected"
+            ? "text-red-600"
+            : "text-amber-600";
+      const orderStatusLabel =
+        order.status === "pending"
+          ? "Order Placed"
+          : order.status === "confirmed"
+            ? "Confirmed"
+            : order.status === "preparing"
+              ? "Preparing"
+              : order.status === "ready"
+                ? "Ready"
+                : order.status === "out_for_delivery"
+                  ? "Out for Delivery"
+                  : order.status === "delivered"
+                    ? "Delivered"
+                    : order.status === "cancelled"
+                      ? "Cancelled"
+                      : "Awaiting Payment Verification";
+      const orderStatusColor =
+        order.status === "confirmed" || order.status === "preparing" || order.status === "ready" || order.status === "out_for_delivery" || order.status === "delivered"
+          ? "text-emerald-600"
+          : order.status === "cancelled"
+            ? "text-red-600"
+            : "text-amber-600";
+
+      return (
+        <div className="min-h-screen bg-background">
+          <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="text-center space-y-6"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
+                className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40"
+              >
+                <CheckCircle2 className="h-12 w-12 text-white" />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+              >
+                <h1 className="text-2xl font-bold tracking-tight">
+                  {order.paymentStatus === "paid" ? "Order Confirmed" : "Payment Submitted for Verification"}
+                </h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {order.paymentStatus === "paid"
+                    ? "Your payment has been verified. We're preparing your order."
+                    : "Payment recorded — we'll verify it and start preparing your order shortly."}
+                </p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35 }}
+                className="rounded-xl border border-border/60 bg-card p-6 space-y-3"
+              >
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Order Number</span>
+                  <span className="font-mono font-semibold">{order.orderNumber}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Order Subtotal</span>
+                  <span className="font-medium">{formatCurrency(orderSubtotal)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Delivery</span>
+                  <span className="font-medium">
+                    {order.orderType === "pickup"
+                      ? "Pickup"
+                      : orderDeliveryFee === 0
+                        ? order.deliveryType === "outside_area" ? "Quote Required" : "Free"
+                        : formatCurrency(orderDeliveryFee)}
+                  </span>
+                </div>
+                {order.tax > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Tax</span>
+                    <span className="font-medium">{formatCurrency(order.tax)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-semibold">
+                  <span>Total</span>
+                  <span>{formatCurrency(order.total)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Payment</span>
+                  <span className={`flex items-center gap-1.5 font-medium ${paymentColor}`}>
+                    {paymentLabel === "Paid" ? (
+                      <BadgeCheck className="h-3.5 w-3.5" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                    )}
+                    {paymentLabel}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Order</span>
+                  <span className={`flex items-center gap-1.5 font-medium ${orderStatusColor}`}>
+                    {orderStatusColor === "text-emerald-600" ? (
+                      <BadgeCheck className="h-3.5 w-3.5" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                    )}
+                    {orderStatusLabel}
+                  </span>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="flex flex-col gap-3 items-center"
+              >
+                <div className="flex gap-3 justify-center">
+                  <Link to={ROUTES.TRACK_ORDER}>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Package className="h-3.5 w-3.5" />
+                      Track Order
+                    </Button>
+                  </Link>
+                  <Link to="/">
+                    <Button size="sm" className="gap-2">
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Back to Home
+                    </Button>
+                  </Link>
+                </div>
+              </motion.div>
+            </motion.div>
+          </div>
+        </div>
+      );
+    }
+
+    // Persisted order exists but Convex query is still loading
+    if (persistedOrder) {
+      return (
+        <div className="min-h-screen bg-background">
+          <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Loading your order...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Genuinely empty cart
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <EmptyState
