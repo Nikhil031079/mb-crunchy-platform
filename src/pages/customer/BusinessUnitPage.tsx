@@ -402,6 +402,10 @@ export default function BusinessUnitPage() {
         });
         return;
       }
+      const bundleItems = combo.items?.map((ci) => ({
+        name: catalogItemMap.get(ci.catalogItemId)?.name ?? "Item",
+        quantity: ci.quantity,
+      }));
       const added = await addItem({
         catalogItemId: catalogItem._id,
         itemType: "combo",
@@ -411,12 +415,13 @@ export default function BusinessUnitPage() {
         quantity: 1,
         unitPrice: combo.price,
         image: combo.coverImage || combo.thumbnail || combo.images?.[0],
+        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
       });
       if (added) {
         toast.success("Added to cart", { description: combo.name });
       }
     },
-    [addItem, bySource, businessUnit, storeIsOpen, nextOpenTime]
+    [addItem, bySource, catalogItemMap, businessUnit, storeIsOpen, nextOpenTime]
   );
 
   const handleAddPartyPack = useCallback(
@@ -437,6 +442,10 @@ export default function BusinessUnitPage() {
         });
         return;
       }
+      const bundleItems = pack.items?.map((pi) => ({
+        name: catalogItemMap.get(pi.catalogItemId)?.name ?? "Item",
+        quantity: pi.quantity,
+      }));
       const added = await addItem({
         catalogItemId: catalogItem._id,
         itemType: "partyPack",
@@ -446,12 +455,13 @@ export default function BusinessUnitPage() {
         quantity: 1,
         unitPrice: pack.price,
         image: pack.coverImage || pack.thumbnail || pack.images?.[0],
+        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
       });
       if (added) {
         toast.success("Added to cart", { description: pack.name });
       }
     },
-    [addItem, bySource, businessUnit, storeIsOpen, nextOpenTime]
+    [addItem, bySource, catalogItemMap, businessUnit, storeIsOpen, nextOpenTime]
   );
 
   // Set page title

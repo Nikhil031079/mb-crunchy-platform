@@ -761,6 +761,8 @@ export interface CartItem {
   unitPrice: number;
   totalPrice: number;
   image?: string;
+  /** Included items for combos / party packs — resolved at add-to-cart time. */
+  bundleItems?: Array<{ name: string; quantity: number }>;
 }
 
 /**

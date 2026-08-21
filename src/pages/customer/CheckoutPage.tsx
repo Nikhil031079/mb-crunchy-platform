@@ -1919,9 +1919,19 @@ export default function CheckoutPage() {
                         <p className="text-sm font-medium truncate">
                           {item.name}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.variantName}
-                        </p>
+                        {item.bundleItems && item.bundleItems.length > 0 ? (
+                          <div className="text-xs text-muted-foreground">
+                            {item.bundleItems.map((bi, i) => (
+                              <span key={i}>
+                                {bi.quantity}× {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {item.variantName}
+                          </p>
+                        )}
                       </div>
                       <span className="text-sm font-medium shrink-0">
                         {formatCurrency(item.totalPrice)}

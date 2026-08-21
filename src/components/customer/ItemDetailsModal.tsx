@@ -164,6 +164,7 @@ export function ItemDetailsModal({
     let quantityToAdd: number;
     let unitPrice: number;
     let image: string | undefined;
+    let bundleItems: Array<{ name: string; quantity: number }> | undefined;
 
     if (isProduct) {
       catalogItemId = selectedItem._id;
@@ -184,6 +185,11 @@ export function ItemDetailsModal({
       quantityToAdd = quantity;
       unitPrice = selectedItem.price;
       image = selectedItem.coverImage || selectedItem.thumbnail;
+      const resolvedItems = comboSource?.items?.map((ci) => ({
+        name: catalogById.get(ci.catalogItemId)?.name ?? "Item",
+        quantity: ci.quantity,
+      }));
+      if (resolvedItems && resolvedItems.length > 0) bundleItems = resolvedItems;
     } else if (isPartyPack) {
       catalogItemId = selectedItem._id;
       itemType = "partyPack";
@@ -192,6 +198,11 @@ export function ItemDetailsModal({
       quantityToAdd = quantity;
       unitPrice = selectedItem.price;
       image = selectedItem.coverImage || selectedItem.thumbnail;
+      const resolvedItems = partyPackSource?.items?.map((pi) => ({
+        name: catalogById.get(pi.catalogItemId)?.name ?? "Item",
+        quantity: pi.quantity,
+      }));
+      if (resolvedItems && resolvedItems.length > 0) bundleItems = resolvedItems;
     } else {
       return;
     }
@@ -205,13 +216,14 @@ export function ItemDetailsModal({
       quantity: quantityToAdd,
       unitPrice,
       image,
+      ...(bundleItems ? { bundleItems } : {}),
     });
 
     if (added) {
       setIsModalOpen(false);
       onClose();
     }
-  }, [isProduct, isCombo, isPartyPack, product, selectedVariant, quantity, minPrice, addItem, selectedItem, setIsModalOpen, onClose]);
+  }, [isProduct, isCombo, isPartyPack, product, comboSource, partyPackSource, catalogById, selectedVariant, quantity, minPrice, addItem, selectedItem, setIsModalOpen, onClose]);
 
   const handleOpenVariantSelector = useCallback(() => setVariantOpen(true), []);
 

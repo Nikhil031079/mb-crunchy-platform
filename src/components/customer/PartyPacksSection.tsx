@@ -5,7 +5,7 @@ import { PartyPopper } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
-import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
@@ -33,8 +33,8 @@ export function PartyPacksSection({
   onOpenItemDetails,
 }: PartyPacksSectionProps) {
   const navigate = useNavigate();
-  const addCallback = useAddToCart();
-  const { bySource } = useCatalogItemMap(businessUnits);
+  const { addItem } = useCart();
+  const { bySource, catalogItemMap } = useCatalogItemMap(businessUnits);
 
   const packsEnabled = useMemo(
     () => businessUnits.filter((bu) => bu.enablePartyPacks),
@@ -92,9 +92,26 @@ export function PartyPacksSection({
         });
         return;
       }
-      addCallback(catalogItem);
+      const bundleItems = pack.items?.map((pi) => ({
+        name: catalogItemMap.get(pi.catalogItemId)?.name ?? "Item",
+        quantity: pi.quantity,
+      }));
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
+        itemType: "partyPack",
+        businessUnitId: catalogItem.businessUnitId,
+        name: pack.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: pack.price,
+        image: pack.coverImage || pack.thumbnail || pack.images?.[0],
+        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
+      });
+      if (added) {
+        toast.success("Added to cart", { description: pack.name });
+      }
     },
-    [addCallback, bySource]
+    [addItem, bySource, catalogItemMap]
   );
 
   if (isLoading) {
@@ -146,6 +163,7 @@ export function PartyPacksSection({
                 const catalogItem = bySource.get(pack._id);
                 if (catalogItem && onOpenItemDetails) onOpenItemDetails(catalogItem);
               }}
+              getItemName={(catalogItemId) => catalogItemMap.get(catalogItemId)?.name}
             />
           ))}
         </div>

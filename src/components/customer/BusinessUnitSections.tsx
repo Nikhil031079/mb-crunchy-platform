@@ -8,6 +8,7 @@ import { api } from "@convex/_generated/api";
 
 import { cn } from "@/lib/utils";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
@@ -57,10 +58,11 @@ function BusinessUnitSection({
     bu.enablePartyPacks ? { businessUnitId: bu._id } : "skip",
   ) as PartyPack[] | undefined;
 
-  const { bySource } = useCatalogItemMap([bu]);
+  const { bySource, catalogItemMap } = useCatalogItemMap([bu]);
 
   const navigate = useNavigate();
   const addCallback = useAddToCart();
+  const { addItem } = useCart();
   const handleAddToCart = useCallback(
     (product: CatalogItem | CardProduct) => addCallback(product as CatalogItem),
     [addCallback],
@@ -75,9 +77,26 @@ function BusinessUnitSection({
         });
         return;
       }
-      addCallback(catalogItem);
+      const bundleItems = partyPack.items?.map((pi) => ({
+        name: catalogItemMap.get(pi.catalogItemId)?.name ?? "Item",
+        quantity: pi.quantity,
+      }));
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
+        itemType: "partyPack",
+        businessUnitId: catalogItem.businessUnitId,
+        name: partyPack.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: partyPack.price,
+        image: partyPack.coverImage || partyPack.thumbnail || partyPack.images?.[0],
+        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
+      });
+      if (added) {
+        toast.success("Added to cart", { description: partyPack.name });
+      }
     },
-    [addCallback, bySource]
+    [addItem, bySource, catalogItemMap]
   );
 
   const isDataLoaded =

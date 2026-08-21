@@ -7,6 +7,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
 import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 import { filterCatalogItemIds } from "@/utils";
 
@@ -33,7 +34,8 @@ export function CrossSellSections({
   excludeIds,
 }: CrossSellSectionsProps) {
   const handleAddToCart = useAddToCart();
-  const { bySource } = useCatalogItemMap([businessUnit]);
+  const { addItem } = useCart();
+  const { bySource, catalogItemMap } = useCatalogItemMap([businessUnit]);
 
   const buId = businessUnit._id as Id<"businessUnits">;
 
@@ -67,9 +69,26 @@ export function CrossSellSections({
         });
         return;
       }
-      handleAddToCart(catalogItem);
+      const bundleItems = combo.items?.map((ci) => ({
+        name: catalogItemMap.get(ci.catalogItemId)?.name ?? "Item",
+        quantity: ci.quantity,
+      }));
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
+        itemType: "combo",
+        businessUnitId: catalogItem.businessUnitId,
+        name: combo.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: combo.price,
+        image: combo.coverImage || combo.thumbnail || combo.images?.[0],
+        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
+      });
+      if (added) {
+        toast.success("Added to cart", { description: combo.name });
+      }
     },
-    [handleAddToCart, bySource],
+    [addItem, bySource, catalogItemMap],
   );
 
   const handleAddPartyPack = useCallback(
@@ -81,9 +100,26 @@ export function CrossSellSections({
         });
         return;
       }
-      handleAddToCart(catalogItem);
+      const bundleItems = partyPack.items?.map((pi) => ({
+        name: catalogItemMap.get(pi.catalogItemId)?.name ?? "Item",
+        quantity: pi.quantity,
+      }));
+      const added = await addItem({
+        catalogItemId: catalogItem._id,
+        itemType: "partyPack",
+        businessUnitId: catalogItem.businessUnitId,
+        name: partyPack.name,
+        variantName: "Default",
+        quantity: 1,
+        unitPrice: partyPack.price,
+        image: partyPack.coverImage || partyPack.thumbnail || partyPack.images?.[0],
+        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
+      });
+      if (added) {
+        toast.success("Added to cart", { description: partyPack.name });
+      }
     },
-    [handleAddToCart, bySource],
+    [addItem, bySource, catalogItemMap],
   );
 
   const handleAddProduct = useCallback(

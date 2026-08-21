@@ -323,9 +323,19 @@ export default function CartPage() {
                         <h3 className="text-sm font-medium truncate">
                           {item.name}
                         </h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {item.variantName}
-                        </p>
+                        {item.bundleItems && item.bundleItems.length > 0 ? (
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {item.bundleItems.map((bi, i) => (
+                              <span key={i}>
+                                {bi.quantity}× {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {item.variantName}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 mt-2">
                           <p className="text-sm font-semibold">
                             {formatCurrency(item.unitPrice)}
@@ -392,7 +402,7 @@ export default function CartPage() {
                     className="flex items-center justify-between text-sm"
                   >
                     <span className="truncate text-muted-foreground mr-2">
-                      {item.name} ({item.variantName}) &times;{item.quantity}
+                      {item.name}{item.bundleItems && item.bundleItems.length > 0 ? "" : ` (${item.variantName})`} &times;{item.quantity}
                     </span>
                     <span className="shrink-0 font-medium">
                       {formatCurrency(item.totalPrice)}
