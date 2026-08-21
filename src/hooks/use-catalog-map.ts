@@ -16,7 +16,7 @@ const MAX_BUSINESS_UNITS = 4;
 
 export function useCatalogItemMap(
   businessUnits: BusinessUnit[] | undefined
-): { bySource: Map<string, CatalogItem>; isLoading: boolean } {
+): { bySource: Map<string, CatalogItem>; catalogItemMap: Map<string, CatalogItem>; isLoading: boolean } {
   const buIds = useMemo(
     () => (businessUnits ?? []).slice(0, MAX_BUSINESS_UNITS).map((bu) => bu._id),
     [businessUnits]

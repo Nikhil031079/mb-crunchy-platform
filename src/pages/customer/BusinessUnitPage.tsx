@@ -104,59 +104,6 @@ export default function BusinessUnitPage() {
   const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
   const onCloseModal = () => setSelectedItem(null);
 
-  // Mapping functions for Combo/PartyPack → CatalogItem
-  const mapComboToCatalogItem = useCallback((combo: Combo): CatalogItem => ({
-    _id: combo._id,
-    _creationTime: combo._creationTime,
-    createdAt: combo.createdAt,
-    updatedAt: combo.updatedAt,
-    businessUnitId: combo.businessUnitId,
-    itemType: "combo" as const,
-    sourceId: combo._id,
-    name: combo.name,
-    slug: combo.slug,
-    description: combo.description,
-    price: combo.price,
-    compareAtPrice: combo.compareAtPrice,
-    coverImage: combo.coverImage,
-    thumbnail: combo.thumbnail,
-    tags: [],
-    status: combo.status,
-    featured: combo.featured,
-    displayOrder: combo.displayOrder,
-    metaTitle: combo.metaTitle,
-    metaDescription: combo.metaDescription,
-    metaKeywords: combo.metaKeywords,
-    canonicalUrl: combo.canonicalUrl,
-    deletedAt: combo.deletedAt,
-  }), []);
-
-  const mapPartyPackToCatalogItem = useCallback((pack: PartyPack): CatalogItem => ({
-    _id: pack._id,
-    _creationTime: pack._creationTime,
-    createdAt: pack.createdAt,
-    updatedAt: pack.updatedAt,
-    businessUnitId: pack.businessUnitId,
-    itemType: "partyPack" as const,
-    sourceId: pack._id,
-    name: pack.name,
-    slug: pack.slug,
-    description: pack.description,
-    price: pack.price,
-    compareAtPrice: pack.compareAtPrice,
-    coverImage: pack.coverImage,
-    thumbnail: pack.thumbnail,
-    tags: [],
-    status: pack.status,
-    featured: pack.featured,
-    displayOrder: pack.displayOrder,
-    metaTitle: pack.metaTitle,
-    metaDescription: pack.metaDescription,
-    metaKeywords: pack.metaKeywords,
-    canonicalUrl: pack.canonicalUrl,
-    deletedAt: pack.deletedAt,
-  }), []);
-
   // Cart
   const { addItem } = useCart();
 
@@ -244,8 +191,9 @@ export default function BusinessUnitPage() {
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
 
-  // Catalog item map for combos/party packs → resolves sourceId to catalogItem._id
-  const { bySource } = useCatalogItemMap([businessUnit!].filter(Boolean) as BusinessUnit[]);
+  const { bySource, catalogItemMap } = useCatalogItemMap(
+    businessUnit ? [businessUnit] : undefined
+  );
 
   // ==========================================================================
   // Derived State
@@ -1000,7 +948,10 @@ export default function BusinessUnitPage() {
                   combo={combo}
                   index={index}
                   onAddToCart={handleAddCombo}
-                  onOpenItemDetails={() => setSelectedItem(mapComboToCatalogItem(combo))}
+                  onOpenItemDetails={() => {
+                    const catalogItem = bySource.get(combo._id);
+                    if (catalogItem) setSelectedItem(catalogItem);
+                  }}
                   getItemName={(catalogItemId) => catalogItemMap.get(catalogItemId)?.name}
                 />
               ))}
@@ -1052,7 +1003,10 @@ export default function BusinessUnitPage() {
                   partyPack={pack}
                   index={index}
                   onAddToCart={handleAddPartyPack}
-                  onOpenItemDetails={() => setSelectedItem(mapPartyPackToCatalogItem(pack))}
+                  onOpenItemDetails={() => {
+                    const catalogItem = bySource.get(pack._id);
+                    if (catalogItem) setSelectedItem(catalogItem);
+                  }}
                   getItemName={(catalogItemId) => catalogItemMap.get(catalogItemId)?.name}
                 />
               ))}

@@ -5,7 +5,7 @@ import { Combine } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
-import { useCart } from "@/stores/cart";
+import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
@@ -24,7 +24,7 @@ interface ComboOffersSectionProps {
 
 export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOffersSectionProps) {
   const navigate = useNavigate();
-  const { addItem } = useCart();
+  const addCallback = useAddToCart();
   const { bySource } = useCatalogItemMap(businessUnits);
 
   const combosEnabled = businessUnits.filter((bu) => bu.enableCombos);
@@ -80,21 +80,9 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
         });
         return;
       }
-      const added = await addItem({
-        catalogItemId: catalogItem._id,
-        itemType: "combo",
-        businessUnitId: combo.businessUnitId,
-        name: combo.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: combo.price,
-        image: combo.coverImage || combo.thumbnail || combo.images?.[0],
-      });
-      if (added) {
-        toast.success("Added to cart", { description: combo.name });
-      }
+      addCallback(catalogItem);
     },
-    [addItem, bySource]
+    [addCallback, bySource]
   );
 
   if (isLoading) {

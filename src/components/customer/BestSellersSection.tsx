@@ -2,12 +2,11 @@ import { useMemo, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { TrendingUp } from "lucide-react";
-import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
 import { cn } from "@/lib/utils";
-import { useCart } from "@/stores/cart";
+import { useAddToCart } from "@/hooks/use-add-to-cart";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard, ProductCardSkeleton } from "./ProductCard";
@@ -25,7 +24,11 @@ interface BestSellersSectionProps {
 
 export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
   const navigate = useNavigate();
-  const { addItem } = useCart();
+  const addCallback = useAddToCart();
+  const handleAddToCart = useCallback(
+    (product: CatalogItem | CardProduct) => addCallback(product as CatalogItem),
+    [addCallback],
+  );
 
   const buSlugsById = useMemo(() => {
     const map = new Map<string, string>();
@@ -71,26 +74,6 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
   }, [r0, r1, r2, r3]);
 
   const firstBuSlug = businessUnits[0]?.slug;
-
-  const handleAddToCart = useCallback(
-    async (product: CatalogItem | CardProduct) => {
-      const item = product as CatalogItem;
-      const added = await addItem({
-        catalogItemId: item._id,
-        itemType: item.itemType,
-        businessUnitId: item.businessUnitId,
-        name: item.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: item.price ?? 0,
-        image: item.coverImage || item.thumbnail,
-      });
-      if (added) {
-        toast.success("Added to cart", { description: item.name });
-      }
-    },
-    [addItem],
-  );
 
   if (isLoading) {
     return (

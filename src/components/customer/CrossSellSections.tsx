@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
-import { useCart } from "@/stores/cart";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 import { filterCatalogItemIds } from "@/utils";
@@ -33,7 +32,6 @@ export function CrossSellSections({
   businessUnit,
   excludeIds,
 }: CrossSellSectionsProps) {
-  const { addItem } = useCart();
   const handleAddToCart = useAddToCart();
   const { bySource } = useCatalogItemMap([businessUnit]);
 
@@ -69,21 +67,9 @@ export function CrossSellSections({
         });
         return;
       }
-      const added = await addItem({
-        catalogItemId: catalogItem._id,
-        itemType: "combo",
-        businessUnitId: combo.businessUnitId,
-        name: combo.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: combo.price,
-        image: combo.coverImage || combo.thumbnail || combo.images?.[0],
-      });
-      if (added) {
-        toast.success("Added to cart", { description: combo.name });
-      }
+      handleAddToCart(catalogItem);
     },
-    [addItem, bySource],
+    [handleAddToCart, bySource],
   );
 
   const handleAddPartyPack = useCallback(
@@ -95,21 +81,9 @@ export function CrossSellSections({
         });
         return;
       }
-      const added = await addItem({
-        catalogItemId: catalogItem._id,
-        itemType: "partyPack",
-        businessUnitId: partyPack.businessUnitId,
-        name: partyPack.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: partyPack.price,
-        image: partyPack.coverImage || partyPack.thumbnail || partyPack.images?.[0],
-      });
-      if (added) {
-        toast.success("Added to cart", { description: partyPack.name });
-      }
+      handleAddToCart(catalogItem);
     },
-    [addItem, bySource],
+    [handleAddToCart, bySource],
   );
 
   const handleAddProduct = useCallback(

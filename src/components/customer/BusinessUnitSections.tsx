@@ -7,15 +7,16 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 
 import { cn } from "@/lib/utils";
-import { useCart } from "@/stores/cart";
+import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
-import { ProductCard, type CardProduct } from "./ProductCard";
+import { ProductCard } from "./ProductCard";
 import { PartyPackCard } from "./PartyPackCard";
 import { CardGridSkeleton } from "./Skeleton";
 
 import type { BusinessUnit, CatalogItem, PartyPack } from "@/types";
+import type { CardProduct } from "./ProductCard";
 
 // ============================================================================
 // BusinessUnitSections — renders per-business-unit storefront sections
@@ -59,26 +60,10 @@ function BusinessUnitSection({
   const { bySource } = useCatalogItemMap([bu]);
 
   const navigate = useNavigate();
-  const { addItem } = useCart();
-
+  const addCallback = useAddToCart();
   const handleAddToCart = useCallback(
-    async (product: CatalogItem | CardProduct) => {
-      const item = product as CatalogItem;
-      await addItem({
-        catalogItemId: item._id,
-        itemType: "product",
-        businessUnitId: bu._id,
-        name: item.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: item.price ?? 0,
-        image: item.coverImage || item.thumbnail,
-      });
-      toast.success("Added to cart", {
-        description: `${item.name}`,
-      });
-    },
-    [addItem, bu._id]
+    (product: CatalogItem | CardProduct) => addCallback(product as CatalogItem),
+    [addCallback],
   );
 
   const handleAddPartyPack = useCallback(
@@ -90,21 +75,9 @@ function BusinessUnitSection({
         });
         return;
       }
-      const added = await addItem({
-        catalogItemId: catalogItem._id,
-        itemType: "partyPack",
-        businessUnitId: partyPack.businessUnitId,
-        name: partyPack.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: partyPack.price,
-        image: partyPack.coverImage || partyPack.thumbnail || partyPack.images?.[0],
-      });
-      if (added) {
-        toast.success("Added to cart", { description: partyPack.name });
-      }
+      addCallback(catalogItem);
     },
-    [addItem, bySource]
+    [addCallback, bySource]
   );
 
   const isDataLoaded =

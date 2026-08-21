@@ -296,7 +296,7 @@ export default function ProductPage() {
   const coverSrc = variantImage || productCover;
 
   const isItemInCart = cart.items.some(
-    (item) => item.catalogItemId === product?._id && item.variantName === selectedVariant?.optionValue
+    (item) => item.catalogItemId === catalogItem?._id && item.variantName === selectedVariant?.optionValue
   );
 
   // Gallery images: variant image first, then product images
@@ -1232,10 +1232,10 @@ export default function ProductPage() {
       {/* FREQUENTLY BOUGHT TOGETHER + CROSS-SELL                            */}
       {/* ================================================================== */}
 
-      {product && businessUnit && (
+      {product && businessUnit && catalogItem && (
         <>
           <FrequentlyBoughtTogetherSection
-            catalogItemId={product._id}
+            catalogItemId={catalogItem._id}
             businessUnitId={businessUnit._id}
             businessUnits={[businessUnit]}
             productName={product.name}

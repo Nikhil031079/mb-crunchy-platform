@@ -5,7 +5,7 @@ import { PartyPopper } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
-import { useCart } from "@/stores/cart";
+import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 
 import { SectionHeader } from "./SectionHeader";
@@ -33,7 +33,7 @@ export function PartyPacksSection({
   onOpenItemDetails,
 }: PartyPacksSectionProps) {
   const navigate = useNavigate();
-  const { addItem } = useCart();
+  const addCallback = useAddToCart();
   const { bySource } = useCatalogItemMap(businessUnits);
 
   const packsEnabled = useMemo(
@@ -92,21 +92,9 @@ export function PartyPacksSection({
         });
         return;
       }
-      const added = await addItem({
-        catalogItemId: catalogItem._id,
-        itemType: "partyPack",
-        businessUnitId: pack.businessUnitId,
-        name: pack.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: pack.price,
-        image: pack.coverImage || pack.thumbnail || pack.images?.[0],
-      });
-      if (added) {
-        toast.success("Added to cart", { description: pack.name });
-      }
+      addCallback(catalogItem);
     },
-    [addItem, bySource]
+    [addCallback, bySource]
   );
 
   if (isLoading) {
