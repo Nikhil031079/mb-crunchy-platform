@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // MB CRUNCHY - Convex Database Schema (v1.2 + Auth)
 // Unified schema: auth tables + all business tables
 // ============================================================================
@@ -72,7 +72,7 @@ const categories = defineTable({
   .index("by_status", ["status"]);
 
 // ============================================================================
-// PRODUCTS (Catalog only — stock moved to inventory)
+// PRODUCTS (Catalog only ΓÇö stock moved to inventory)
 // ============================================================================
 
 const productVariants = v.object({
@@ -328,7 +328,7 @@ const offers = defineTable({
   .index("by_active_period", ["startsAt", "endsAt"]);
 
 // ============================================================================
-// DELIVERY POLICIES (Global — not BU-owned)
+// DELIVERY POLICIES (Global ΓÇö not BU-owned)
 // ============================================================================
 
 const deliveryPolicies = defineTable({
@@ -400,10 +400,13 @@ const orders = defineTable({
     v.literal("cancelled"), v.literal("refunded")
   ),
   paymentStatus: v.union(
-    v.literal("pending"), v.literal("pending_verification"), v.literal("paid"), v.literal("failed"), v.literal("refunded"), v.literal("rejected")
+    v.literal("pending"), v.literal("paid"), v.literal("failed"), v.literal("refunded")
   ),
   paymentMethod: v.optional(v.string()),
   paymentReference: v.optional(v.string()),
+  razorpayOrderId: v.optional(v.string()),
+  razorpayPaymentId: v.optional(v.string()),
+  razorpaySignature: v.optional(v.string()),
   offerId: v.optional(v.id("offers")),
   offerCode: v.optional(v.string()),
   loyaltyPointsToRedeem: v.optional(v.number()),
@@ -418,7 +421,9 @@ const orders = defineTable({
   .index("by_customer", ["customerId"])
   .index("by_status", ["status"])
   .index("by_phone", ["customerPhone"])
-  .index("by_idempotency_key", ["idempotencyKey"]);
+  .index("by_idempotency_key", ["idempotencyKey"])
+  .index("by_razorpayOrderId", ["razorpayOrderId"])
+  .index("by_razorpayPaymentId", ["razorpayPaymentId"]);
 
 // ============================================================================
 // ORDER ACTIVITIES (Audit timeline for the order lifecycle)
@@ -432,8 +437,6 @@ const orderActivities = defineTable({
     v.literal("payment_pending"),
     v.literal("payment_verified"),
     v.literal("payment_failed"),
-    v.literal("payment_rejected"),
-    v.literal("payment_reopened"),
     v.literal("order_accepted"),
     v.literal("preparing"),
     v.literal("ready"),
@@ -523,7 +526,7 @@ const addresses = defineTable({
   .index("by_default", ["customerId", "isDefault"]);
 
 // ============================================================================
-// LOYALTY SETTINGS (Single record — configurable loyalty program)
+// LOYALTY SETTINGS (Single record ΓÇö configurable loyalty program)
 // ============================================================================
 
 const loyaltySettings = defineTable({
@@ -590,7 +593,7 @@ const loyaltyTransactions = defineTable({
   .index("by_order", ["orderId"]);
 
 // ============================================================================
-// CUSTOMER COLLECTIONS (Generic — favorites, wishlist, recently viewed, etc.)
+// CUSTOMER COLLECTIONS (Generic ΓÇö favorites, wishlist, recently viewed, etc.)
 // ============================================================================
 
 const customerCollections = defineTable({
@@ -636,7 +639,7 @@ const deliveryZones = defineTable({
   .index("by_is_default", ["isDefault"]);
 
 // ============================================================================
-// CONTENT (Generic — replaces banners with hero, promo, announcement, etc.)
+// CONTENT (Generic ΓÇö replaces banners with hero, promo, announcement, etc.)
 // ============================================================================
 
 const content = defineTable({
@@ -722,7 +725,7 @@ const notifications = defineTable({
   .index("by_channel", ["businessUnitId", "channel"]);
 
 // ============================================================================
-// ANALYTICS — Daily Metrics
+// ANALYTICS ΓÇö Daily Metrics
 // ============================================================================
 
 const dailyMetrics = defineTable({
@@ -742,7 +745,7 @@ const dailyMetrics = defineTable({
   .index("by_date", ["date"]);
 
 // ============================================================================
-// Analytics — Event Log (for raw view/search data)
+// Analytics ΓÇö Event Log (for raw view/search data)
 // ============================================================================
 
 const analyticsEvents = defineTable({
@@ -764,7 +767,7 @@ const analyticsEvents = defineTable({
   .index("by_catalog_item", ["catalogItemId"]);
 
 // ============================================================================
-// SETTINGS (Simplified — WhatsApp moved to notifications)
+// SETTINGS (Simplified ΓÇö WhatsApp moved to notifications)
 // ============================================================================
 
 const settings = defineTable({

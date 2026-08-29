@@ -34,7 +34,6 @@ const STATUS_FILTERS = [
 
 const PAYMENT_FILTERS = [
   "all",
-  "pending_verification",
   "paid",
   "failed",
   "refunded",
@@ -53,19 +52,15 @@ const STATUS_COLORS: Record<string, string> = {
 
 const PAYMENT_LABELS: Record<string, string> = {
   pending: "Payment pending",
-  pending_verification: "Awaiting payment verification",
   paid: "Payment verified",
   failed: "Payment failed",
   refunded: "Refunded",
-  rejected: "Payment not confirmed",
 };
 
 const PAYMENT_COLORS: Record<string, string> = {
   pending: "text-amber-600",
-  pending_verification: "text-amber-600",
   paid: "text-emerald-600",
   failed: "text-red-600",
-  rejected: "text-red-600",
   refunded: "text-gray-500",
 };
 
@@ -365,9 +360,7 @@ export default function OrderHistoryPage() {
                         )}
 
                         {/* Payment pending / continuation */}
-                        {(order.paymentStatus === "pending_verification" ||
-                          order.paymentStatus === "failed" ||
-                          order.paymentStatus === "rejected" ||
+                        {(order.paymentStatus === "failed" ||
                           order.status === "cancelled" ||
                           order.status === "refunded") && (
                           <PaymentPendingCard

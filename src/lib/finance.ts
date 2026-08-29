@@ -5,8 +5,6 @@ import type { Order } from "@/types";
 //
 //   Orders            = every order in the window
 //   Paid Revenue      = paymentStatus === "paid" only
-//   Pending Revenue   = paymentStatus === "pending_verification"
-//                       (never cancelled/refunded orders)
 //   Cancelled         = cancelled orders
 //   Refunded          = refunded orders
 //   Net Revenue       = Paid Revenue − Refunded amount
@@ -21,20 +19,10 @@ export function isPaid(o: RevenueOrder): boolean {
   return o.paymentStatus === "paid";
 }
 
-export function isPendingRevenue(o: RevenueOrder): boolean {
-  return (
-    o.paymentStatus === "pending_verification" &&
-    o.status !== "cancelled" &&
-    o.status !== "refunded"
-  );
-}
-
 export interface RevenueMetrics {
   totalOrders: number;
   paidRevenue: number;
   paidOrderCount: number;
-  pendingRevenue: number;
-  pendingOrderCount: number;
   cancelledOrders: number;
   cancelledAmount: number;
   refundedOrders: number;
@@ -46,8 +34,6 @@ export function computeRevenueMetrics(orders: RevenueOrder[]): RevenueMetrics {
   let totalOrders = 0;
   let paidRevenue = 0;
   let paidOrderCount = 0;
-  let pendingRevenue = 0;
-  let pendingOrderCount = 0;
   let cancelledOrders = 0;
   let cancelledAmount = 0;
   let refundedOrders = 0;
@@ -71,9 +57,6 @@ export function computeRevenueMetrics(orders: RevenueOrder[]): RevenueMetrics {
     if (isPaid(o)) {
       paidRevenue += o.total;
       paidOrderCount += 1;
-    } else if (isPendingRevenue(o)) {
-      pendingRevenue += o.total;
-      pendingOrderCount += 1;
     }
   }
 
@@ -81,8 +64,6 @@ export function computeRevenueMetrics(orders: RevenueOrder[]): RevenueMetrics {
     totalOrders,
     paidRevenue,
     paidOrderCount,
-    pendingRevenue,
-    pendingOrderCount,
     cancelledOrders,
     cancelledAmount,
     refundedOrders,

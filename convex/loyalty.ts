@@ -148,7 +148,7 @@ export async function getMaxRedeemableInternal(
 
 /**
  * Server-authoritative loyalty redemption. Called atomically during order
- * creation (local/pickup) or at claimPayment (outside-area after quote
+ * creation (local/pickup) or at finalizePaidOrder (outside-area after quote
  * acceptance). Validates the customer's available points, clamps the request
  * to the maximum redeemable, deducts points, and creates a ledger entry.
  *

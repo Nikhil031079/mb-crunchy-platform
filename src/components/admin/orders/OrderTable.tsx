@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { STATUS_COLORS } from "@/constants";
 import { cn } from "@/lib/utils";
 
-import type { OrderRecord, OrderSortKey, PaymentStatus, SortDirection } from "./types";
-import { getNextStatus, isTerminalStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS, DELIVERY_TYPE_LABELS, DELIVERY_QUOTE_STATUS_LABELS, DELIVERY_QUOTE_STATUS_COLORS, canReopenPaymentVerification } from "./types";
+import type { OrderRecord, OrderSortKey, SortDirection } from "./types";
+import { getNextStatus, isTerminalStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS, DELIVERY_TYPE_LABELS, DELIVERY_QUOTE_STATUS_LABELS, DELIVERY_QUOTE_STATUS_COLORS } from "./types";
 
 // ---------------------------------------------------------------------------
 // Elapsed timer (kitchen queue)
@@ -71,8 +71,6 @@ interface OrderTableProps {
   onViewDetail: (order: OrderRecord) => void;
   onQuickStatus: (order: OrderRecord) => void;
   onCancel: (order: OrderRecord) => void;
-  onUpdatePaymentStatus: (order: OrderRecord, paymentStatus: PaymentStatus) => void;
-  onReopenPaymentVerification: (order: OrderRecord) => void;
   onEnterQuote: (order: OrderRecord) => void;
   selectedIds?: ReadonlySet<string>;
   onToggleSelect?: (orderId: string) => void;
@@ -83,7 +81,7 @@ interface OrderTableProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onUpdatePaymentStatus, onReopenPaymentVerification, onEnterQuote, selectedIds, onToggleSelect, onToggleSelectAll }: OrderTableProps) {
+export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, onSort, onViewDetail, onQuickStatus, onCancel, onEnterQuote, selectedIds, onToggleSelect, onToggleSelectAll }: OrderTableProps) {
   const hasSelection = Boolean(onToggleSelect);
   const skeletonCols = hasSelection ? 10 : 9;
 
@@ -168,7 +166,7 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={cn("text-xs", order.paymentStatus === "paid" ? "border-emerald-200 bg-emerald-500/10 text-emerald-700" : order.paymentStatus === "pending_verification" ? "border-amber-200 bg-amber-500/10 text-amber-700" : order.paymentStatus === "rejected" ? "border-red-200 bg-red-500/10 text-red-700" : "border-muted-foreground/20 bg-muted/50 text-muted-foreground")}>
+                  <Badge variant="outline" className={cn("text-xs", order.paymentStatus === "paid" ? "border-emerald-200 bg-emerald-500/10 text-emerald-700" : order.paymentStatus === "failed" ? "border-red-200 bg-red-500/10 text-red-700" : order.paymentStatus === "refunded" ? "border-gray-200 bg-gray-500/10 text-gray-700" : "border-muted-foreground/20 bg-muted/50 text-muted-foreground")}>
                     {PAYMENT_STATUS_LABELS[order.paymentStatus]}
                   </Badge>
                 </TableCell>
@@ -198,27 +196,6 @@ export function OrderTable({ orders, isLoading = false, sortKey, sortDirection, 
                     {order.status !== "delivered" && order.status !== "cancelled" && order.status !== "refunded" && (
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive" onClick={() => onCancel(order)}>
                         Cancel
-                      </Button>
-                    )}
-                    {order.paymentStatus === "pending_verification" && !isTerminalStatus(order.status) && (
-                      <>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-emerald-600" onClick={() => onUpdatePaymentStatus(order, "paid")}>
-                          Pay
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive" onClick={() => onUpdatePaymentStatus(order, "rejected")}>
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                    {canReopenPaymentVerification(order) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-amber-600"
-                        title="Re-open verification so the customer can retry payment"
-                        onClick={() => onReopenPaymentVerification(order)}
-                      >
-                        Re-open
                       </Button>
                     )}
                     {order.deliveryType === "outside_area" && order.deliveryQuoteRequired && order.deliveryQuoteStatus === "pending" && !isTerminalStatus(order.status) && (

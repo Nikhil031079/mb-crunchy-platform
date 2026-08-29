@@ -25,7 +25,6 @@ import {
   Truck,
   Trophy,
   ChefHat,
-  Wallet,
 } from "lucide-react";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -87,7 +86,6 @@ export default function DashboardPage() {
     const todayMetrics = computeRevenueMetrics(todayOrders);
     const yesterdayMetrics = computeRevenueMetrics(yesterdayOrders);
     const todayRevenue = todayMetrics.paidRevenue;
-    const todayPendingRevenue = todayMetrics.pendingRevenue;
     const yesterdayRevenue = yesterdayMetrics.paidRevenue;
 
     const revenueChange =
@@ -108,7 +106,6 @@ export default function DashboardPage() {
 
     return {
       todayRevenue,
-      todayPendingRevenue,
       revenueChange,
       todayOrderCount: todayOrders.length,
       totalOrders: orders.length,
@@ -251,13 +248,6 @@ export default function DashboardPage() {
               <ShoppingCart className="size-4 text-blue-500" />
               <span className="text-sm font-medium">{stats.todayOrderCount}</span>
               <span className="text-xs text-muted-foreground">today</span>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border/60 px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <Wallet className="size-4 text-amber-500" />
-              <span className="text-sm font-medium">{formatCurrency(stats.todayPendingRevenue)}</span>
-              <span className="text-xs text-muted-foreground">pending collection</span>
             </div>
           </div>
           <div className="rounded-xl border border-border/60 px-4 py-2.5">

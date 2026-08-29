@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingCart,
@@ -38,7 +38,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 // Customer components
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
-import { PaymentQR } from "@/components/customer/PaymentQR";
+import { openRazorpayCheckout } from "@/hooks/use-razorpay";
 import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 import { PhoneInput } from "@/components/customer/PhoneInput";
 
@@ -63,7 +63,7 @@ import type {
 import type { Id } from "@convex/_generated/dataModel";
 
 // ============================================================================
-// CheckoutPage — Contact form, delivery/pickup, order summary, submit
+// CheckoutPage ΓÇö Contact form, delivery/pickup, order summary, submit
 // ============================================================================
 
 interface CheckoutForm {
@@ -91,7 +91,7 @@ const INITIAL_FORM: CheckoutForm = {
 };
 
 // ============================================================================
-// Idempotency key — stable per order intent, reused across retries so a
+// Idempotency key ΓÇö stable per order intent, reused across retries so a
 // double-click, network retry or browser refresh can never create a duplicate
 // order. Persisted in sessionStorage so it survives a refresh mid-submit; it
 // is cleared only after the order is successfully created.
@@ -115,7 +115,7 @@ function clearIdempotencyKey() {
 }
 
 // ============================================================================
-// Order confirmation persistence — survives browser refresh so the
+// Order confirmation persistence ΓÇö survives browser refresh so the
 // confirmation page can recover the order via a reactive Convex query.
 // Used by ALL order flows (outside-area, local delivery, pickup).
 // ============================================================================
@@ -130,7 +130,7 @@ function persistOrderConfirmation(orderNumber: string, phone: string) {
       JSON.stringify({ orderNumber, phone })
     );
   } catch {
-    // localStorage unavailable — non-critical, fallback to fresh state
+    // localStorage unavailable ΓÇö non-critical, fallback to fresh state
   }
 }
 
@@ -167,7 +167,7 @@ function clearPersistedOrderConfirmation() {
 }
 
 // ============================================================================
-// OutsideAreaConfirmation — persistent, backend-driven order status page
+// OutsideAreaConfirmation ΓÇö persistent, backend-driven order status page
 // for outside-area delivery orders. Uses a reactive Convex query so the
 // page updates in real-time when the admin sends a quote.
 // ============================================================================
@@ -234,7 +234,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
     );
   }
 
-  // Non-outside-area order — shouldn't happen, but fallback
+  // Non-outside-area order ΓÇö shouldn't happen, but fallback
   if (order.deliveryType !== "outside_area") {
     clearPersistedOrderConfirmation();
     return (
@@ -262,7 +262,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
     `Hi MB Crunchy,\n\nI have requested outside-area delivery.\n\nOrder: ${order.orderNumber}\nOrder value: ${formatCurrency(orderSubtotal)}\n\nPlease check delivery availability and confirm the delivery charge.`
   );
 
-  // ── QUOTE PENDING ────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ QUOTE PENDING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (quoteStatus === "pending") {
     return (
       <div className="min-h-screen bg-background">
@@ -370,7 +370,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
     );
   }
 
-  // ── QUOTE QUOTED / ACCEPTED / REJECTED — delegate to PaymentPendingCard ──
+  // ΓöÇΓöÇ QUOTE QUOTED / ACCEPTED / REJECTED ΓÇö delegate to PaymentPendingCard ΓöÇΓöÇ
   // PaymentPendingCard handles: quote ready (accept/decline), quote accepted
   // (payment flow), quote rejected (cancelled state).
   const settings = (buSettings ?? null) as { paymentConfig?: { whatsappNumber?: string } } | null;
@@ -396,7 +396,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
             <h1 className="text-2xl font-bold tracking-tight">
               {quoteStatus === "quoted" && "Delivery Quote Ready"}
-              {quoteStatus === "accepted" && "Quote Accepted — Complete Payment"}
+              {quoteStatus === "accepted" && "Quote Accepted ΓÇö Complete Payment"}
               {quoteStatus === "rejected" && "Delivery Quote Declined"}
               {!quoteStatus && "Order Confirmed"}
             </h1>
@@ -462,7 +462,8 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const { cart, clearCart, itemCount, dismissNotice } = useCart();
   const createOrder = useMutation(api.orders.create);
-  const claimPayment = useMutation(api.orders.claimPayment);
+  const createRazorpayOrder = useAction(api.razorpay.createOrder);
+  const verifyRazorpayPayment = useAction(api.razorpay.verifyPayment);
 
   // ==========================================================================
   // State
@@ -476,7 +477,6 @@ export default function CheckoutPage() {
     orderId: string;
   } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "processing_payment" | "creating_order">("idle");
-  const [showPaymentQR, setShowPaymentQR] = useState(false);
   const [pendingOrder, setPendingOrder] = useState<{
     orderId: string;
     orderNumber: string;
@@ -492,7 +492,7 @@ export default function CheckoutPage() {
   const [redeemPoints, setRedeemPoints] = useState(0);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
-  // Order confirmation lookup — after order creation, we subscribe to the
+  // Order confirmation lookup ΓÇö after order creation, we subscribe to the
   // authoritative order record from Convex so the confirmation screen always
   // shows correct totals (not derived from the now-empty cart).
   const [confirmLookup, setConfirmLookup] = useState<{ phone: string; orderNumber: string } | null>(null);
@@ -508,7 +508,7 @@ export default function CheckoutPage() {
   );
 
   // ==========================================================================
-  // Data Fetching — BU settings + global delivery policy
+  // Data Fetching ΓÇö BU settings + global delivery policy
   // ==========================================================================
 
   // Use the first business unit from cart for settings queries
@@ -645,7 +645,7 @@ export default function CheckoutPage() {
   }, [cart.subtotal, cart.discount, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount]);
 
   // ==========================================================================
-  // Defensive normalization — deliveryType is only meaningful for delivery orders.
+  // Defensive normalization ΓÇö deliveryType is only meaningful for delivery orders.
   // When orderType is "pickup", effectiveDeliveryType is undefined so stale
   // outside_area state can never leak into pricing, validation, or submission.
   // ==========================================================================
@@ -687,7 +687,7 @@ export default function CheckoutPage() {
       title: couponValidation.title,
     });
     toast.success("Coupon applied!", {
-      description: `${couponValidation.title} — ${formatCurrency(couponValidation.discount ?? 0)} off`,
+      description: `${couponValidation.title} ΓÇö ${formatCurrency(couponValidation.discount ?? 0)} off`,
     });
   }, [form.couponCode, couponValidation, cart.subtotal]);
 
@@ -829,7 +829,7 @@ export default function CheckoutPage() {
           deliveryZoneId: undefined,
           deliveryNotes: form.deliveryNotes.trim() || undefined,
           offerCode: couponApplied?.valid ? form.couponCode.trim() : undefined,
-          paymentMethod: "upi_qr",
+          paymentMethod: "razorpay",
           idempotencyKey: getOrCreateIdempotencyKey(),
           loyaltyPointsToRedeem: redeemPoints > 0 ? redeemPoints : undefined,
         });
@@ -860,7 +860,55 @@ export default function CheckoutPage() {
             description: "We'll contact you with a delivery quote shortly.",
           });
         } else {
-          setShowPaymentQR(true);
+          // Launch Razorpay checkout
+          setPaymentStatus("processing_payment");
+          const razorpayResult = await openRazorpayCheckout({
+            orderId: newOrderId as Id<"orders">,
+            amount: pricing.total,
+            customerName: form.customerName.trim(),
+            customerPhone: form.customerPhone.trim(),
+            customerEmail: form.customerEmail.trim() || undefined,
+            businessName: SITE_NAME,
+            createRazorpayOrder: (args) => createRazorpayOrder(args as any),
+            verifyRazorpayPayment: (args) => verifyRazorpayPayment(args as any),
+          });
+
+          if (razorpayResult.success) {
+            // Payment verified — finalizePaidOrder runs server-side
+            setOrderSuccess({
+              orderNumber: newOrderNumber,
+              orderId: newOrderId,
+            });
+            setConfirmLookup({ phone: form.customerPhone.trim(), orderNumber: newOrderNumber });
+            persistOrderConfirmation(newOrderNumber, form.customerPhone.trim());
+            clearCart();
+            clearIdempotencyKey();
+            toast.success("Payment successful!", {
+              description: "Your order is being prepared.",
+            });
+          } else if (razorpayResult.error) {
+            // Payment failed — show error but keep order for retry
+            setPendingOrder({
+              orderId: newOrderId,
+              orderNumber: newOrderNumber,
+              amount: pricing.total,
+              phone: form.customerPhone.trim(),
+            });
+            toast.error("Payment failed", {
+              description: razorpayResult.error,
+            });
+          } else {
+            // Payment cancelled — keep order for retry
+            setPendingOrder({
+              orderId: newOrderId,
+              orderNumber: newOrderNumber,
+              amount: pricing.total,
+              phone: form.customerPhone.trim(),
+            });
+            toast.info("Payment pending", {
+              description: "Your order is reserved. Pay now or complete it later from Track Order.",
+            });
+          }
         }
       } catch (error) {
         const message =
@@ -884,42 +932,56 @@ export default function CheckoutPage() {
   );
 
   // ==========================================================================
-  // Payment Claimed — order is placed and the customer says they've paid.
-  // Show the confirmation only here; closing the QR modal without paying
-  // must never look like a successful order.
+  // Payment Success — handled by Razorpay + finalizePaidOrder (server-side).
   // ==========================================================================
 
-  const handlePaymentClaimed = useCallback(async (reference?: string) => {
+  const handleRetryPayment = useCallback(async () => {
     if (!pendingOrder) return;
-    setShowPaymentQR(false);
-    setOrderSuccess({
-      orderNumber: pendingOrder.orderNumber,
-      orderId: pendingOrder.orderId,
-    });
-    setConfirmLookup({ phone: pendingOrder.phone, orderNumber: pendingOrder.orderNumber });
-    persistOrderConfirmation(pendingOrder.orderNumber, pendingOrder.phone);
-    clearCart();
-    clearIdempotencyKey();
-    toast.success("Order placed!", {
-      description: "Payment is under verification. We'll confirm shortly.",
-    });
-
-    // Record the "I've Paid" claim server-side so the kitchen can see it.
-    // This is a light, idempotent call — it never creates a new order and
-    // never changes payment status on its own.
+    setPaymentStatus("processing_payment");
     try {
-      await claimPayment({
+      const razorpayResult = await openRazorpayCheckout({
         orderId: pendingOrder.orderId as Id<"orders">,
-        phone: pendingOrder.phone,
-        reference: reference?.trim() || undefined,
+        amount: pendingOrder.amount,
+        customerName: form.customerName.trim() || undefined,
+        customerPhone: pendingOrder.phone,
+        customerEmail: form.customerEmail.trim() || undefined,
+        businessName: SITE_NAME,
+        createRazorpayOrder: (args) => createRazorpayOrder(args as any),
+        verifyRazorpayPayment: (args) => verifyRazorpayPayment(args as any),
       });
+
+      if (razorpayResult.success) {
+        setOrderSuccess({
+          orderNumber: pendingOrder.orderNumber,
+          orderId: pendingOrder.orderId,
+        });
+        setConfirmLookup({ phone: pendingOrder.phone, orderNumber: pendingOrder.orderNumber });
+        persistOrderConfirmation(pendingOrder.orderNumber, pendingOrder.phone);
+        clearCart();
+        clearIdempotencyKey();
+        toast.success("Payment successful!", {
+          description: "Your order is being prepared.",
+        });
+      } else if (razorpayResult.error) {
+        toast.error("Payment failed", {
+          description: razorpayResult.error,
+        });
+      } else {
+        toast.info("Payment pending", {
+          description: "Your order is reserved. Pay now or complete it later from Track Order.",
+        });
+      }
     } catch {
-      // The success screen is already shown; a failed claim is non-blocking.
+      toast.error("Payment failed", {
+        description: "Please try again or contact support.",
+      });
+    } finally {
+      setPaymentStatus("idle");
     }
-  }, [pendingOrder, clearCart, claimPayment]);
+  }, [pendingOrder, form, createRazorpayOrder, verifyRazorpayPayment, clearCart]);
 
   // ==========================================================================
-  // Persisted order confirmation — recovers confirmation page on refresh
+  // Persisted order confirmation ΓÇö recovers confirmation page on refresh
   // (initialized above via activeLookup = confirmLookup ?? persistedOrder)
   // ==========================================================================
 
@@ -943,18 +1005,14 @@ export default function CheckoutPage() {
     const paymentLabel = order
       ? order.paymentStatus === "paid"
         ? "Paid"
-        : order.paymentStatus === "pending_verification"
-          ? "Pending Verification"
-          : order.paymentStatus === "failed"
-            ? "Failed"
-            : order.paymentStatus === "rejected"
-              ? "Rejected"
-              : "Pending"
-      : "Pending Verification";
+        : order.paymentStatus === "failed"
+          ? "Failed"
+          : "Pending"
+      : "Processing";
     const paymentColor = order
       ? order.paymentStatus === "paid"
         ? "text-emerald-600"
-        : order.paymentStatus === "failed" || order.paymentStatus === "rejected"
+        : order.paymentStatus === "failed"
           ? "text-red-600"
           : "text-amber-600"
       : "text-amber-600";
@@ -973,8 +1031,8 @@ export default function CheckoutPage() {
                   ? "Delivered"
                   : order.status === "cancelled"
                     ? "Cancelled"
-                    : "Awaiting Payment Verification"
-      : "Awaiting Payment Verification";
+                    : "Processing"
+      : "Processing";
     const orderStatusColor = order
       ? order.status === "confirmed" || order.status === "preparing" || order.status === "ready" || order.status === "out_for_delivery" || order.status === "delivered"
         ? "text-emerald-600"
@@ -1019,10 +1077,10 @@ export default function CheckoutPage() {
               transition={{ delay: 0.25 }}
             >
               <h1 className="text-2xl font-bold tracking-tight">
-                Payment Submitted for Verification
+                Payment Recorded
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Payment recorded — we&apos;ll verify it and start preparing your order shortly.
+                Your payment has been recorded. We&apos;ll start preparing your order shortly.
               </p>
             </motion.div>
 
@@ -1134,17 +1192,13 @@ export default function CheckoutPage() {
       const paymentLabel =
         order.paymentStatus === "paid"
           ? "Paid"
-          : order.paymentStatus === "pending_verification"
-            ? "Pending Verification"
-            : order.paymentStatus === "failed"
-              ? "Failed"
-              : order.paymentStatus === "rejected"
-                ? "Rejected"
-                : "Pending";
+          : order.paymentStatus === "failed"
+            ? "Failed"
+            : "Pending";
       const paymentColor =
         order.paymentStatus === "paid"
           ? "text-emerald-600"
-          : order.paymentStatus === "failed" || order.paymentStatus === "rejected"
+          : order.paymentStatus === "failed"
             ? "text-red-600"
             : "text-amber-600";
       const orderStatusLabel =
@@ -1162,7 +1216,7 @@ export default function CheckoutPage() {
                     ? "Delivered"
                     : order.status === "cancelled"
                       ? "Cancelled"
-                      : "Awaiting Payment Verification";
+                      : "Processing";
       const orderStatusColor =
         order.status === "confirmed" || order.status === "preparing" || order.status === "ready" || order.status === "out_for_delivery" || order.status === "delivered"
           ? "text-emerald-600"
@@ -1194,12 +1248,12 @@ export default function CheckoutPage() {
                 transition={{ delay: 0.25 }}
               >
                 <h1 className="text-2xl font-bold tracking-tight">
-                  {order.paymentStatus === "paid" ? "Order Confirmed" : "Payment Submitted for Verification"}
+                  {order.paymentStatus === "paid" ? "Order Confirmed" : "Payment Recorded"}
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {order.paymentStatus === "paid"
                     ? "Your payment has been verified. We're preparing your order."
-                    : "Payment recorded — we'll verify it and start preparing your order shortly."}
+                    : "Your payment has been recorded. We'll start preparing your order shortly."}
                 </p>
               </motion.div>
 
@@ -1348,7 +1402,7 @@ export default function CheckoutPage() {
           </p>
         </motion.div>
 
-        {/* Loading State — settings still loading */}
+        {/* Loading State ΓÇö settings still loading */}
         {buSettings === undefined && cart.businessUnitIds[0] && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1387,7 +1441,7 @@ export default function CheckoutPage() {
         )}
 
         {/* Payment Pending Banner — order created but payment not confirmed */}
-        {pendingOrder && !showPaymentQR && !orderSuccess && (
+        {pendingOrder && !orderSuccess && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1403,7 +1457,7 @@ export default function CheckoutPage() {
                   </p>
                   <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
                     Your order is reserved for{" "}
-                    {formatCurrency(pendingOrder.amount)}. Complete the UPI
+                    {formatCurrency(pendingOrder.amount)}. Complete the
                     payment to confirm it.
                   </p>
                 </div>
@@ -1411,20 +1465,11 @@ export default function CheckoutPage() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
-                  onClick={() => setShowPaymentQR(true)}
+                  onClick={handleRetryPayment}
                   className="gap-1.5"
                 >
                   <CreditCard className="h-3.5 w-3.5" />
                   Pay Now
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handlePaymentClaimed()}
-                  className="gap-1.5"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  I&apos;ve Paid
                 </Button>
                 <Link to={ROUTES.TRACK_ORDER}>
                   <Button size="sm" variant="ghost" className="gap-1.5">
@@ -1585,7 +1630,7 @@ export default function CheckoutPage() {
                     <div className="rounded-xl border border-border/60 p-6 space-y-4">
                       <h2 className="font-semibold">Delivery Details</h2>
 
-                      {/* Delivery Type Selection — Local vs Outside Area */}
+                      {/* Delivery Type Selection ΓÇö Local vs Outside Area */}
                       <div className="space-y-2">
                         <Label>Delivery Area</Label>
                         <RadioGroup
@@ -1923,7 +1968,7 @@ export default function CheckoutPage() {
                           <div className="text-xs text-muted-foreground">
                             {item.bundleItems.map((bi, i) => (
                               <span key={i}>
-                                {bi.quantity}× {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
+                                {bi.quantity}├ù {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
                               </span>
                             ))}
                           </div>
@@ -1987,7 +2032,7 @@ export default function CheckoutPage() {
                   </div>
                   {couponApplied?.valid && couponApplied.discount && (
                     <p className="text-xs text-emerald-600">
-                      {couponApplied.title} — {formatCurrency(couponApplied.discount)} off
+                      {couponApplied.title} ΓÇö {formatCurrency(couponApplied.discount)} off
                     </p>
                   )}
                   {couponApplied && !couponApplied.valid && couponApplied.error && (
@@ -2199,32 +2244,6 @@ export default function CheckoutPage() {
           </div>
         </form>
       </div>
-
-      {/* UPI Payment QR Modal */}
-      {showPaymentQR && pendingOrder && (
-        <PaymentQR
-          upiId={globalSettings?.paymentConfig?.upiId ?? ""}
-          merchantName={globalSettings?.paymentConfig?.merchantName ?? SITE_NAME}
-          amount={pricing.total}
-          orderNumber={pendingOrder.orderNumber}
-          whatsappNumber={globalSettings?.paymentConfig?.whatsappNumber}
-          onPaid={handlePaymentClaimed}
-          onWhatsApp={() => {
-            const phone = (globalSettings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
-            const msg = encodeURIComponent(
-              `Hi! I've placed order #${pendingOrder.orderNumber} for ${formatCurrency(pricing.total)}. Please confirm my payment.`
-            );
-            window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
-          }}
-          onClose={() => {
-            setShowPaymentQR(false);
-            toast.info("Payment pending", {
-              description:
-                "Your order is reserved. Pay now or complete it later from Track Order.",
-            });
-          }}
-        />
-      )}
     </div>
   );
 }

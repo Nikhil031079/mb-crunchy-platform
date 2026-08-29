@@ -1,93 +1,174 @@
-import { useCallback, useRef } from "react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 // ============================================================================
-// useRazorpay — opens Razorpay checkout and returns payment response
+// Razorpay — Server-validated Standard Checkout
+//
+// Flow:
+//   1. createOrder (server) → Razorpay Order ID
+//   2. Open Razorpay Checkout (browser)
+//   3. verifyPayment (server) → signature verification
+//   4. Returns success / failure
+//
+// The Key Secret never leaves the server. The browser receives only the
+// Key ID and the server-created Order ID.
 // ============================================================================
-
-interface RazorpayPaymentArgs {
-  amount: number;
-  currency?: string;
-  name: string;
-  description?: string;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  /** Pre-fill contact with phone (Razorpay expects this as "contact") */
-}
-
-interface RazorpayPaymentResult {
-  razorpay_payment_id: string;
-  razorpay_order_id?: string;
-  razorpay_signature?: string;
-}
 
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined;
 
-export function useRazorpay() {
-  const processingRef = useRef(false);
+interface RazorpayCheckoutArgs {
+  /** MB Crunchy order ID (created before Razorpay checkout opens). */
+  orderId: Id<"orders">;
+  /** Amount in rupees — server recomputes from its own records, not from this. */
+  amount: number;
+  /** Customer pre-fill. */
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  /** Business name shown in Razorpay checkout. */
+  businessName: string;
+  /** Convex action for creating Razorpay order (from api.razorpay.createOrder). */
+  createRazorpayOrder: (args: { orderId: Id<"orders">; amount: number }) => Promise<{
+    razorpayOrderId: string;
+    keyId: string;
+  }>;
+  /** Convex action for verifying payment (from api.razorpay.verifyPayment). */
+  verifyRazorpayPayment: (args: {
+    orderId: Id<"orders">;
+    razorpayPaymentId: string;
+    razorpayOrderId: string;
+    razorpaySignature: string;
+  }) => Promise<{ verified: boolean }>;
+}
 
-  const openCheckout = useCallback(
-    (args: RazorpayPaymentArgs): Promise<RazorpayPaymentResult> => {
-      if (!RAZORPAY_KEY_ID) {
-        return Promise.reject(
-          new Error("Payment is not configured. Please contact support to enable payments.")
-        );
-      }
+export interface RazorpayCheckoutResult {
+  success: boolean;
+  error?: string;
+}
 
-      if (typeof window.Razorpay === "undefined") {
-        return Promise.reject(
-          new Error("Payment gateway is loading. Please try again in a moment.")
-        );
-      }
+/**
+ * Opens Razorpay Standard Checkout for an already-created MB Crunchy order.
+ * Call this AFTER `orders.create` succeeds.
+ */
+export async function openRazorpayCheckout(
+  args: RazorpayCheckoutArgs
+): Promise<RazorpayCheckoutResult> {
+  // --- Guards ---
+  if (!RAZORPAY_KEY_ID) {
+    return { success: false, error: "Payment is not configured. Please contact support." };
+  }
+  if (typeof window.Razorpay === "undefined") {
+    return { success: false, error: "Payment gateway is loading. Please try again." };
+  }
 
-      if (processingRef.current) {
-        return Promise.reject(new Error("A payment is already in progress."));
-      }
+  try {
+    // Step 1: Create Razorpay Order (server-side).
+    const amountInPaise = Math.round(args.amount * 100);
+    const { razorpayOrderId } = await args.createRazorpayOrder({
+      orderId: args.orderId,
+      amount: amountInPaise,
+    });
 
-      return new Promise((resolve, reject) => {
-        processingRef.current = true;
+    // Step 2: Open Razorpay Checkout (browser).
+    const razorpayResponse = await openRazorpayModal({
+      keyId: RAZORPAY_KEY_ID,
+      orderId: razorpayOrderId,
+      amount: amountInPaise,
+      customerName: args.customerName,
+      customerPhone: args.customerPhone,
+      customerEmail: args.customerEmail,
+      businessName: args.businessName,
+    });
 
-        const options: RazorpayOptions = {
-          key: RAZORPAY_KEY_ID,
-          amount: Math.round(args.amount * 100), // Razorpay expects paise
-          currency: args.currency ?? "INR",
-          name: args.name,
-          description: args.description ?? "Order Payment",
-          handler: (response: RazorpayResponse) => {
-            processingRef.current = false;
-            resolve(response);
-          },
-          prefill: {
-            name: args.customerName,
-            contact: args.customerPhone,
-            email: args.customerEmail,
-          },
-          theme: {
-            color: "#f97316", // Primary orange
-          },
-          modal: {
-            ondismiss: () => {
-              processingRef.current = false;
-              reject(new Error("Payment cancelled."));
-            },
-          },
-        };
+    // Step 3: Verify payment signature (server-side).
+    const { verified } = await args.verifyRazorpayPayment({
+      orderId: args.orderId,
+      razorpayPaymentId: razorpayResponse.razorpay_payment_id,
+      razorpayOrderId: razorpayResponse.razorpay_order_id,
+      razorpaySignature: razorpayResponse.razorpay_signature,
+    });
 
-        try {
-          const rzp = new window.Razorpay(options);
-          rzp.on("payment.failed", (response) => {
-            processingRef.current = false;
-            reject(new Error(response.error.description || "Payment failed."));
+    if (!verified) {
+      return { success: false, error: "Payment verification failed. Please contact support." };
+    }
+
+    return { success: true };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Payment failed. Please try again.";
+    // "Payment cancelled" means user dismissed the modal — not an error to display.
+    if (message === "Payment cancelled.") {
+      return { success: false, error: undefined };
+    }
+    return { success: false, error: message };
+  }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+interface RazorpayModalArgs {
+  keyId: string;
+  orderId: string;
+  amount: number;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  businessName: string;
+}
+
+function openRazorpayModal(args: RazorpayModalArgs): Promise<{
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const options: RazorpayOptions = {
+      key: args.keyId,
+      amount: args.amount,
+      currency: "INR",
+      name: args.businessName,
+      description: "Order Payment",
+      order_id: args.orderId,
+      handler: (response: RazorpayResponse) => {
+        if (response.razorpay_payment_id && response.razorpay_signature) {
+          resolve({
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id ?? args.orderId,
+            razorpay_signature: response.razorpay_signature,
           });
-          rzp.open();
-        } catch (err) {
-          processingRef.current = false;
-          reject(err);
+        } else {
+          reject(new Error("Incomplete payment response."));
         }
-      });
-    },
-    []
-  );
+      },
+      prefill: {
+        name: args.customerName,
+        contact: args.customerPhone,
+        email: args.customerEmail,
+      },
+      theme: {
+        color: "#f97316",
+      },
+      modal: {
+        ondismiss: () => {
+          reject(new Error("Payment cancelled."));
+        },
+      },
+    };
 
-  return { openCheckout, isProcessing: processingRef.current };
+    try {
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", () => {
+        // Do not reject here.
+        // Razorpay Checkout keeps the modal open and allows the customer to retry.
+        // If the customer retries successfully, the handler callback resolves
+        // the existing Promise.
+        // If the customer closes the checkout, ondismiss will reject the Promise.
+      });
+      rzp.open();
+    } catch (err) {
+      reject(err);
+    }
+  });
 }

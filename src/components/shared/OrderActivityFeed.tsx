@@ -40,8 +40,6 @@ const ACTIVITY_META: Record<OrderActivityAction, ActivityMeta> = {
   payment_pending: { label: "Payment Pending", icon: Clock, color: "bg-amber-500/10 text-amber-600" },
   payment_verified: { label: "Payment Verified", icon: BadgeCheck, color: "bg-emerald-500/10 text-emerald-600" },
   payment_failed: { label: "Payment Failed", icon: XCircle, color: "bg-red-500/10 text-red-600" },
-  payment_rejected: { label: "Payment Rejected", icon: XCircle, color: "bg-red-500/10 text-red-600" },
-  payment_reopened: { label: "Payment Verification Re-opened", icon: RotateCcw, color: "bg-amber-500/10 text-amber-600" },
   order_accepted: { label: "Order Accepted", icon: CheckCircle2, color: "bg-emerald-500/10 text-emerald-600" },
   preparing: { label: "Preparing", icon: CookingPot, color: "bg-amber-500/10 text-amber-600" },
   ready: { label: "Ready", icon: PackageCheck, color: "bg-emerald-500/10 text-emerald-600" },

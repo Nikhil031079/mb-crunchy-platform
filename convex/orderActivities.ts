@@ -17,8 +17,6 @@ export const ACTIVITY_ACTIONS = [
   "payment_pending",
   "payment_verified",
   "payment_failed",
-  "payment_rejected",
-  "payment_reopened",
   "order_accepted",
   "preparing",
   "ready",

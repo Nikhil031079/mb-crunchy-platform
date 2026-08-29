@@ -314,8 +314,6 @@ export function PaymentStatusBadge({ status }: { status: string }) {
   const getStatusColor = () => {
     switch (status) {
       case "paid": return "border-emerald-200 bg-emerald-500/10 text-emerald-700";
-      case "pending_verification": return "border-amber-200 bg-amber-500/10 text-amber-700";
-      case "rejected": return "border-red-200 bg-red-500/10 text-red-700";
       case "failed": return "border-red-200 bg-red-500/10 text-red-700";
       case "refunded": return "border-gray-200 bg-gray-500/10 text-gray-700";
       default: return "border-muted-foreground/20 bg-muted/50 text-muted-foreground";
@@ -325,8 +323,6 @@ export function PaymentStatusBadge({ status }: { status: string }) {
   const getStatusLabel = () => {
     switch (status) {
       case "paid": return "Paid";
-      case "pending_verification": return "Pending Verification";
-      case "rejected": return "Payment Rejected";
       case "failed": return "Payment Failed";
       case "refunded": return "Refunded";
       default: return "Pending";

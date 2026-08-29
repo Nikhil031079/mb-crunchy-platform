@@ -118,12 +118,6 @@ function GlobalSettingsSection() {
     primaryColor: "#000000",
     supportEmail: "",
     supportPhone: "",
-    paymentMode: "upi_qr" as "upi_qr" | "razorpay",
-    upiId: "",
-    merchantName: "",
-    whatsappNumber: "",
-    qrDisplayName: "",
-    paymentInstructions: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -138,12 +132,6 @@ function GlobalSettingsSection() {
         primaryColor: globalSettings.primaryColor ?? "#000000",
         supportEmail: globalSettings.supportEmail ?? "",
         supportPhone: extractDigitsForInput(globalSettings.supportPhone ?? ""),
-        paymentMode: globalSettings.paymentConfig?.mode ?? "upi_qr",
-        upiId: globalSettings.paymentConfig?.upiId ?? "",
-        merchantName: globalSettings.paymentConfig?.merchantName ?? "",
-        whatsappNumber: extractDigitsForInput(globalSettings.paymentConfig?.whatsappNumber ?? ""),
-        qrDisplayName: globalSettings.paymentConfig?.qrDisplayName ?? "",
-        paymentInstructions: globalSettings.paymentConfig?.paymentInstructions ?? "",
       });
       setLoaded(true);
     }
@@ -166,12 +154,7 @@ function GlobalSettingsSection() {
         supportEmail: form.supportEmail.trim() || undefined,
         supportPhone: normalizeIndianPhone(form.supportPhone) || undefined,
         paymentConfig: {
-          mode: form.paymentMode,
-          upiId: form.upiId.trim() || undefined,
-          merchantName: form.merchantName.trim() || undefined,
-          whatsappNumber: normalizeIndianPhone(form.whatsappNumber) || undefined,
-          qrDisplayName: form.qrDisplayName.trim() || undefined,
-          paymentInstructions: form.paymentInstructions.trim() || undefined,
+          mode: "razorpay",
         },
       });
       toast.success("Global settings saved");
@@ -281,46 +264,13 @@ function GlobalSettingsSection() {
             Payment Settings
           </h3>
           <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>Payment Mode</Label>
-              <Select value={form.paymentMode} onValueChange={(v) => setForm((f) => ({ ...f, paymentMode: v as "upi_qr" | "razorpay" }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="upi_qr">UPI QR Code</SelectItem>
-                  <SelectItem value="razorpay">Razorpay (Coming Soon)</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="rounded-md border border-muted bg-muted/50 p-4 text-sm text-muted-foreground">
+              Razorpay is configured via server environment variables
+              (<code className="font-mono text-xs">RAZORPAY_KEY_ID</code>,{" "}
+              <code className="font-mono text-xs">RAZORPAY_KEY_SECRET</code>,{" "}
+              <code className="font-mono text-xs">RAZORPAY_WEBHOOK_SECRET</code>).
+              Ensure these are set in your Convex deployment.
             </div>
-            {form.paymentMode === "upi_qr" && (
-              <>
-                <div className="grid gap-2">
-                  <Label>UPI ID <span className="font-normal text-muted-foreground">(required for UPI)</span></Label>
-                  <Input value={form.upiId} onChange={(e) => setForm((f) => ({ ...f, upiId: e.target.value }))} placeholder="yourname@upi" />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Merchant Name <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                  <Input value={form.merchantName} onChange={(e) => setForm((f) => ({ ...f, merchantName: e.target.value }))} placeholder="MB Crunchy" />
-                </div>
-                <div className="grid gap-2">
-                  <Label>QR Display Name <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                  <Input value={form.qrDisplayName} onChange={(e) => setForm((f) => ({ ...f, qrDisplayName: e.target.value }))} placeholder="MB Crunchy" />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Payment Instructions <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                  <Textarea value={form.paymentInstructions} onChange={(e) => setForm((f) => ({ ...f, paymentInstructions: e.target.value }))} placeholder="Scan QR to pay..." rows={2} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>WhatsApp Business Number <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                  <PhoneInput
-                    value={form.whatsappNumber}
-                    onChange={(val) => setForm((f) => ({ ...f, whatsappNumber: val }))}
-                    placeholder="8801756151"
-                  />
-                </div>
-              </>
-            )}
           </div>
         </div>
       </div>

@@ -14,7 +14,7 @@ import { BulkOperationsBar } from "@/components/admin/orders/BulkOperationsBar";
 import { BulkStatusUpdateDialog } from "@/components/admin/orders/BulkStatusUpdateDialog";
 import { BulkCancelDialog } from "@/components/admin/orders/BulkCancelDialog";
 import { BulkRefundDialog } from "@/components/admin/orders/BulkRefundDialog";
-import type { OrderFilters, OrderRecord, OrderSortKey, OrderStatus, PaymentStatus, SortDirection } from "@/components/admin/orders/types";
+import type { OrderFilters, OrderRecord, OrderSortKey, OrderStatus, SortDirection } from "@/components/admin/orders/types";
 import { getNextStatus, PAYMENT_STATUS_LABELS, STATUS_LABELS, DELIVERY_QUOTE_STATUS_LABELS, DELIVERY_QUOTE_STATUS_COLORS } from "@/components/admin/orders/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -299,7 +299,6 @@ export default function OrdersPage() {
   const allOrders = useQuery(api.orders.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const updateStatus = useMutation(api.orders.updateStatus);
-  const reopenPaymentVerification = useMutation(api.orders.reopenPaymentVerification);
   const bulkUpdateStatus = useMutation(api.orderBulk.bulkUpdateStatus);
   const bulkCancel = useMutation(api.orderBulk.bulkCancel);
   const bulkRefund = useMutation(api.orderBulk.bulkRefund);
@@ -352,7 +351,6 @@ export default function OrdersPage() {
     let deliveredCount = 0;
     let cancelledCount = 0;
     let todayRevenue = 0;
-    let todayPendingRevenue = 0;
     let deliveredTotal = 0;
 
     for (const r of records) {
@@ -367,13 +365,12 @@ export default function OrdersPage() {
       if (r.status === "cancelled" || r.status === "refunded") cancelledCount++;
       if (r.createdAt >= todayMs) {
         if (r.paymentStatus === "paid") todayRevenue += r.total;
-        else if (r.paymentStatus === "pending_verification" && r.status !== "cancelled" && r.status !== "refunded") todayPendingRevenue += r.total;
       }
     }
 
     const averageOrderValue = deliveredCount > 0 ? deliveredTotal / deliveredCount : 0;
 
-    return { totalOrders, pendingCount, inProgressCount, outForDeliveryCount, deliveredCount, cancelledCount, todayRevenue, todayPendingRevenue, averageOrderValue };
+    return { totalOrders, pendingCount, inProgressCount, outForDeliveryCount, deliveredCount, cancelledCount, todayRevenue, averageOrderValue };
   }, [records]);
 
   // --- Filtering ---
@@ -606,37 +603,6 @@ export default function OrdersPage() {
     }
   };
 
-  const handlePaymentStatusUpdate = async (order: OrderRecord, paymentStatus: PaymentStatus) => {
-    try {
-      await updateStatus({
-        id: toOrderId(order.id),
-        status: order.status,
-        paymentStatus,
-        sessionToken: getSessionToken()!,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update payment status");
-    }
-  };
-
-  const handleReopenPaymentVerification = async (order: OrderRecord) => {
-    try {
-      const res = await reopenPaymentVerification({
-        sessionToken: getSessionToken()!,
-        orderId: toOrderId(order.id),
-      });
-      if (res.reopened) {
-        toast.success(`${order.orderNumber} — verification re-opened`, {
-          description: "The customer can now retry payment and submit a new claim.",
-        });
-      } else {
-        toast.info(`${order.orderNumber} is already awaiting verification`);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to re-open payment verification");
-    }
-  };
-
   return (
     <div>
       <PageHeader title="Orders" description="Manage customer orders and fulfillment.">
@@ -665,7 +631,6 @@ export default function OrdersPage() {
         <SummaryCard title="Delivered" value={summary.deliveredCount} icon={ShoppingCart} className="text-emerald-600" />
         <SummaryCard title="Cancelled" value={summary.cancelledCount} icon={ShoppingCart} className="text-red-600" />
         <SummaryCard title="Today's Paid Revenue" value={`₹${summary.todayRevenue.toLocaleString()}`} icon={ShoppingCart} className="text-emerald-600" />
-        <SummaryCard title="Pending Collection Today" value={`₹${summary.todayPendingRevenue.toLocaleString()}`} icon={ShoppingCart} className="text-amber-600" />
         <SummaryCard title="Avg Order Value" value={`₹${Math.round(summary.averageOrderValue).toLocaleString()}`} icon={ShoppingCart} />
       </div>
 
@@ -701,7 +666,7 @@ export default function OrdersPage() {
             isBusy={isBulkPending}
           />
           {isLoading ? (
-            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onUpdatePaymentStatus={() => undefined} onReopenPaymentVerification={() => undefined} onEnterQuote={() => undefined} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAllVisible} />
+            <OrderTable orders={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onViewDetail={() => undefined} onQuickStatus={() => undefined} onCancel={() => undefined} onEnterQuote={() => undefined} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAllVisible} />
           ) : visible.length === 0 ? (
             <EmptyState
               icon={ShoppingCart}
@@ -720,8 +685,6 @@ export default function OrdersPage() {
                 onViewDetail={setDetailTarget}
                 onQuickStatus={handleQuickStatus}
                 onCancel={handleCancel}
-                onUpdatePaymentStatus={handlePaymentStatusUpdate}
-                onReopenPaymentVerification={handleReopenPaymentVerification}
                 onEnterQuote={handleEnterQuote}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}

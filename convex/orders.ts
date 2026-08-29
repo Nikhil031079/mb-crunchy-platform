@@ -1,9 +1,10 @@
 // ============================================================================
+// ============================================================================
 // MB CRUNCHY - Orders Queries & Mutations
 // ============================================================================
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -31,9 +32,275 @@ import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 // in tax, delivery fee, and total calculations.
 const PRICE_TOLERANCE = 0.02;
 
-// Minimum gap between two customer payment claims on the same order. Keeps
-// claim logging idempotent so a double-tap never produces duplicate activities.
-const CLAIM_COOLDOWN_MS = 2 * 60 * 1000;
+// ============================================================================
+// Internal Queries & Mutations (for Razorpay integration)
+// ============================================================================
+
+/** Internal: fetch order by ID (used by Razorpay actions). */
+export const getByIdInternal = internalQuery({
+  args: { orderId: v.id("orders") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.orderId);
+  },
+});
+
+// ============================================================================
+// finalizePaidOrder — Idempotent order finalization after Razorpay payment
+//
+// Called by BOTH:
+//   1. verifyPayment (browser path)
+//   2. Razorpay payment.captured webhook (server path)
+//
+// Safe to call multiple times — idempotency guards prevent duplicate:
+//   - inventory reservation
+//   - coupon usage
+//   - loyalty redemption
+//   - NEW_ORDER notification
+// ============================================================================
+
+export const finalizePaidOrder = internalMutation({
+  args: {
+    orderId: v.id("orders"),
+    razorpayPaymentId: v.string(),
+    razorpaySignature: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) return;
+
+    // Idempotent: already paid or refunded — do nothing.
+    if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
+      return;
+    }
+
+    const now = Date.now();
+    const patchFields: Record<string, unknown> = {
+      paymentStatus: "paid",
+      razorpayPaymentId: args.razorpayPaymentId,
+      updatedAt: now,
+    };
+
+    if (args.razorpaySignature) {
+      patchFields.razorpaySignature = args.razorpaySignature;
+    }
+
+    // Transition order from awaiting_payment to pending when payment is
+    // confirmed.
+    if (order.status === "awaiting_payment") {
+      patchFields.status = "pending";
+    }
+
+    // Race-condition recovery: the cron may have cancelled this order before
+    // the payment arrived. If the cancellation was system-initiated (cron),
+    // restore to "pending" since the Razorpay payment is authoritative.
+    // If cancelled by admin, keep "cancelled" but still record the payment.
+    if (order.status === "cancelled") {
+      const lastActivity = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
+        .order("desc")
+        .first();
+
+      const wasSystemCancelled =
+        lastActivity &&
+        lastActivity.action === "cancelled" &&
+        lastActivity.actor === "system";
+
+      if (wasSystemCancelled) {
+        patchFields.status = "pending";
+      }
+    }
+
+    await ctx.db.patch(args.orderId, patchFields);
+
+    // --- Outside-area order finalization ---
+    // For outside-area orders with accepted quote, inventory reservation,
+    // notification, coupon and loyalty redemption are deferred from creation
+    // to payment finalization. Local orders already handled these at create.
+    if (
+      order.deliveryQuoteRequired &&
+      order.deliveryQuoteStatus === "accepted"
+    ) {
+      // Idempotency guard: check if inventory was already reserved.
+      const alreadyReserved = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .filter((q) => q.eq(q.field("action"), "inventory_reserved"))
+        .first();
+
+      if (!alreadyReserved) {
+        // NEW_ORDER notification
+        const businessUnit = await ctx.db.get(order.businessUnitId);
+        await notify("NEW_ORDER", {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          businessUnitName: businessUnit?.name ?? "",
+          orderType: order.orderType,
+          total: order.total,
+          itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+          customerName: order.customerName,
+        });
+
+        // Reserve stock
+        for (const item of order.items) {
+          const inventory = await findInventoryForOrderItem(
+            ctx,
+            item.catalogItemId,
+            item.variantName,
+          );
+
+          if (!inventory) continue;
+
+          if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+          }
+
+          const reserved = inventory.reservedStock ?? 0;
+          const avail = inventory.stockQuantity - reserved;
+          if (avail < item.quantity) {
+            throw new Error(
+              `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
+            );
+          }
+
+          const newReserved = reserved + item.quantity;
+          await ctx.db.patch(inventory._id, {
+            reservedStock: newReserved,
+            available: (inventory.stockQuantity - newReserved) > 0,
+            updatedAt: now,
+          });
+
+          await logMovement(ctx, {
+            inventoryId: inventory._id,
+            businessUnitId: inventory.businessUnitId,
+            type: "reservation",
+            quantity: item.quantity,
+            previousStock: inventory.stockQuantity,
+            newStock: inventory.stockQuantity,
+            orderId: order._id,
+          });
+
+          await logActivity(ctx, {
+            orderId: order._id,
+            businessUnitId: inventory.businessUnitId,
+            action: "inventory_reserved",
+            newValue: `${item.quantity} × ${inventory.variantName}`,
+            actor: "system",
+            visibleToCustomer: true,
+          });
+        }
+
+        // Coupon usage
+        if (order.offerId) {
+          await ctx.runMutation(internal.offers.incrementUsage, { id: order.offerId });
+        }
+
+        // Loyalty redemption — idempotent via existing transaction check
+        const loyaltyPoints = order.loyaltyPointsToRedeem ?? 0;
+        if (loyaltyPoints > 0 && order.customerId) {
+          const alreadyRedeemed = await ctx.db
+            .query("loyaltyTransactions")
+            .withIndex("by_order", (q) => q.eq("orderId", order._id))
+            .filter((q) => q.eq(q.field("type"), "redeemed"))
+            .first();
+
+          if (!alreadyRedeemed) {
+            await redeemLoyaltyInternal(ctx, {
+              customerId: order.customerId,
+              orderId: order._id,
+              orderNumber: order.orderNumber,
+              points: loyaltyPoints,
+              orderTotal: order.subtotal,
+            });
+          }
+        }
+      }
+    }
+
+    await logActivity(ctx, {
+      orderId: args.orderId,
+      businessUnitId: order.businessUnitId,
+      action: "payment_verified",
+      previousValue: order.paymentStatus,
+      newValue: "paid",
+      actor: "system",
+      visibleToCustomer: true,
+    });
+  },
+});
+
+/** Internal: store Razorpay Order ID on the MB Crunchy order. */
+export const updateRazorpayOrderId = internalMutation({
+  args: {
+    orderId: v.id("orders"),
+    razorpayOrderId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.orderId, {
+      razorpayOrderId: args.razorpayOrderId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/** Internal: store Razorpay payment details after signature verification. */
+/**
+ * Internal: mark payment failed from webhook (payment.failed).
+ * Sets paymentStatus to "failed". Idempotent.
+ */
+export const failPaymentFromWebhook = internalMutation({
+  args: {
+    orderId: v.id("orders"),
+    razorpayPaymentId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) return;
+
+    if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
+      return;
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.orderId, {
+      paymentStatus: "failed",
+      ...(args.razorpayPaymentId ? { razorpayPaymentId: args.razorpayPaymentId } : {}),
+      updatedAt: now,
+    });
+
+    await logActivity(ctx, {
+      orderId: args.orderId,
+      businessUnitId: order.businessUnitId,
+      action: "payment_failed",
+      previousValue: order.paymentStatus,
+      newValue: "failed",
+      actor: "system",
+      visibleToCustomer: true,
+    });
+  },
+});
+
+/** Internal: find orders by Razorpay order ID (for webhook lookup). */
+export const getByRazorpayOrderIdInternal = internalQuery({
+  args: { razorpayOrderId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("orders")
+      .withIndex("by_razorpayOrderId", (q) => q.eq("razorpayOrderId", args.razorpayOrderId))
+      .collect();
+  },
+});
+
+/** Internal: find orders by Razorpay payment ID (for webhook lookup). */
+export const getByRazorpayPaymentIdInternal = internalQuery({
+  args: { razorpayPaymentId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("orders")
+      .withIndex("by_razorpayPaymentId", (q) => q.eq("razorpayPaymentId", args.razorpayPaymentId))
+      .collect();
+  },
+});
 
 // ============================================================================
 // Queries
@@ -79,7 +346,7 @@ export const getByPhone = query({
   args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
-    const phone = normalizeIndianPhone(args.phone); // returns null on invalid → graceful empty result
+    const phone = normalizeIndianPhone(args.phone); // returns null on invalid ΓåÆ graceful empty result
     return await ctx.db
       .query("orders")
       .withIndex("by_phone", (q) => q.eq("customerPhone", phone ?? ""))
@@ -153,7 +420,7 @@ export const getById = query({
  * The arg object + return shape are deliberately stable: a future
  * "phone + order number + OTP" verification step can be added as an extra
  * optional arg (e.g. `otp`) with an additional server-side check inside this
- * handler — no call-site or response-shape change required.
+ * handler ΓÇö no call-site or response-shape change required.
  */
 export const getByPhoneAndOrderNumber = query({
   args: { phone: v.string(), orderNumber: v.string() },
@@ -414,13 +681,13 @@ async function computeDeliveryFee(
     }
     if (zone.minOrder && args.afterDiscount < zone.minOrder) {
       throw new Error(
-        `Delivery to "${zone.name}" requires a minimum order of ₹${zone.minOrder}`,
+        `Delivery to "${zone.name}" requires a minimum order of Γé╣${zone.minOrder}`,
       );
     }
     return feeForZone(zone);
   }
 
-  // No delivery zone found — do not silently apply a fee.
+  // No delivery zone found ΓÇö do not silently apply a fee.
   return 0;
 }
 
@@ -472,11 +739,11 @@ export const create = mutation({
     // Allow guest checkout - authentication is optional for order creation
     // Customer is identified by phone/email via ensureCustomerByPhone
 
-    // Normalize phone to canonical +91XXXXXXXXXX format — reject invalid
+    // Normalize phone to canonical +91XXXXXXXXXX format ΓÇö reject invalid
     const customerPhone = requireIndianPhone(args.customerPhone);
 
     // ----------------------------------------------------------------------
-    // 0. Idempotency — reject duplicate submissions (network retry, browser
+    // 0. Idempotency ΓÇö reject duplicate submissions (network retry, browser
     //    refresh, double-click, repeated submit). If an order already exists
     //    for this request key, return it instead of creating a new order and
     //    re-running side effects (inventory / loyalty / notifications).
@@ -506,7 +773,7 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
-    // 1. Items — resolve each line against current catalog data and recompute
+    // 1. Items ΓÇö resolve each line against current catalog data and recompute
     //    the authoritative unit price / line total from the active variant.
     // ----------------------------------------------------------------------
     const items: OrderLine[] = [];
@@ -524,7 +791,7 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
-    // 2. Coupon discount — validated & recomputed server-side.
+    // 2. Coupon discount ΓÇö validated & recomputed server-side.
     // ----------------------------------------------------------------------
     let couponDiscount = 0;
     let offerId: Id<"offers"> | undefined;
@@ -547,7 +814,7 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
-    // 3. Discount — the portion beyond the coupon can only come from loyalty
+    // 3. Discount ΓÇö the portion beyond the coupon can only come from loyalty
     //    points, capped at the customer's maximum redeemable value.
     // ----------------------------------------------------------------------
     const customerId = await ensureCustomerByPhone(ctx, {
@@ -574,7 +841,7 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
-    // 4. Delivery fee, tax and grand total — recomputed server-side.
+    // 4. Delivery fee, tax and grand total ΓÇö recomputed server-side.
     // ----------------------------------------------------------------------
     const buSettings = await ctx.db
       .query("settings")
@@ -644,7 +911,7 @@ export const create = mutation({
     const orderNumber = `${prefix}-${timestamp}${random}`;
     const now = Date.now();
 
-    const paymentStatus = args.paymentMethod === "upi_qr" ? "pending_verification" as const : "pending" as const;
+    const paymentStatus = "pending" as const;
 
     // Outside-area orders: no payment yet, quote pending. No NEW_ORDER notification
     // or inventory reservation until customer accepts quote and claims payment.
@@ -696,9 +963,9 @@ export const create = mutation({
     // These happen when customer accepts quote and claims payment.
     if (!isOutsideArea) {
       // Don't send NEW_ORDER notification or reserve inventory for awaiting_payment orders
-      // These happen when payment is verified (claimPayment -> admin verification)
+      // These happen when payment is verified (finalizePaidOrder)
 
-      // Coupon usage — incremented exactly once per successfully created order.
+      // Coupon usage ΓÇö incremented exactly once per successfully created order.
       // `create` is idempotency-keyed (a retry returns the existing order above),
       // so a network retry or double submit can never double-count a redemption.
       // Failed/cancelled orders never reach this point and never consume usage.
@@ -707,7 +974,7 @@ export const create = mutation({
       }
 
       // Reserve stock for each item. Done inline in the create transaction so
-      // the reservation and order insert are atomic — a failed reservation rolls
+      // the reservation and order insert are atomic ΓÇö a failed reservation rolls
       // the whole order back instead of leaving an order with no stock held.
       for (const item of items) {
         const inventory = await findInventoryForOrderItem(
@@ -751,7 +1018,7 @@ export const create = mutation({
           orderId,
           businessUnitId: inventory.businessUnitId,
           action: "inventory_reserved",
-          newValue: `${item.quantity} × ${inventory.variantName}`,
+          newValue: `${item.quantity} ├ù ${inventory.variantName}`,
           actor: "system",
           visibleToCustomer: true,
         });
@@ -768,7 +1035,7 @@ export const create = mutation({
         customerName: args.customerName,
       });
 
-      // Atomic loyalty redemption — server-authoritative. Deducted within the
+      // Atomic loyalty redemption ΓÇö server-authoritative. Deducted within the
       // same transaction as order creation so a failure rolls back the order.
       const loyaltyPoints = args.loyaltyPointsToRedeem ?? 0;
       if (loyaltyPoints > 0 && customerId) {
@@ -814,11 +1081,9 @@ export const updateStatus = mutation({
     paymentStatus: v.optional(
       v.union(
         v.literal("pending"),
-        v.literal("pending_verification"),
         v.literal("paid"),
         v.literal("failed"),
-        v.literal("refunded"),
-        v.literal("rejected")
+        v.literal("refunded")
       )
     ),
   },
@@ -929,7 +1194,7 @@ export const updateStatus = mutation({
       // Reverse coupon usage if the order had a consumed coupon.
       // The coupon is consumed exactly when inventory is reserved (logged as
       // an "inventory_reserved" activity). For local orders this happens at
-      // orders.create; for outside-area orders at claimPayment. Checking for
+      // orders.create; for outside-area orders at finalizePaidOrder. Checking for
       // this activity is the authoritative signal that usage was incremented.
       if (order.offerId) {
         const reservedActivity = await ctx.db
@@ -1031,9 +1296,7 @@ export const updateStatus = mutation({
         paid: "payment_verified",
         refunded: "refund_completed",
         failed: "payment_failed",
-        rejected: "payment_rejected",
         pending: "payment_pending",
-        pending_verification: "payment_pending",
       };
       await logActivity(ctx, {
         orderId: args.id,
@@ -1046,371 +1309,6 @@ export const updateStatus = mutation({
         visibleToCustomer: true,
       });
     }
-  },
-});
-
-// ============================================================================
-// Re-open payment verification
-// ============================================================================
-
-/**
- * Admin-only recovery for an order whose payment verification was rejected or
- * failed. Moves paymentStatus back to "pending_verification" so the customer
- * can retry payment and submit a fresh claim. This never touches order status,
- * inventory, or money — it only re-arms the verification window and records an
- * auditable activity.
- *
- * Idempotent: calling it on an order already awaiting verification is a no-op.
- */
-export const reopenPaymentVerification = mutation({
-  args: { sessionToken: v.string(), orderId: v.id("orders") },
-  handler: async (ctx, args) => {
-    const { admin } = await requireAdminSession(ctx, args.sessionToken);
-
-    const order = await ctx.db.get(args.orderId);
-    if (!order || order.deletedAt) throw new Error("Order not found");
-
-    // Terminal order states have no verification window to re-open.
-    if (
-      order.status === "cancelled" ||
-      order.status === "refunded" ||
-      order.status === "delivered"
-    ) {
-      throw new Error("This order can no longer be re-opened for verification");
-    }
-
-    // Money already collected — never un-verify a paid/refunded order.
-    if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
-      throw new Error("Payment is already settled for this order");
-    }
-
-    // Already awaiting verification — idempotent no-op (double-click safe).
-    if (order.paymentStatus === "pending_verification") {
-      return { reopened: false };
-    }
-
-    // Only a failed or rejected verification can be re-opened.
-    if (
-      order.paymentStatus !== "failed" &&
-      order.paymentStatus !== "rejected"
-    ) {
-      throw new Error("Payment is not in a failed or rejected state");
-    }
-
-    const now = Date.now();
-    await ctx.db.patch(args.orderId, {
-      paymentStatus: "pending_verification",
-      updatedAt: now,
-    });
-
-    await logActivity(ctx, {
-      orderId: args.orderId,
-      businessUnitId: order.businessUnitId,
-      action: "payment_reopened",
-      previousValue: order.paymentStatus,
-      newValue: "pending_verification",
-      actor: admin.username,
-      actorId: admin._id,
-      visibleToCustomer: true,
-    });
-
-    return { reopened: true };
-  },
-});
-
-// ============================================================================
-// Customer payment claim
-// ============================================================================
-
-/**
- * Records a customer's "I've Paid" claim so the kitchen/owner can see that the
- * customer says the transfer is done. This is deliberately a light operation:
- * it never creates an order, never touches inventory or loyalty, and never
- * changes payment/order status. Payment is only confirmed by an admin through
- * updateStatus (Mark Paid / Reject), which preserves the audit trail.
- *
- * The customer may optionally attach their UPI transaction reference (UTR);
- * it is stored once on the order for admin verification and never shown in
- * customer-facing views.
- */
-export const claimPayment = mutation({
-  args: {
-    orderId: v.id("orders"),
-    phone: v.string(),
-    reference: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    // Allow guest payment claim - verified by phone number
-
-    const phone = requireIndianPhone(args.phone);
-
-    const order = await ctx.db.get(args.orderId);
-    if (!order || order.deletedAt) throw new Error("Order not found");
-    if (order.customerPhone !== phone) {
-      throw new Error("Order not found for this phone number");
-    }
-
-    // Reservation already ended — there is nothing left to claim.
-    if (order.status === "cancelled" || order.status === "refunded") {
-      return { outcome: "expired" as const };
-    }
-
-    // Already verified — idempotent no-op.
-    if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
-      return { outcome: "already_paid" as const };
-    }
-
-    // A claim may be submitted for awaiting_payment orders, or while payment is 
-    // awaiting verification, or after a failed/rejected verification when the 
-    // customer has retried and wants a re-check.
-    if (
-      order.status !== "awaiting_payment" &&
-      order.paymentStatus !== "pending_verification" &&
-      order.paymentStatus !== "failed" &&
-      order.paymentStatus !== "rejected"
-    ) {
-      return { outcome: "not_pending" as const };
-    }
-
-    // Outside-area orders: block payment claim until quote is accepted.
-    if (
-      order.deliveryQuoteRequired &&
-      order.deliveryQuoteStatus !== "accepted"
-    ) {
-      return { outcome: "quote_not_accepted" as const };
-    }
-
-    // For awaiting_payment orders, transition to pending and pending_verification
-    if (order.status === "awaiting_payment") {
-      const now = Date.now();
-      await ctx.db.patch(order._id, {
-        status: "pending",
-        paymentStatus: "pending_verification",
-        updatedAt: now,
-      });
-
-      // Now send NEW_ORDER notification and reserve inventory
-      const businessUnit = await ctx.db.get(order.businessUnitId);
-      await notify("NEW_ORDER", {
-        orderId: order._id,
-        orderNumber: order.orderNumber,
-        businessUnitName: businessUnit?.name ?? "",
-        orderType: order.orderType,
-        total: order.total,
-        itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
-        customerName: order.customerName,
-      });
-
-      // Reserve stock
-      for (const item of order.items) {
-        const inventory = await findInventoryForOrderItem(
-          ctx,
-          item.catalogItemId,
-          item.variantName,
-        );
-
-        if (!inventory) continue;
-
-        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-          throw new Error(`Invalid quantity for "${inventory.variantName}"`);
-        }
-
-        const reserved = inventory.reservedStock ?? 0;
-        const avail = inventory.stockQuantity - reserved;
-        if (avail < item.quantity) {
-          throw new Error(
-            `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
-          );
-        }
-
-        const newReserved = reserved + item.quantity;
-        await ctx.db.patch(inventory._id, {
-          reservedStock: newReserved,
-          available: (inventory.stockQuantity - newReserved) > 0,
-          updatedAt: Date.now(),
-        });
-
-        await logMovement(ctx, {
-          inventoryId: inventory._id,
-          businessUnitId: inventory.businessUnitId,
-          type: "reservation",
-          quantity: item.quantity,
-          previousStock: inventory.stockQuantity,
-          newStock: inventory.stockQuantity,
-          orderId: order._id,
-        });
-
-        await logActivity(ctx, {
-          orderId: order._id,
-          businessUnitId: inventory.businessUnitId,
-          action: "inventory_reserved",
-          newValue: `${item.quantity} × ${inventory.variantName}`,
-          actor: "system",
-          visibleToCustomer: true,
-        });
-      }
-
-      await logActivity(ctx, {
-        orderId: order._id,
-        businessUnitId: order.businessUnitId,
-        action: "order_accepted",
-        newValue: "pending",
-        actor: "system",
-        visibleToCustomer: true,
-      });
-
-      await logActivity(ctx, {
-        orderId: order._id,
-        businessUnitId: order.businessUnitId,
-        action: "payment_pending",
-        newValue: "pending_verification",
-        actor: "system",
-        visibleToCustomer: true,
-      });
-    }
-
-    // Outside-area orders: reserve inventory, send notification and increment
-    // coupon on the customer's first payment claim (after quote acceptance).
-    // This is idempotent — if inventory was already reserved for this order
-    // we skip the entire block.
-    if (
-      order.deliveryQuoteRequired &&
-      order.deliveryQuoteStatus === "accepted" &&
-      order.status === "pending"
-    ) {
-      const alreadyReserved = await ctx.db
-        .query("orderActivities")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .filter((q) => q.eq(q.field("action"), "inventory_reserved"))
-        .first();
-
-      if (!alreadyReserved) {
-        const now = Date.now();
-
-        const businessUnit = await ctx.db.get(order.businessUnitId);
-        await notify("NEW_ORDER", {
-          orderId: order._id,
-          orderNumber: order.orderNumber,
-          businessUnitName: businessUnit?.name ?? "",
-          orderType: order.orderType,
-          total: order.total,
-          itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
-          customerName: order.customerName,
-        });
-
-        for (const item of order.items) {
-          const inventory = await findInventoryForOrderItem(
-            ctx,
-            item.catalogItemId,
-            item.variantName,
-          );
-
-          if (!inventory) continue;
-
-          if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-            throw new Error(`Invalid quantity for "${inventory.variantName}"`);
-          }
-
-          const reserved = inventory.reservedStock ?? 0;
-          const avail = inventory.stockQuantity - reserved;
-          if (avail < item.quantity) {
-            throw new Error(
-              `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
-            );
-          }
-
-          const newReserved = reserved + item.quantity;
-          await ctx.db.patch(inventory._id, {
-            reservedStock: newReserved,
-            available: (inventory.stockQuantity - newReserved) > 0,
-            updatedAt: now,
-          });
-
-          await logMovement(ctx, {
-            inventoryId: inventory._id,
-            businessUnitId: inventory.businessUnitId,
-            type: "reservation",
-            quantity: item.quantity,
-            previousStock: inventory.stockQuantity,
-            newStock: inventory.stockQuantity,
-            orderId: order._id,
-          });
-
-          await logActivity(ctx, {
-            orderId: order._id,
-            businessUnitId: inventory.businessUnitId,
-            action: "inventory_reserved",
-            newValue: `${item.quantity} × ${inventory.variantName}`,
-            actor: "system",
-            visibleToCustomer: true,
-          });
-        }
-
-        if (order.offerId) {
-          await ctx.runMutation(internal.offers.incrementUsage, { id: order.offerId });
-        }
-
-        // Atomic loyalty redemption for outside-area orders — deferred from
-        // creation to payment claim because the final total (with delivery
-        // quote) was not known at creation time.
-        const loyaltyPoints = order.loyaltyPointsToRedeem ?? 0;
-        if (loyaltyPoints > 0 && order.customerId) {
-          await redeemLoyaltyInternal(ctx, {
-            customerId: order.customerId,
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            points: loyaltyPoints,
-            orderTotal: order.subtotal,
-          });
-        }
-      }
-    }
-
-    // Optionally record the customer's UPI transaction reference (UTR) so the
-    // admin can match the transfer while verifying. The first reference wins
-    // so a retry or later edit never overwrites what the customer submitted
-    // closest to the actual payment.
-    if (args.reference && args.reference.trim()) {
-      const reference = args.reference.trim().slice(0, 100);
-      if (!order.paymentReference) {
-        await ctx.db.patch(order._id, {
-          paymentReference: reference,
-          updatedAt: Date.now(),
-        });
-      }
-    }
-
-    // Idempotent claim logging: skip when the most recent activity for this
-    // order is already a recent customer claim, so double-taps and retries
-    // never produce duplicate activities.
-    const recent = await ctx.db
-      .query("orderActivities")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .order("desc")
-      .first();
-
-    const claimActor = order.customerName || order.customerPhone;
-
-    const alreadyClaimed =
-      recent?.action === "payment_pending" &&
-      recent.actor === claimActor &&
-      Date.now() - recent.createdAt < CLAIM_COOLDOWN_MS;
-
-    if (!alreadyClaimed) {
-      await logActivity(ctx, {
-        orderId: order._id,
-        businessUnitId: order.businessUnitId,
-        action: "payment_pending",
-        newValue: order.paymentStatus,
-        actor: claimActor,
-        visibleToCustomer: true,
-      });
-    }
-
-    return {
-      outcome: alreadyClaimed ? ("already_claimed" as const) : ("claimed" as const),
-    };
   },
 });
 
@@ -1462,8 +1360,8 @@ export const updateDeliveryQuote = mutation({
       orderId: order._id,
       businessUnitId: order.businessUnitId,
       action: "payment_pending",
-      previousValue: previousQuoteAmount > 0 ? `₹${previousQuoteAmount}` : "not_quoted",
-      newValue: `₹${args.deliveryQuoteAmount}`,
+      previousValue: previousQuoteAmount > 0 ? `Γé╣${previousQuoteAmount}` : "not_quoted",
+      newValue: `Γé╣${args.deliveryQuoteAmount}`,
       actor: "admin",
       visibleToCustomer: true,
     });
@@ -1495,17 +1393,12 @@ export const acceptDeliveryQuote = mutation({
 
     const now = Date.now();
 
-    // Accept quote. Transition to pending + pending_verification so the
-    // PaymentPendingCard shows the correct "Quote Accepted — Complete Payment"
-    // UI with the payment QR flow.
-    //
-    // Inventory reservation, coupon usage and NEW_ORDER notification are
-    // deliberately deferred to claimPayment — they must only happen once
-    // the customer has actually initiated payment, not merely on acceptance.
+    // Accept quote. The order stays in "awaiting_payment" with
+    // paymentStatus "pending" until the customer actually pays via Razorpay.
+    // finalizePaidOrder handles inventory, notification, coupon and loyalty
+    // when payment arrives.
     await ctx.db.patch(order._id, {
       deliveryQuoteStatus: "accepted",
-      status: "pending",
-      paymentStatus: "pending_verification",
       updatedAt: now,
     });
 
@@ -1513,17 +1406,8 @@ export const acceptDeliveryQuote = mutation({
       orderId: order._id,
       businessUnitId: order.businessUnitId,
       action: "order_accepted",
-      newValue: "pending",
-      actor: "system",
-      visibleToCustomer: true,
-    });
-
-    await logActivity(ctx, {
-      orderId: order._id,
-      businessUnitId: order.businessUnitId,
-      action: "payment_pending",
-      newValue: "pending_verification",
-      actor: "system",
+      newValue: "delivery_quote_accepted",
+      actor: order.customerName || order.customerPhone,
       visibleToCustomer: true,
     });
 
@@ -1608,7 +1492,7 @@ export const softDelete = mutation({
       // Reverse coupon usage if the order had a consumed coupon.
       // The coupon is consumed exactly when inventory is reserved (logged as
       // an "inventory_reserved" activity). For local orders this happens at
-      // orders.create; for outside-area orders at claimPayment. Checking for
+      // orders.create; for outside-area orders at finalizePaidOrder. Checking for
       // this activity is the authoritative signal that usage was incremented.
       if (order.offerId) {
         const reservedActivity = await ctx.db

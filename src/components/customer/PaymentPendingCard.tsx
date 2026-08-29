@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -16,12 +16,11 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
-import { SITE_NAME, ROUTES } from "@/constants";
+import { ROUTES } from "@/constants";
 import { formatCurrency, formatDateTime } from "@/utils";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
-import { PaymentQR } from "@/components/customer/PaymentQR";
 
 import type { Order } from "@/types";
 
@@ -29,24 +28,17 @@ import type { Order } from "@/types";
 // PaymentPendingCard — customer-facing payment continuation.
 //
 // Renders the right state for an order whose payment is not yet verified:
-//   - Payment Pending  -> Pay Now (reopens the same QR flow) + I've Paid
-//   - Claim submitted  -> honest "we're verifying" message
-//   - In preparation   -> "payment under verification" note (no pay actions)
-//   - Failed/Rejected  -> retry with Pay Now
-//   - Reservation gone -> Order Cancelled / Reservation Expired + Order Again
-//
-// Payment is only ever confirmed by an admin; "I've Paid" records a claim via
-// api.orders.claimPayment, which is idempotent and never creates a new order.
+//   - Cancelled / refunded
+//   - Outside-area quote pending / quoted (delivery quote, not payment)
+//   - Quote accepted awaiting payment (Razorpay Pay Now)
+//   - Awaiting payment (Razorpay Pay Now)
+//   - Failed payment retry (Razorpay Pay Now)
+//   - Return null for all other states
 // ============================================================================
 
 interface PaymentPendingCardProps {
   order: Order;
   onOrderAgain: (order: Order) => void;
-  /**
-   * Phone number of the customer who placed the order. The sanitized,
-   * customer-facing order projection intentionally strips `customerPhone`, so
-   * the caller supplies it from the verified source (tracking form / profile).
-   */
   phone?: string;
 }
 
@@ -57,11 +49,6 @@ interface PaymentConfig {
 }
 
 export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendingCardProps) {
-  const [showQR, setShowQR] = useState(false);
-  const [claimState, setClaimState] = useState<"idle" | "claiming" | "claimed">("idle");
-  const [reference, setReference] = useState("");
-
-  const claimPayment = useMutation(api.orders.claimPayment);
   const acceptDeliveryQuote = useMutation(api.orders.acceptDeliveryQuote);
   const rejectDeliveryQuote = useMutation(api.orders.rejectDeliveryQuote);
   const [quoteAction, setQuoteAction] = useState<"idle" | "accepting" | "rejecting">("idle");
@@ -74,16 +61,8 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   const cancelled = order.status === "cancelled";
   const refunded = order.status === "refunded";
   const isAwaitingPayment = order.status === "awaiting_payment";
-  const isPendingVerification = order.status === "pending" && order.paymentStatus === "pending_verification";
-  const isWorkStartedUnpaid =
-    (order.status === "preparing" ||
-      order.status === "ready" ||
-      order.status === "out_for_delivery" ||
-      order.status === "delivered") &&
-    order.paymentStatus === "pending_verification";
   const needsRetry =
-    (order.paymentStatus === "failed" || order.paymentStatus === "rejected") &&
-    (order.status === "pending" || order.status === "confirmed");
+    order.paymentStatus === "failed" && (order.status === "pending" || order.status === "confirmed");
 
   // Outside-area delivery quote states
   const isOutsideArea = order.deliveryQuoteRequired === true;
@@ -91,46 +70,6 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   const quoteQuoted = isOutsideArea && order.deliveryQuoteStatus === "quoted";
   const quoteAccepted = isOutsideArea && order.deliveryQuoteStatus === "accepted";
   const quoteRejected = isOutsideArea && order.deliveryQuoteStatus === "rejected";
-
-  const handleClaim = useCallback(async (referenceArg?: string) => {
-    if (claimState !== "idle") return;
-    setClaimState("claiming");
-    try {
-      const res = await claimPayment({
-        orderId: order._id as Id<"orders">,
-        phone: phone || order.customerPhone,
-        reference: referenceArg?.trim() || undefined,
-      });
-      if (res.outcome === "claimed" || res.outcome === "already_claimed") {
-        setClaimState("claimed");
-        toast.success("Payment claim received", {
-          description: "We'll verify your payment and start preparing your order shortly.",
-        });
-      } else if (res.outcome === "already_paid") {
-        toast.success("Payment already verified", {
-          description: "This order is confirmed — we're on it!",
-        });
-      } else if (res.outcome === "expired") {
-        toast.error("Reservation expired", {
-          description: "This order was cancelled. You can place a new one.",
-        });
-      } else if (res.outcome === "quote_not_accepted") {
-        toast.error("Delivery quote pending", {
-          description: "Please wait for the delivery quote before making payment.",
-        });
-      } else {
-        toast.info("Payment still pending", {
-          description: "We'll update this order as soon as your payment is verified.",
-        });
-      }
-    } catch (err) {
-      toast.error("Could not submit payment claim", {
-        description: err instanceof Error ? err.message : "Please try again or contact support.",
-      });
-    } finally {
-      setClaimState("idle");
-    }
-  }, [claimState, claimPayment, order]);
 
   // --------------------------------------------------------------------------
   // Reservation expired / cancelled / refunded
@@ -339,33 +278,9 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   }
 
   // --------------------------------------------------------------------------
-  // Payment pending but work has started (preparing/ready) — honest note only
+  // Outside-area: Quote accepted but payment not yet made — Razorpay Pay Now
   // --------------------------------------------------------------------------
-  if (isWorkStartedUnpaid) {
-    return (
-      <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-800/50 dark:bg-amber-950/20">
-        <div className="flex items-start gap-3">
-          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-amber-800 dark:text-amber-200">
-              Payment under verification
-            </p>
-            <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-              We&apos;re waiting to verify your payment. Your order is safely
-              reserved and will start preparing as soon as payment is confirmed.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // Outside-area: Quote accepted but payment not yet made — show payment prompt
-  // with Pay Now + I've Paid actions (mirrors the awaiting_payment UI)
-  // --------------------------------------------------------------------------
-  if (isPendingVerification && isOutsideArea && quoteAccepted) {
-    const paymentConfig = settings?.paymentConfig;
+  if (isAwaitingPayment && isOutsideArea && quoteAccepted) {
     return (
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800/60 dark:bg-blue-950/30">
         <div className="flex items-start gap-3">
@@ -392,108 +307,30 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
               </div>
             </dl>
 
-            <div className="mt-3 space-y-2">
-              <div>
-                <label
-                  htmlFor="card-utr-reference-accepted"
-                  className="block text-xs font-medium text-blue-800 dark:text-blue-200"
-                >
-                  UPI Reference (UTR){" "}
-                  <span className="text-blue-700/70 dark:text-blue-300/60">— optional</span>
-                </label>
-                <input
-                  id="card-utr-reference-accepted"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="e.g. 412345678901"
-                  className="mt-1 w-full rounded-lg border border-blue-300/60 bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <p className="mt-1 text-[10px] text-blue-700/70 dark:text-blue-300/60">
-                  Found in your UPI app after paying. It helps us verify your payment faster.
-                </p>
-              </div>
-            </div>
-
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" className="gap-1.5" onClick={() => setShowQR(true)}>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => toast.info("Payment via Razorpay coming soon")}
+              >
                 <CreditCard className="h-3.5 w-3.5" />
                 Pay Now
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => handleClaim(reference)}
-                disabled={claimState !== "idle"}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {claimState === "claiming"
-                  ? "Submitting…"
-                  : claimState === "claimed"
-                    ? "Claim Received"
-                    : "I've Paid"}
-              </Button>
             </div>
 
-            <p
-              className={cn(
-                "mt-2 text-xs",
-                claimState === "claimed"
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-blue-600/80 dark:text-blue-300/70",
-              )}
-            >
-              {claimState === "claimed"
-                ? "Payment claim received — we're verifying it and will update this order as soon as it's confirmed."
-                : "Just paid? Let us know and we'll verify it for you."}
+            <p className="mt-2 text-xs text-blue-600/80 dark:text-blue-300/70">
+              Complete payment to confirm your order.
             </p>
           </div>
         </div>
-
-        {showQR && (
-          <PaymentQR
-            upiId={paymentConfig?.upiId ?? ""}
-            merchantName={paymentConfig?.merchantName ?? SITE_NAME}
-            amount={order.total}
-            orderNumber={order.orderNumber}
-            whatsappNumber={paymentConfig?.whatsappNumber}
-            initialReference={reference}
-            onPaid={(ref) => {
-              setShowQR(false);
-              handleClaim(ref || reference);
-            }}
-            onWhatsApp={
-              paymentConfig?.whatsappNumber
-                ? () => {
-                    const phone = (paymentConfig.whatsappNumber ?? "").replace(/[^0-9]/g, "");
-                    const msg = encodeURIComponent(
-                      `Hi! I've placed order #${order.orderNumber} for ${formatCurrency(order.total)}. Please confirm my payment.`,
-                    );
-                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
-                  }
-                : undefined
-            }
-            onClose={() => {
-              setShowQR(false);
-              toast.info("Payment pending", {
-                description:
-                  "Your order is reserved. Pay now or complete it later from Track Order.",
-              });
-            }}
-          />
-        )}
       </div>
     );
   }
 
   // --------------------------------------------------------------------------
-  // awaiting_payment — Pay Now + I've Paid (customer hasn't claimed payment yet)
+  // awaiting_payment — Razorpay Pay Now
   // --------------------------------------------------------------------------
   if (isAwaitingPayment) {
-    const paymentConfig = settings?.paymentConfig;
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/60 dark:bg-amber-950/30">
         <div className="flex items-start gap-3">
@@ -503,7 +340,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
               Payment Not Completed
             </p>
             <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-              Your order is reserved for {formatCurrency(order.total)}. Complete the UPI payment to continue.
+              Your order is reserved for {formatCurrency(order.total)}. Complete the payment to continue.
             </p>
 
             <dl className="mt-3 space-y-1.5 text-sm">
@@ -527,128 +364,20 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
               </div>
             </dl>
 
-            <div className="mt-3 space-y-2">
-              <div>
-                <label
-                  htmlFor="card-utr-reference"
-                  className="block text-xs font-medium text-amber-800 dark:text-amber-200"
-                >
-                  UPI Reference (UTR){" "}
-                  <span className="text-amber-700/70 dark:text-amber-300/60">— optional</span>
-                </label>
-                <input
-                  id="card-utr-reference"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="e.g. 412345678901"
-                  className="mt-1 w-full rounded-lg border border-amber-300/60 bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <p className="mt-1 text-[10px] text-amber-700/70 dark:text-amber-300/60">
-                  Found in your UPI app after paying. It helps us verify your payment faster.
-                </p>
-              </div>
-            </div>
-
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" className="gap-1.5" onClick={() => setShowQR(true)}>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => toast.info("Payment via Razorpay coming soon")}
+              >
                 <CreditCard className="h-3.5 w-3.5" />
                 Pay Now
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => handleClaim(reference)}
-                disabled={claimState !== "idle"}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {claimState === "claiming"
-                  ? "Submitting…"
-                  : claimState === "claimed"
-                    ? "Claim Received"
-                    : "I've Paid"}
-              </Button>
             </div>
 
-            <p
-              className={cn(
-                "mt-2 text-xs",
-                claimState === "claimed"
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-amber-700/80 dark:text-amber-300/70",
-              )}
-            >
-              {claimState === "claimed"
-                ? "Payment claim received — we're verifying it and will update this order as soon as it's confirmed."
-                : "Just paid? Let us know and we'll verify it for you."}
+            <p className="mt-2 text-xs text-amber-700/80 dark:text-amber-300/70">
+              Complete payment to confirm your order.
             </p>
-          </div>
-        </div>
-
-        {showQR && (
-          <PaymentQR
-            upiId={paymentConfig?.upiId ?? ""}
-            merchantName={paymentConfig?.merchantName ?? SITE_NAME}
-            amount={order.total}
-            orderNumber={order.orderNumber}
-            whatsappNumber={paymentConfig?.whatsappNumber}
-            initialReference={reference}
-            onPaid={(ref) => {
-              setShowQR(false);
-              handleClaim(ref || reference);
-            }}
-            onWhatsApp={
-              paymentConfig?.whatsappNumber
-                ? () => {
-                    const phone = (paymentConfig.whatsappNumber ?? "").replace(/[^0-9]/g, "");
-                    const msg = encodeURIComponent(
-                      `Hi! I've placed order #${order.orderNumber} for ${formatCurrency(order.total)}. Please confirm my payment.`,
-                    );
-                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
-                  }
-                : undefined
-            }
-            onClose={() => {
-              setShowQR(false);
-              toast.info("Payment pending", {
-                description:
-                  "Your order is reserved. Pay now or complete it later from Track Order.",
-              });
-            }}
-          />
-        )}
-      </div>
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // pending_verification — Customer has submitted "I've Paid"
-  // --------------------------------------------------------------------------
-  if (isPendingVerification) {
-    return (
-      <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4 dark:border-amber-800/50 dark:bg-amber-950/20">
-        <div className="flex items-start gap-3">
-          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-amber-800 dark:text-amber-200">
-              Payment Submitted for Verification
-            </p>
-            <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-              We've received your payment claim. MB Crunchy will verify your payment shortly.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-3 gap-1.5"
-              asChild
-            >
-              <Link to={ROUTES.TRACK_ORDER}>
-                Track Order
-              </Link>
-            </Button>
           </div>
         </div>
       </div>
@@ -656,81 +385,31 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   }
 
   // --------------------------------------------------------------------------
-  // Failed / rejected payment — offer a retry
+  // Failed payment — offer a retry
   // --------------------------------------------------------------------------
   if (needsRetry) {
-    const paymentConfig = settings?.paymentConfig;
     return (
       <div className="rounded-xl border border-red-200/70 bg-red-50/60 p-4 dark:border-red-900/40 dark:bg-red-950/20">
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-red-700 dark:text-red-300">
-              Payment {order.paymentStatus === "rejected" ? "was not confirmed" : "failed"}
+              Payment failed
             </p>
             <p className="mt-1 text-sm text-red-600/90 dark:text-red-300/80">
-              {order.paymentStatus === "rejected"
-                ? "We couldn't match a payment for this order. Please complete payment to keep it moving."
-                : "The payment didn't go through. Please try again."}
+              The payment didn&apos;t go through. Please try again.
             </p>
-            <div className="mt-3 space-y-2">
-              <div>
-                <label
-                  htmlFor="retry-utr-reference"
-                  className="block text-xs font-medium text-red-700 dark:text-red-300"
-                >
-                  UPI Reference (UTR){" "}
-                  <span className="text-red-600/70 dark:text-red-300/60">— optional</span>
-                </label>
-                <input
-                  id="retry-utr-reference"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="e.g. 412345678901"
-                  className="mt-1 w-full rounded-lg border border-red-300/60 bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <p className="mt-1 text-[10px] text-red-600/70 dark:text-red-300/60">
-                  Found in your UPI app after paying. It helps us verify your payment faster.
-                </p>
-              </div>
-            </div>
 
-            <Button size="sm" className="mt-3 gap-1.5" onClick={() => setShowQR(true)}>
+            <Button
+              size="sm"
+              className="mt-3 gap-1.5"
+              onClick={() => toast.info("Payment via Razorpay coming soon")}
+            >
               <CreditCard className="h-3.5 w-3.5" />
               Pay Now
             </Button>
           </div>
         </div>
-
-        {showQR && (
-          <PaymentQR
-            upiId={paymentConfig?.upiId ?? ""}
-            merchantName={paymentConfig?.merchantName ?? SITE_NAME}
-            amount={order.total}
-            orderNumber={order.orderNumber}
-            whatsappNumber={paymentConfig?.whatsappNumber}
-            initialReference={reference}
-            onPaid={(ref) => {
-              setShowQR(false);
-              handleClaim(ref || reference);
-            }}
-            onWhatsApp={
-              paymentConfig?.whatsappNumber
-                ? () => {
-                    const phone = (paymentConfig.whatsappNumber ?? "").replace(/[^0-9]/g, "");
-                    const msg = encodeURIComponent(
-                      `Hi! I've placed order #${order.orderNumber} for ${formatCurrency(order.total)}. Please confirm my payment.`,
-                    );
-                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
-                  }
-                : undefined
-            }
-            onClose={() => setShowQR(false)}
-          />
-        )}
       </div>
     );
   }

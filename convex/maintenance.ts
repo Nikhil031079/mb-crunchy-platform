@@ -4,7 +4,7 @@
 // (expired order reservations) out of the request path.
 // ============================================================================
 
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalAction, internalQuery } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -49,8 +49,7 @@ async function findInventoryForOrderItem(
  *    deducted at confirmation. These are restored back to on-hand inventory
  *    (stockQuantity increased; reservedStock is already reduced).
  *
- * Only unpaid orders are touched (paymentStatus pending / pending_verification
- * / failed / rejected). Orders already marked paid or refunded are never
+ * Only unpaid orders are touched (paymentStatus pending / failed). Orders already marked paid or refunded are never
  * auto-cancelled, and delivered orders are never scanned.
  *
  * Timeout is configurable via the RESERVATION_TIMEOUT_MINUTES env var
@@ -142,7 +141,7 @@ export const cleanupExpiredReservations = internalMutation({
       // Reverse coupon usage if the order had a consumed coupon.
       // The coupon is consumed exactly when inventory is reserved (logged as
       // an "inventory_reserved" activity). For local orders this happens at
-      // orders.create; for outside-area orders at claimPayment. Checking for
+      // orders.create; for outside-area orders at finalizePaidOrder. Checking for
       // this activity is the authoritative signal that usage was incremented.
       if (order.offerId) {
         const reservedActivity = await ctx.db
@@ -229,5 +228,130 @@ export const cleanupExpiredReservations = internalMutation({
     }
 
     return { scanned: staleOrders.length, cancelled, releasedItems };
+  },
+});
+
+// ============================================================================
+// Razorpay Pre-Cleanup Check
+//
+// Before the cron cancels stale awaiting_payment orders, check Razorpay's
+// API to see if any Razorpay order has been paid. If so, mark it paid
+// immediately so the cleanup sweep skips it. This prevents the race where
+// the cron cancels an order before the payment.captured webhook arrives.
+//
+// The check is best-effort: if the Razorpay API is unreachable, the
+// cleanup proceeds normally and the webhook handler's race-condition
+// recovery (finalizePaidOrder) acts as a safety net.
+// ============================================================================
+
+/** Find stale awaiting_payment Razorpay orders eligible for cancellation. */
+export const getStaleRazorpayOrders = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rawTimeout = process.env.RESERVATION_TIMEOUT_MINUTES;
+    const timeoutMinutes =
+      rawTimeout && rawTimeout.trim() !== ""
+        ? Number(rawTimeout)
+        : DEFAULT_RESERVATION_TIMEOUT_MINUTES;
+
+    if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) return [];
+
+    const cutoff = Date.now() - timeoutMinutes * 60 * 1000;
+
+    return await ctx.db
+      .query("orders")
+      .withIndex("by_status", (q) => q.eq("status", "awaiting_payment"))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("deletedAt"), undefined),
+          q.lt(q.field("createdAt"), cutoff),
+          q.eq(q.field("paymentMethod"), "razorpay"),
+        ),
+      )
+      .collect();
+  },
+});
+
+/**
+ * Best-effort Razorpay API check before cleanup. For each stale Razorpay
+ * awaiting_payment order, queries the Razorpay API to see if a payment was
+ * captured. If so, confirms the payment immediately so the subsequent
+ * cleanup sweep skips it.
+ */
+export const checkRazorpayPaymentsBeforeCleanup = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const staleOrders = await ctx.runQuery(
+      internal.maintenance.getStaleRazorpayOrders,
+    );
+
+    if (staleOrders.length === 0) return;
+
+    let confirmed = 0;
+
+    for (const order of staleOrders) {
+      if (!order.razorpayOrderId) continue;
+
+      try {
+        const payments = await ctx.runAction(
+          internal.razorpay.getPaymentsForOrder,
+          { razorpayOrderId: order.razorpayOrderId },
+        );
+
+        if (!payments || !payments.items || payments.items.length === 0)
+          continue;
+
+        const capturedPayment = payments.items.find(
+          (p: { id: string; status: string }) => p.status === "captured",
+        );
+
+        if (capturedPayment) {
+          await ctx.runMutation(
+            internal.orders.finalizePaidOrder,
+            {
+              orderId: order._id,
+              razorpayPaymentId: capturedPayment.id,
+            },
+          );
+          confirmed++;
+          console.log(
+            `[razorpay-pre-cleanup] Confirmed payment for order ${order.orderNumber} (pre-cancellation)`,
+          );
+        }
+      } catch (e) {
+        // Best-effort: if Razorpay API is down, skip this order.
+        // The webhook handler's race-condition recovery will handle it.
+        console.warn(
+          `[razorpay-pre-cleanup] Failed to check payment for order ${order.orderNumber}:`,
+          e,
+        );
+      }
+    }
+
+    if (confirmed > 0) {
+      console.warn(
+        `[razorpay-pre-cleanup] Pre-confirmed ${confirmed} Razorpay order(s) before cleanup`,
+      );
+    }
+  },
+});
+
+/**
+ * Entry point for the cleanup cron. First checks Razorpay payments for
+ * stale Razorpay orders (preventing the webhook/cron race), then proceeds
+ * with the standard cleanup sweep for all stale orders.
+ */
+export const cleanupExpiredReservationsWithRazorpayCheck = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    // Layer 1: Check Razorpay API for stale Razorpay orders. If payment
+    // was captured, mark it paid so the cleanup sweep skips it.
+    await ctx.runAction(
+      internal.maintenance.checkRazorpayPaymentsBeforeCleanup,
+    );
+
+    // Layer 2: Standard cleanup for remaining stale orders (including
+    // genuinely unpaid Razorpay orders and manual UPI orders).
+    await ctx.runMutation(internal.maintenance.cleanupExpiredReservations);
   },
 });

@@ -76,19 +76,15 @@ const STATUS_COLORS: Record<string, string> = {
 
 const PAYMENT_LABELS: Record<string, string> = {
   pending: "Pending",
-  pending_verification: "Pending Verification",
   paid: "Paid",
   failed: "Failed",
   refunded: "Refunded",
-  rejected: "Rejected",
 };
 
 const PAYMENT_COLORS: Record<string, string> = {
   pending: "text-amber-600",
-  pending_verification: "text-amber-600",
   paid: "text-emerald-600",
   failed: "text-red-600",
-  rejected: "text-red-600",
   refunded: "text-gray-500",
 };
 
@@ -123,7 +119,7 @@ function getTrackingSteps(orderType: OrderType, paymentStatus?: string) {
       : ORDER_STATUS_STEPS;
 
   const unpaid =
-    paymentStatus === "pending_verification" || paymentStatus === "pending";
+    paymentStatus === "pending";
 
   if (!unpaid) return base;
 
@@ -166,7 +162,7 @@ function StatusProgressFlow({
 
   const steps = getTrackingSteps(orderType, paymentStatus);
   const unpaid =
-    paymentStatus === "pending_verification" || paymentStatus === "pending";
+    paymentStatus === "pending";
   // While payment is unverified the current step is "Payment Pending" (the
   // customer's action). Once verified, progress flows by order status.
   const currentKey = unpaid ? "payment_pending" : status;
@@ -239,7 +235,7 @@ function TrackingSummary({
   const isCancelled = order.status === "cancelled" || order.status === "refunded";
   const steps = getTrackingSteps(order.orderType, order.paymentStatus);
   const unpaid =
-    order.paymentStatus === "pending_verification" || order.paymentStatus === "pending";
+    order.paymentStatus === "pending";
   const currentKey = unpaid ? "payment_pending" : order.status;
   const currentStepIndex = steps.findIndex((s) => s.key === currentKey);
   const completedSteps =
@@ -518,9 +514,7 @@ export default function OrderTrackingPage() {
 
                 {/* Payment pending / continuation */}
                 {(selectedOrder.status === "awaiting_payment" ||
-                  selectedOrder.paymentStatus === "pending_verification" ||
                   selectedOrder.paymentStatus === "failed" ||
-                  selectedOrder.paymentStatus === "rejected" ||
                   selectedOrder.status === "cancelled" ||
                   selectedOrder.status === "refunded") && (
                   <div className="mt-5">
