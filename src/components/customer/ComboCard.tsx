@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatCurrency, calculateDiscount } from "@/utils";
+import { MealDealBadge } from "@/components/customer/MealDealBadge";
 
 import type { Combo } from "@/types";
+import type { EnrichedMealDeal } from "@/types";
 
 interface ComboCardProps {
   combo: Combo;
@@ -21,6 +23,10 @@ interface ComboCardProps {
   onOpenItemDetails?: (combo: Combo) => void;
   /** Maps catalogItemId to the item's display name */
   getItemName?: (catalogItemId: string) => string | undefined;
+  /** Applicable meal deal for this combo */
+  mealDeal?: EnrichedMealDeal | null;
+  /** Called when the meal upgrade button is clicked. Second arg is the parent combo for atomic add. */
+  onAddMealDeal?: (deal: EnrichedMealDeal, sourceItem?: Combo) => void;
 }
 
 export const ComboCard = memo(function ComboCard({
@@ -32,6 +38,8 @@ export const ComboCard = memo(function ComboCard({
   className,
   onOpenItemDetails,
   getItemName,
+  mealDeal,
+  onAddMealDeal,
 }: ComboCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -172,6 +180,15 @@ export const ComboCard = memo(function ComboCard({
 
             {/* Spacer */}
             <div className="flex-1" />
+
+            {/* Meal Deal Upgrade */}
+            {mealDeal && (
+              <MealDealBadge
+                mealDeal={mealDeal}
+                onAddMealDeal={onAddMealDeal ? (deal) => onAddMealDeal(deal, combo) : undefined}
+                compact
+              />
+            )}
 
             {/* Bottom: Price + CTA */}
             <div className="mt-4 flex items-center justify-between gap-2">

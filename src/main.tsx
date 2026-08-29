@@ -55,6 +55,7 @@ const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
 const HomepageSectionsPage = lazy(() => import("@/pages/admin/HomepageSectionsPage"));
 const FlashSalesPage = lazy(() => import("@/pages/admin/FlashSalesPage"));
 const HappyHourPage = lazy(() => import("@/pages/admin/HappyHourPage"));
+const MealDealsPage = lazy(() => import("@/pages/admin/MealDealsPage"));
 
 // Kitchen Layout & Pages
 const KitchenLayout = lazy(() => import("@/layouts/kitchen/KitchenLayout"));
@@ -245,6 +246,7 @@ function AppRoutes() {
           <Route path="homepage-sections" element={<HomepageSectionsPage />} />
           <Route path="flash-sales" element={<FlashSalesPage />} />
           <Route path="happy-hour" element={<HappyHourPage />} />
+          <Route path="meal-deals" element={<MealDealsPage />} />
         </Route>
 
         {/* ============ Auth ============ */}

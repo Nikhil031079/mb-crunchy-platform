@@ -7,11 +7,25 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
+import { useMealDeals } from "@/hooks/use-meal-deals";
 
 import { SectionHeader } from "./SectionHeader";
 import { ComboCard, ComboCardSkeleton } from "./ComboCard";
 
-import type { BusinessUnit, Combo, CatalogItem } from "@/types";
+import type { BusinessUnit, Combo, CatalogItem, EnrichedMealDeal } from "@/types";
+
+/**
+ * Rule 17: Check whether a parent catalog item is eligible for a meal deal.
+ * - undefined or empty parentCatalogItemIds → all eligible parents allowed
+ * - non-empty parentCatalogItemIds → only listed IDs allowed
+ */
+function isParentAllowed(
+  parentCatalogItemId: string,
+  parentCatalogItemIds?: string[],
+): boolean {
+  if (!parentCatalogItemIds || parentCatalogItemIds.length === 0) return true;
+  return parentCatalogItemIds.includes(parentCatalogItemId);
+}
 
 // ============================================================================
 // ComboOffersSection — global "Combo Offers" row across active business units
@@ -24,7 +38,7 @@ interface ComboOffersSectionProps {
 
 export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOffersSectionProps) {
   const navigate = useNavigate();
-  const { addItem } = useCart();
+  const { cart, addItem, applyMealDeal } = useCart();
   const { bySource, catalogItemMap } = useCatalogItemMap(businessUnits);
 
   const combosEnabled = businessUnits.filter((bu) => bu.enableCombos);
@@ -51,6 +65,12 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
     b3 ? { businessUnitId: b3 } : "skip",
   ) as Combo[] | undefined;
 
+  // Fetch active meal deals for each BU (same fixed-slot pattern)
+  const md0 = useMealDeals(b0);
+  const md1 = useMealDeals(b1);
+  const md2 = useMealDeals(b2);
+  const md3 = useMealDeals(b3);
+
   const expectedCount = Math.min(combosEnabled.length, 4);
   const isLoading =
     expectedCount > 0 &&
@@ -71,14 +91,35 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
 
   const firstBuSlug = combosEnabled[0]?.slug;
 
+  // Map each combo's catalogItemId → best applicable meal deal
+  const comboMealDealMap = useMemo(() => {
+    const allDeals = [...(md0 ?? []), ...(md1 ?? []), ...(md2 ?? []), ...(md3 ?? [])];
+    if (allDeals.length === 0 || combos.length === 0) return new Map<string, EnrichedMealDeal>();
+
+    const map = new Map<string, EnrichedMealDeal>();
+    for (const combo of combos) {
+      const comboCatalogItemId = bySource.get(combo._id)?._id;
+      const comboDeals = allDeals.filter(
+        (d) =>
+          d.businessUnitId === combo.businessUnitId &&
+          d.applyToCombos &&
+          isParentAllowed(comboCatalogItemId ?? "", d.parentCatalogItemIds),
+      );
+      if (comboDeals.length === 0) continue;
+      const best = comboDeals.reduce((a, b) => (a.savings > b.savings ? a : b));
+      map.set(combo._id, best);
+    }
+    return map;
+  }, [md0, md1, md2, md3, combos, bySource]);
+
   const handleAddToCart = useCallback(
-    async (combo: Combo) => {
+    async (combo: Combo): Promise<boolean> => {
       const catalogItem = bySource.get(combo._id);
       if (!catalogItem) {
         toast.error("Item unavailable", {
           description: `${combo.name} is temporarily unavailable. Please try again.`,
         });
-        return;
+        return false;
       }
       const bundleItems = combo.items?.map((ci) => ({
         name: catalogItemMap.get(ci.catalogItemId)?.name ?? "Item",
@@ -98,8 +139,32 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
       if (added) {
         toast.success("Added to cart", { description: combo.name });
       }
+      return added;
     },
     [addItem, bySource, catalogItemMap]
+  );
+
+  const handleAddMealDeal = useCallback(
+    async (deal: EnrichedMealDeal, sourceItem?: Combo) => {
+      let sourceParentCatalogItemId: string | undefined;
+      if (sourceItem) {
+        sourceParentCatalogItemId = bySource.get(sourceItem._id)?._id;
+        const parentAlreadyInCart = sourceParentCatalogItemId
+          ? cart.items.some((i) => i.catalogItemId === sourceParentCatalogItemId)
+          : false;
+        if (!parentAlreadyInCart) {
+          const added = await handleAddToCart(sourceItem);
+          if (!added) return;
+        }
+      }
+      try {
+        await applyMealDeal(deal, 1, sourceParentCatalogItemId);
+        toast.success("Meal deal applied", { description: deal.name });
+      } catch {
+        toast.error("Could not apply meal deal");
+      }
+    },
+    [applyMealDeal, handleAddToCart, bySource, cart.items]
   );
 
   if (isLoading) {
@@ -152,6 +217,8 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
                 if (catalogItem && onOpenItemDetails) onOpenItemDetails(catalogItem);
               }}
               getItemName={(catalogItemId) => catalogItemMap.get(catalogItemId)?.name}
+              mealDeal={comboMealDealMap.get(combo._id) ?? null}
+              onAddMealDeal={handleAddMealDeal}
             />
           ))}
         </div>

@@ -12,19 +12,24 @@ import { formatCurrency, calculateDiscount } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-import type { CatalogItem, CatalogItemType, Product, Combo, PartyPack } from "@/types";
+import type { CatalogItem, CatalogItemType, Product, Combo, PartyPack, EnrichedMealDeal } from "@/types";
 import type { CartItem } from "@/types";
+import { MealDealBadge } from "@/components/customer/MealDealBadge";
 
 const DESKTOP_MAX_WIDTH = 768;
 
 export interface ItemDetailsModalProps {
   selectedItem: CatalogItem | null;
   onClose: () => void;
+  mealDeal?: EnrichedMealDeal | null;
+  onAddMealDeal?: (deal: EnrichedMealDeal, sourceItem?: Combo | PartyPack) => void;
 }
 
 export function ItemDetailsModal({
   selectedItem,
   onClose,
+  mealDeal,
+  onAddMealDeal,
 }: ItemDetailsModalProps) {
   const { addItem } = useCart();
   const [isModalOpen, setIsModalOpen] = useState(true);
@@ -316,6 +321,9 @@ export function ItemDetailsModal({
       {comboItemCounts.length > 0 && (
         <div className="mb-6"><p className="text-sm font-medium text-muted-foreground mb-2">Includes:</p><ul className="space-y-2 text-sm text-muted-foreground">{comboItemCounts.slice(0, 6).map((item: { catalogItemId: string; quantity: number; name: string }) => <li key={item.catalogItemId} className="flex items-center gap-2"><span className="w-2 h-2 rounded bg-emerald-600"></span><span>{item.quantity}x</span><span>{item.name}</span></li>)}{comboItemCounts.length > 6 && <li className="text-xs text-muted-foreground">+{comboItemCounts.length - 6} more items</li>}</ul></div>
       )}
+      {mealDeal && (
+        <MealDealBadge mealDeal={mealDeal} onAddMealDeal={onAddMealDeal && comboSource ? (deal) => onAddMealDeal(deal, comboSource) : undefined} />
+      )}
       <Button size="lg" onClick={handleAddToCart} className="w-full gap-2 mt-4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><path d="M9 8l4 4L15 8"/></svg>Add to Cart</Button>
     </div>
   );
@@ -336,6 +344,9 @@ export function ItemDetailsModal({
         <div className="mb-6"><p className="text-sm font-medium text-muted-foreground mb-2">Includes:</p><ul className="space-y-2 text-sm text-muted-foreground">{partyPackItemCounts.slice(0, 6).map((item: { catalogItemId: string; quantity: number; name: string }) => <li key={item.catalogItemId} className="flex items-center gap-2"><span className="w-2 h-2 rounded bg-sky-600"></span><span>{item.quantity}x</span><span>{item.name}</span></li>)}{partyPackItemCounts.length > 6 && <li className="text-xs text-muted-foreground">+{partyPackItemCounts.length - 6} more items</li>}</ul></div>
       )}
       {partyPackSource?.minServings !== undefined && <div className="mb-4 text-sm text-muted-foreground">Servings: {partyPackSource.minServings}–{partyPackSource.maxServings}</div>}
+      {mealDeal && (
+        <MealDealBadge mealDeal={mealDeal} onAddMealDeal={onAddMealDeal && partyPackSource ? (deal) => onAddMealDeal(deal, partyPackSource) : undefined} />
+      )}
       <Button size="lg" onClick={handleAddToCart} className="w-full gap-2 mt-4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><path d="M9 8l4 4L15 8"/></svg>Add to Cart</Button>
     </div>
   );

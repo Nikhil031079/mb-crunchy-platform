@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatCurrency, calculateDiscount } from "@/utils";
+import { MealDealBadge } from "@/components/customer/MealDealBadge";
 
 import type { PartyPack } from "@/types";
+import type { EnrichedMealDeal } from "@/types";
 
 interface PartyPackCardProps {
   partyPack: PartyPack;
@@ -21,6 +23,10 @@ interface PartyPackCardProps {
   onOpenItemDetails?: (partyPack: PartyPack) => void;
   /** Maps catalogItemId to the item's display name */
   getItemName?: (catalogItemId: string) => string | undefined;
+  /** Applicable meal deal for this party pack */
+  mealDeal?: EnrichedMealDeal | null;
+  /** Called when the meal upgrade button is clicked. Second arg is the parent party pack for atomic add. */
+  onAddMealDeal?: (deal: EnrichedMealDeal, sourceItem?: PartyPack) => void;
 }
 
 export const PartyPackCard = memo(function PartyPackCard({
@@ -32,6 +38,8 @@ export const PartyPackCard = memo(function PartyPackCard({
   className,
   onOpenItemDetails,
   getItemName,
+  mealDeal,
+  onAddMealDeal,
 }: PartyPackCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -173,6 +181,15 @@ export const PartyPackCard = memo(function PartyPackCard({
 
             {/* Spacer */}
             <div className="flex-1" />
+
+            {/* Meal Deal Upgrade */}
+            {mealDeal && (
+              <MealDealBadge
+                mealDeal={mealDeal}
+                onAddMealDeal={onAddMealDeal ? (deal) => onAddMealDeal(deal, partyPack) : undefined}
+                compact
+              />
+            )}
 
             {/* Bottom: Price + CTA */}
             <div className="mt-4 flex items-center justify-between gap-2">

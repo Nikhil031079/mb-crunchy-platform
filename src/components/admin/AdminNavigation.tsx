@@ -17,6 +17,7 @@ import {
   Tag,
   Truck,
   Users,
+  UtensilsCrossed,
   Warehouse,
   Zap,
 } from "lucide-react";
@@ -47,6 +48,7 @@ const iconMap: Record<AdminNavigationIcon, ComponentType<{ className?: string }>
   Clock3,
   BarChart3,
   Truck,
+  UtensilsCrossed,
 };
 
 interface AdminNavigationProps {

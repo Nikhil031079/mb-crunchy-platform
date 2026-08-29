@@ -16,6 +16,7 @@ import {
   Clock,
   AlertTriangle,
   X,
+  UtensilsCrossed,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,6 +29,7 @@ import { filterCatalogItemIds, formatCurrency } from "@/utils";
 import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useCartMealDealDetection, useMealDeals } from "@/hooks/use-meal-deals";
 import { QuantitySelector } from "@/components/customer";
 import { ProductCard, ProductCardSkeleton } from "@/components/customer";
 import { FrequentlyBoughtTogetherSection } from "@/components/customer/FrequentlyBoughtTogetherSection";
@@ -50,7 +52,7 @@ import type { CardProduct } from "@/components/customer/ProductCard";
 
 export default function CartPage() {
   const navigate = useNavigate();
-  const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem, dismissNotice } = useCart();
+  const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem, dismissNotice, applyMealDeal, allocateExistingMealDeal, removeMealDeal } = useCart();
   const addToCart = useAddToCart();
 
   // Page title
@@ -65,6 +67,23 @@ export default function CartPage() {
     if (cart.items.length > 0) return cart.items[0].businessUnitId;
     return null;
   }, [cart.businessUnitIds, cart.items]);
+
+  const cartMealDealMatches = useCartMealDealDetection(
+    cart.items,
+    primaryBusinessUnitId,
+    cart.appliedMealDeals,
+  );
+
+  // Stale deal cleanup: remove applied deals that are no longer active
+  const activeDeals = useMealDeals(primaryBusinessUnitId);
+  useEffect(() => {
+    if (activeDeals === undefined || !cart.appliedMealDeals || cart.appliedMealDeals.length === 0) return;
+    for (const applied of cart.appliedMealDeals) {
+      if (!activeDeals.some((d) => d._id === applied.mealDealId)) {
+        removeMealDeal(applied.mealDealId);
+      }
+    }
+  }, [activeDeals, cart.appliedMealDeals, removeMealDeal]);
 
   const buSettings = useQuery(
     api.settings.getBusinessUnitSettings,
@@ -280,6 +299,83 @@ export default function CartPage() {
           </motion.div>
         )}
 
+        {/* ================================================================ */}
+        {/* MEAL DEAL SMART DETECTION OFFER                                 */}
+        {/* ================================================================ */}
+        {cartMealDealMatches.length > 0 && cartMealDealMatches.map((match) => {
+          const isPartial = match.missingItems.length > 0;
+
+          return (
+            <motion.div
+              key={match.deal._id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <UtensilsCrossed className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1">
+                  {isPartial ? (
+                    <>
+                      <p className="text-sm font-semibold">
+                        Complete Your Meal
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Add {match.missingItems.map((m) =>
+                          m.quantity > 1 ? `${m.quantity}× ${m.name}` : m.name
+                        ).join(" + ")} and save {formatCurrency(match.deal.savings)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold">
+                        Better Value Available!
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Make it a Meal for {formatCurrency(match.deal.dealPrice)}
+                        {match.deal.savings > 0 && (
+                          <span className="ml-1 text-emerald-600 font-medium">
+                            Save {formatCurrency(match.deal.savings)}
+                          </span>
+                        )}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {match.deal.qualifyingItems.map((qi) => (
+                          <span
+                            key={qi.catalogItemId}
+                            className="inline-flex items-center rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium"
+                          >
+                            {qi.quantity}x {qi.name}
+                          </span>
+                        ))}
+                      </div>
+                      {match.eligibleQuantity > 1 && (
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {match.eligibleQuantity} deals available
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  onClick={() => isPartial
+                    ? applyMealDeal(match.deal, 1, match.sourceParentCatalogItemId)
+                    : allocateExistingMealDeal(match.deal, match.sourceParentCatalogItemId)
+                  }
+                >
+                  <UtensilsCrossed className="h-3 w-3" />
+                  {isPartial ? "Add & Save" : "Apply Meal Deal"}
+                </Button>
+              </div>
+            </motion.div>
+          );
+        })}
+
         <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
           {/* ================================================================ */}
           {/* CART ITEMS                                                      */}
@@ -288,10 +384,9 @@ export default function CartPage() {
           <div className="space-y-3">
             <AnimatePresence mode="popLayout">
               {cart.items.map((item) => {
-                const itemKey = `${item.catalogItemId}-${item.variantName}`;
                 return (
                   <motion.div
-                    key={itemKey}
+                    key={item.cartItemId}
                     layout
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -351,7 +446,7 @@ export default function CartPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => removeItem(item.catalogItemId, item.variantName)}
+                          onClick={() => removeItem(item.cartItemId)}
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           aria-label={`Remove ${item.name}`}
                         >
@@ -360,7 +455,7 @@ export default function CartPage() {
                         <QuantitySelector
                           value={item.quantity}
                           onChange={(qty) =>
-                            updateQuantity(item.catalogItemId, item.variantName, qty)
+                            updateQuantity(item.cartItemId, qty)
                           }
                           min={1}
                           max={99}
@@ -372,6 +467,42 @@ export default function CartPage() {
                 );
               })}
             </AnimatePresence>
+
+            {/* Applied Meal Deals */}
+            {cart.appliedMealDeals && cart.appliedMealDeals.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Applied Meal Deals
+                </p>
+                {cart.appliedMealDeals.map((deal) => (
+                  <div
+                    key={deal.mealDealId}
+                    className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <UtensilsCrossed className="h-4 w-4 text-emerald-600" />
+                      <div>
+                        <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                          {deal.name} x{deal.quantity}
+                        </p>
+                        <p className="text-[10px] text-emerald-600">
+                          Saving {formatCurrency(deal.savings * deal.quantity)}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-emerald-700 hover:text-destructive"
+                      onClick={() => removeMealDeal(deal.mealDealId)}
+                      aria-label={`Remove ${deal.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Continue Shopping */}
             <div className="pt-4">
@@ -398,7 +529,7 @@ export default function CartPage() {
               <div className="max-h-40 space-y-2 overflow-y-auto">
                 {cart.items.map((item) => (
                   <div
-                    key={`${item.catalogItemId}-${item.variantName}`}
+                      key={item.cartItemId}
                     className="flex items-center justify-between text-sm"
                   >
                     <span className="truncate text-muted-foreground mr-2">
@@ -412,6 +543,79 @@ export default function CartPage() {
               </div>
 
               <Separator />
+
+              {/* Smart Meal Deal Suggestion */}
+              {cartMealDealMatches.length > 0 && cartMealDealMatches.map((match) => {
+                const isPartial = match.missingItems.length > 0;
+
+                return (
+                  <div
+                    key={match.deal._id}
+                    className="rounded-lg border border-primary/20 bg-primary/5 p-3"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
+                        <UtensilsCrossed className="h-3.5 w-3.5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {isPartial ? (
+                          <>
+                            <p className="text-xs font-semibold">Complete Your Meal</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              Add {match.missingItems.map((m) =>
+                                m.quantity > 1 ? `${m.quantity}× ${m.name}` : m.name
+                              ).join(" + ")}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs font-semibold">Make it a Meal</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {match.deal.qualifyingItems.map((qi) => qi.name).join(" + ")}
+                            </p>
+                          </>
+                        )}
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-xs font-bold">{formatCurrency(match.deal.dealPrice)}</span>
+                          {match.deal.savings > 0 && (
+                            <span className="text-[10px] font-medium text-emerald-600">
+                              Save {formatCurrency(match.deal.savings)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="shrink-0 h-7 gap-1 text-xs"
+                        onClick={() => isPartial
+                          ? applyMealDeal(match.deal, 1, match.sourceParentCatalogItemId)
+                          : allocateExistingMealDeal(match.deal, match.sourceParentCatalogItemId)
+                        }
+                      >
+                        {isPartial ? "Add" : "Apply"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Applied Meal Deal in Order Summary */}
+              {cart.appliedMealDeals && cart.appliedMealDeals.map((applied) => (
+                <div
+                  key={applied.mealDealId}
+                  className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/30"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                      {applied.name}
+                    </p>
+                    <p className="text-[10px] text-emerald-600">
+                      Save {formatCurrency(applied.savings * applied.quantity)}
+                    </p>
+                  </div>
+                </div>
+              ))}
 
               {/* Savings Banner */}
               {savingsInfo > 0 && (
@@ -433,6 +637,14 @@ export default function CartPage() {
                   <div className="flex justify-between text-emerald-600">
                     <span>Discount</span>
                     <span className="font-medium">-{formatCurrency(cart.discount)}</span>
+                  </div>
+                )}
+                {cart.mealDealSavings > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Meal Deal Savings</span>
+                    <span className="font-medium">
+                      -{formatCurrency(cart.mealDealSavings)}
+                    </span>
                   </div>
                 )}
                 {cart.deliveryFee > 0 && (

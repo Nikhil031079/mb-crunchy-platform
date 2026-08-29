@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // MB CRUNCHY - Convex Database Schema (v1.2 + Auth)
 // Unified schema: auth tables + all business tables
 // ============================================================================
@@ -72,7 +72,7 @@ const categories = defineTable({
   .index("by_status", ["status"]);
 
 // ============================================================================
-// PRODUCTS (Catalog only ΓÇö stock moved to inventory)
+// PRODUCTS (Catalog only — stock moved to inventory)
 // ============================================================================
 
 const productVariants = v.object({
@@ -328,7 +328,34 @@ const offers = defineTable({
   .index("by_active_period", ["startsAt", "endsAt"]);
 
 // ============================================================================
-// DELIVERY POLICIES (Global ΓÇö not BU-owned)
+// MEAL DEALS (Configurable promotional bundles)
+// ============================================================================
+
+const mealDealQualifyingItem = v.object({
+  catalogItemId: v.id("catalogItems"),
+  quantity: v.number(),
+});
+
+const mealDeals = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  name: v.string(),
+  status: v.union(v.literal("active"), v.literal("inactive")),
+  dealPrice: v.number(),
+  qualifyingItems: v.array(mealDealQualifyingItem),
+  applyToCombos: v.boolean(),
+  applyToPartyPacks: v.boolean(),
+  parentCatalogItemIds: v.optional(v.array(v.id("catalogItems"))),
+  cartSmartDetection: v.boolean(),
+  displayOrder: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "displayOrder"])
+  .index("by_status", ["status"]);
+
+// ============================================================================
+// DELIVERY POLICIES (Global — not BU-owned)
 // ============================================================================
 
 const deliveryPolicies = defineTable({
@@ -526,7 +553,7 @@ const addresses = defineTable({
   .index("by_default", ["customerId", "isDefault"]);
 
 // ============================================================================
-// LOYALTY SETTINGS (Single record ΓÇö configurable loyalty program)
+// LOYALTY SETTINGS (Single record — configurable loyalty program)
 // ============================================================================
 
 const loyaltySettings = defineTable({
@@ -593,7 +620,7 @@ const loyaltyTransactions = defineTable({
   .index("by_order", ["orderId"]);
 
 // ============================================================================
-// CUSTOMER COLLECTIONS (Generic ΓÇö favorites, wishlist, recently viewed, etc.)
+// CUSTOMER COLLECTIONS (Generic — favorites, wishlist, recently viewed, etc.)
 // ============================================================================
 
 const customerCollections = defineTable({
@@ -639,7 +666,7 @@ const deliveryZones = defineTable({
   .index("by_is_default", ["isDefault"]);
 
 // ============================================================================
-// CONTENT (Generic ΓÇö replaces banners with hero, promo, announcement, etc.)
+// CONTENT (Generic — replaces banners with hero, promo, announcement, etc.)
 // ============================================================================
 
 const content = defineTable({
@@ -725,7 +752,7 @@ const notifications = defineTable({
   .index("by_channel", ["businessUnitId", "channel"]);
 
 // ============================================================================
-// ANALYTICS ΓÇö Daily Metrics
+// ANALYTICS — Daily Metrics
 // ============================================================================
 
 const dailyMetrics = defineTable({
@@ -745,7 +772,7 @@ const dailyMetrics = defineTable({
   .index("by_date", ["date"]);
 
 // ============================================================================
-// Analytics ΓÇö Event Log (for raw view/search data)
+// Analytics — Event Log (for raw view/search data)
 // ============================================================================
 
 const analyticsEvents = defineTable({
@@ -767,7 +794,7 @@ const analyticsEvents = defineTable({
   .index("by_catalog_item", ["catalogItemId"]);
 
 // ============================================================================
-// SETTINGS (Simplified ΓÇö WhatsApp moved to notifications)
+// SETTINGS (Simplified — WhatsApp moved to notifications)
 // ============================================================================
 
 const settings = defineTable({
@@ -919,6 +946,7 @@ export default defineSchema({
   inventory,
   stockMovements,
   offers,
+  mealDeals,
   orders,
   orderActivities,
   orderNotes,

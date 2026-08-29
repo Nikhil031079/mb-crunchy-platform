@@ -1,5 +1,4 @@
 // ============================================================================
-// ============================================================================
 // MB CRUNCHY - Orders Queries & Mutations
 // ============================================================================
 
@@ -346,7 +345,7 @@ export const getByPhone = query({
   args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
-    const phone = normalizeIndianPhone(args.phone); // returns null on invalid ΓåÆ graceful empty result
+    const phone = normalizeIndianPhone(args.phone); // returns null on invalid → graceful empty result
     return await ctx.db
       .query("orders")
       .withIndex("by_phone", (q) => q.eq("customerPhone", phone ?? ""))
@@ -420,7 +419,7 @@ export const getById = query({
  * The arg object + return shape are deliberately stable: a future
  * "phone + order number + OTP" verification step can be added as an extra
  * optional arg (e.g. `otp`) with an additional server-side check inside this
- * handler ΓÇö no call-site or response-shape change required.
+ * handler — no call-site or response-shape change required.
  */
 export const getByPhoneAndOrderNumber = query({
   args: { phone: v.string(), orderNumber: v.string() },
@@ -681,13 +680,13 @@ async function computeDeliveryFee(
     }
     if (zone.minOrder && args.afterDiscount < zone.minOrder) {
       throw new Error(
-        `Delivery to "${zone.name}" requires a minimum order of Γé╣${zone.minOrder}`,
+        `Delivery to "${zone.name}" requires a minimum order of ₹${zone.minOrder}`,
       );
     }
     return feeForZone(zone);
   }
 
-  // No delivery zone found ΓÇö do not silently apply a fee.
+  // No delivery zone found — do not silently apply a fee.
   return 0;
 }
 
@@ -733,17 +732,19 @@ export const create = mutation({
     paymentMethod: v.optional(v.string()),
     idempotencyKey: v.optional(v.string()),
     loyaltyPointsToRedeem: v.optional(v.number()),
+    mealDealIds: v.optional(v.array(v.string())),
+    mealDealDiscount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     // Allow guest checkout - authentication is optional for order creation
     // Customer is identified by phone/email via ensureCustomerByPhone
 
-    // Normalize phone to canonical +91XXXXXXXXXX format ΓÇö reject invalid
+    // Normalize phone to canonical +91XXXXXXXXXX format — reject invalid
     const customerPhone = requireIndianPhone(args.customerPhone);
 
     // ----------------------------------------------------------------------
-    // 0. Idempotency ΓÇö reject duplicate submissions (network retry, browser
+    // 0. Idempotency — reject duplicate submissions (network retry, browser
     //    refresh, double-click, repeated submit). If an order already exists
     //    for this request key, return it instead of creating a new order and
     //    re-running side effects (inventory / loyalty / notifications).
@@ -773,7 +774,7 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
-    // 1. Items ΓÇö resolve each line against current catalog data and recompute
+    // 1. Items — resolve each line against current catalog data and recompute
     //    the authoritative unit price / line total from the active variant.
     // ----------------------------------------------------------------------
     const items: OrderLine[] = [];
@@ -791,7 +792,7 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
-    // 2. Coupon discount ΓÇö validated & recomputed server-side.
+    // 2. Coupon discount — validated & recomputed server-side.
     // ----------------------------------------------------------------------
     let couponDiscount = 0;
     let offerId: Id<"offers"> | undefined;
@@ -814,8 +815,53 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
-    // 3. Discount ΓÇö the portion beyond the coupon can only come from loyalty
-    //    points, capped at the customer's maximum redeemable value.
+    // 2b. Meal deal discount — validated server-side from active deals.
+    // ----------------------------------------------------------------------
+    let mealDealDiscount = 0;
+    if (args.mealDealIds && args.mealDealIds.length > 0) {
+      for (const mealDealId of args.mealDealIds) {
+        const dealDoc = await ctx.db.get(mealDealId as Id<"mealDeals">);
+        if (!dealDoc || dealDoc.status !== "active" || dealDoc.deletedAt) {
+          throw new Error("One or more meal deals are no longer active");
+        }
+
+        // Verify qualifying items exist in the order with sufficient quantities
+        for (const qi of dealDoc.qualifyingItems) {
+          const matchingItem = items.find(
+            (item) => item.catalogItemId === qi.catalogItemId
+          );
+          if (!matchingItem || matchingItem.quantity < qi.quantity) {
+            throw new Error(
+              `Insufficient quantity for meal deal qualifying item "${matchingItem?.name ?? qi.catalogItemId}"`
+            );
+          }
+        }
+
+        // Calculate server-side discount from current catalog prices
+        let serverIndividualTotal = 0;
+        for (const qi of dealDoc.qualifyingItems) {
+          const catalogItem = await ctx.db.get(qi.catalogItemId);
+          if (!catalogItem) {
+            throw new Error(`Meal deal qualifying item ${qi.catalogItemId} not found`);
+          }
+          serverIndividualTotal += catalogItem.price * qi.quantity;
+        }
+
+        const dealDiscount = serverIndividualTotal - dealDoc.dealPrice;
+        if (dealDiscount > 0) {
+          mealDealDiscount += dealDiscount;
+        }
+      }
+
+      // Validate client-submitted meal deal discount
+      if (Math.abs((args.mealDealDiscount ?? 0) - mealDealDiscount) > PRICE_TOLERANCE) {
+        throw new Error("Meal deal discount is out of date. Please review your cart.");
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // 3. Discount — the portion beyond the coupon and meal deal can only
+    //    come from loyalty points, capped at the customer's max redeemable.
     // ----------------------------------------------------------------------
     const customerId = await ensureCustomerByPhone(ctx, {
       name: args.customerName,
@@ -823,25 +869,26 @@ export const create = mutation({
       email: args.customerEmail,
     });
 
-    const submittedLoyalty = args.discount - couponDiscount;
-    if (submittedLoyalty < -PRICE_TOLERANCE) {
+    const submittedNonCouponDiscount = args.discount - couponDiscount;
+    if (submittedNonCouponDiscount < -PRICE_TOLERANCE) {
       throw new Error("Discount is out of date. Please review your cart.");
     }
     const redeemable = await getMaxRedeemableInternal(ctx, {
       customerId,
       orderTotal: subtotal,
     });
+    const submittedLoyalty = submittedNonCouponDiscount - mealDealDiscount;
     if (submittedLoyalty > redeemable.maxValue + PRICE_TOLERANCE) {
       throw new Error("Loyalty discount exceeds your available points");
     }
-    const discount =
-      couponDiscount + Math.min(Math.max(submittedLoyalty, 0), redeemable.maxValue);
+    const loyaltyDiscount = Math.min(Math.max(submittedLoyalty, 0), redeemable.maxValue);
+    const discount = couponDiscount + mealDealDiscount + loyaltyDiscount;
     if (Math.abs(args.discount - discount) > PRICE_TOLERANCE) {
       throw new Error("Discount is out of date. Please review your cart.");
     }
 
     // ----------------------------------------------------------------------
-    // 4. Delivery fee, tax and grand total ΓÇö recomputed server-side.
+    // 4. Delivery fee, tax and grand total — recomputed server-side.
     // ----------------------------------------------------------------------
     const buSettings = await ctx.db
       .query("settings")
@@ -965,7 +1012,7 @@ export const create = mutation({
       // Don't send NEW_ORDER notification or reserve inventory for awaiting_payment orders
       // These happen when payment is verified (finalizePaidOrder)
 
-      // Coupon usage ΓÇö incremented exactly once per successfully created order.
+      // Coupon usage — incremented exactly once per successfully created order.
       // `create` is idempotency-keyed (a retry returns the existing order above),
       // so a network retry or double submit can never double-count a redemption.
       // Failed/cancelled orders never reach this point and never consume usage.
@@ -974,7 +1021,7 @@ export const create = mutation({
       }
 
       // Reserve stock for each item. Done inline in the create transaction so
-      // the reservation and order insert are atomic ΓÇö a failed reservation rolls
+      // the reservation and order insert are atomic — a failed reservation rolls
       // the whole order back instead of leaving an order with no stock held.
       for (const item of items) {
         const inventory = await findInventoryForOrderItem(
@@ -1018,7 +1065,7 @@ export const create = mutation({
           orderId,
           businessUnitId: inventory.businessUnitId,
           action: "inventory_reserved",
-          newValue: `${item.quantity} ├ù ${inventory.variantName}`,
+          newValue: `${item.quantity} × ${inventory.variantName}`,
           actor: "system",
           visibleToCustomer: true,
         });
@@ -1035,7 +1082,7 @@ export const create = mutation({
         customerName: args.customerName,
       });
 
-      // Atomic loyalty redemption ΓÇö server-authoritative. Deducted within the
+      // Atomic loyalty redemption — server-authoritative. Deducted within the
       // same transaction as order creation so a failure rolls back the order.
       const loyaltyPoints = args.loyaltyPointsToRedeem ?? 0;
       if (loyaltyPoints > 0 && customerId) {
@@ -1083,7 +1130,7 @@ export const updateStatus = mutation({
         v.literal("pending"),
         v.literal("paid"),
         v.literal("failed"),
-        v.literal("refunded")
+        v.literal("refunded"),
       )
     ),
   },
@@ -1360,8 +1407,8 @@ export const updateDeliveryQuote = mutation({
       orderId: order._id,
       businessUnitId: order.businessUnitId,
       action: "payment_pending",
-      previousValue: previousQuoteAmount > 0 ? `Γé╣${previousQuoteAmount}` : "not_quoted",
-      newValue: `Γé╣${args.deliveryQuoteAmount}`,
+      previousValue: previousQuoteAmount > 0 ? `₹${previousQuoteAmount}` : "not_quoted",
+      newValue: `₹${args.deliveryQuoteAmount}`,
       actor: "admin",
       visibleToCustomer: true,
     });

@@ -115,9 +115,9 @@ export const ProductCard = memo(function ProductCard({
     e.preventDefault();
     e.stopPropagation();
     if (cartItem) {
-      updateQuantity(product._id, defaultVariantName, cartItem.quantity + 1);
+      updateQuantity(cartItem.cartItemId, cartItem.quantity + 1);
     }
-  }, [cartItem, updateQuantity, product._id, defaultVariantName]);
+  }, [cartItem, updateQuantity]);
 
   const handleDecrement = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -125,12 +125,12 @@ export const ProductCard = memo(function ProductCard({
     if (cartItem) {
       const newQty = cartItem.quantity - 1;
       if (newQty <= 0) {
-        updateQuantity(product._id, defaultVariantName, 0);
+        updateQuantity(cartItem.cartItemId, 0);
       } else {
-        updateQuantity(product._id, defaultVariantName, newQty);
+        updateQuantity(cartItem.cartItemId, newQty);
       }
     }
-  }, [cartItem, updateQuantity, product._id, defaultVariantName]);
+  }, [cartItem, updateQuantity]);
 
   const handleFavorite = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

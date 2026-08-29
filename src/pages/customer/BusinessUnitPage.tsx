@@ -25,6 +25,7 @@ import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
 import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
+import { useMealDeals } from "@/hooks/use-meal-deals";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 
 // Customer reusable components
@@ -67,6 +68,19 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
 
+/**
+ * Rule 17: Check whether a parent catalog item is eligible for a meal deal.
+ * - undefined or empty parentCatalogItemIds → all eligible parents allowed
+ * - non-empty parentCatalogItemIds → only listed IDs allowed
+ */
+function isParentAllowed(
+  parentCatalogItemId: string,
+  parentCatalogItemIds?: string[],
+): boolean {
+  if (!parentCatalogItemIds || parentCatalogItemIds.length === 0) return true;
+  return parentCatalogItemIds.includes(parentCatalogItemId);
+}
+
 // ============================================================================
 // Sort Options
 // ============================================================================
@@ -105,7 +119,7 @@ export default function BusinessUnitPage() {
   const onCloseModal = () => setSelectedItem(null);
 
   // Cart
-  const { addItem } = useCart();
+  const { cart, addItem, applyMealDeal } = useCart();
 
   // ==========================================================================
   // Data Fetching
@@ -195,6 +209,10 @@ export default function BusinessUnitPage() {
     businessUnit ? [businessUnit] : undefined
   );
 
+  // Meal deal eligibility for combos and party packs — per-item filtering
+  // respects parentCatalogItemIds (Rule 17).
+  const activeDeals = useMealDeals(businessUnit?._id ?? null);
+
   // ==========================================================================
   // Derived State
   // ==========================================================================
@@ -259,6 +277,40 @@ export default function BusinessUnitPage() {
     () => (partyPacks ?? []).filter((p) => p.status === "active"),
     [partyPacks]
   );
+
+  // Per-combo meal deal map — respects parentCatalogItemIds (Rule 17).
+  const comboMealDealMap = useMemo(() => {
+    if (!activeDeals || activeDeals.length === 0) return new Map<string, import("@/types").EnrichedMealDeal>();
+    const map = new Map<string, import("@/types").EnrichedMealDeal>();
+    for (const combo of activeCombos) {
+      const comboCatalogItemId = bySource.get(combo._id)?._id;
+      const eligible = activeDeals.filter(
+        (d) =>
+          d.applyToCombos &&
+          isParentAllowed(comboCatalogItemId ?? "", d.parentCatalogItemIds),
+      );
+      if (eligible.length === 0) continue;
+      map.set(combo._id, eligible.reduce((a, b) => (a.savings > b.savings ? a : b)));
+    }
+    return map;
+  }, [activeDeals, activeCombos, bySource]);
+
+  // Per-party-pack meal deal map — respects parentCatalogItemIds (Rule 17).
+  const partyPackMealDealMap = useMemo(() => {
+    if (!activeDeals || activeDeals.length === 0) return new Map<string, import("@/types").EnrichedMealDeal>();
+    const map = new Map<string, import("@/types").EnrichedMealDeal>();
+    for (const pack of activePartyPacks) {
+      const packCatalogItemId = bySource.get(pack._id)?._id;
+      const eligible = activeDeals.filter(
+        (d) =>
+          d.applyToPartyPacks &&
+          isParentAllowed(packCatalogItemId ?? "", d.parentCatalogItemIds),
+      );
+      if (eligible.length === 0) continue;
+      map.set(pack._id, eligible.reduce((a, b) => (a.savings > b.savings ? a : b)));
+    }
+    return map;
+  }, [activeDeals, activePartyPacks, bySource]);
 
   // Filter + sort catalog items
   const filteredItems = useMemo(() => {
@@ -385,22 +437,22 @@ export default function BusinessUnitPage() {
   );
 
   const handleAddCombo = useCallback(
-    async (combo: Combo) => {
-      if (!businessUnit) return;
+    async (combo: Combo): Promise<boolean> => {
+      if (!businessUnit) return false;
       if (!storeIsOpen) {
         toast.error("Store is currently closed", {
           description: nextOpenTime
             ? `Orders resume ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
             : "Please try again during business hours.",
         });
-        return;
+        return false;
       }
       const catalogItem = bySource.get(combo._id);
       if (!catalogItem) {
         toast.error("Item unavailable", {
           description: `${combo.name} is temporarily unavailable. Please try again.`,
         });
-        return;
+        return false;
       }
       const bundleItems = combo.items?.map((ci) => ({
         name: catalogItemMap.get(ci.catalogItemId)?.name ?? "Item",
@@ -420,27 +472,28 @@ export default function BusinessUnitPage() {
       if (added) {
         toast.success("Added to cart", { description: combo.name });
       }
+      return added;
     },
     [addItem, bySource, catalogItemMap, businessUnit, storeIsOpen, nextOpenTime]
   );
 
   const handleAddPartyPack = useCallback(
-    async (pack: PartyPack) => {
-      if (!businessUnit) return;
+    async (pack: PartyPack): Promise<boolean> => {
+      if (!businessUnit) return false;
       if (!storeIsOpen) {
         toast.error("Store is currently closed", {
           description: nextOpenTime
             ? `Orders resume ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
             : "Please try again during business hours.",
         });
-        return;
+        return false;
       }
       const catalogItem = bySource.get(pack._id);
       if (!catalogItem) {
         toast.error("Item unavailable", {
           description: `${pack.name} is temporarily unavailable. Please try again.`,
         });
-        return;
+        return false;
       }
       const bundleItems = pack.items?.map((pi) => ({
         name: catalogItemMap.get(pi.catalogItemId)?.name ?? "Item",
@@ -460,8 +513,38 @@ export default function BusinessUnitPage() {
       if (added) {
         toast.success("Added to cart", { description: pack.name });
       }
+      return added;
     },
     [addItem, bySource, catalogItemMap, businessUnit, storeIsOpen, nextOpenTime]
+  );
+
+  const handleAddMealDeal = useCallback(
+    async (deal: import("@/types").EnrichedMealDeal, sourceItem?: Combo | PartyPack) => {
+      if (!businessUnit) return;
+      if (!storeIsOpen) {
+        toast.error("Store is currently closed", {
+          description: nextOpenTime
+            ? `Orders resume ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
+            : "Please try again during business hours.",
+        });
+        return;
+      }
+      let sourceParentCatalogItemId: string | undefined;
+      if (sourceItem) {
+        sourceParentCatalogItemId = bySource.get(sourceItem._id)?._id;
+        const parentAlreadyInCart = sourceParentCatalogItemId
+          ? cart.items.some((i) => i.catalogItemId === sourceParentCatalogItemId)
+          : false;
+        if (!parentAlreadyInCart) {
+          const added = "minServings" in sourceItem
+            ? await handleAddPartyPack(sourceItem as PartyPack)
+            : await handleAddCombo(sourceItem as Combo);
+          if (!added) return;
+        }
+      }
+      await applyMealDeal(deal, 1, sourceParentCatalogItemId);
+    },
+    [applyMealDeal, handleAddCombo, handleAddPartyPack, businessUnit, storeIsOpen, nextOpenTime, bySource, cart.items]
   );
 
   // Set page title
@@ -963,6 +1046,8 @@ export default function BusinessUnitPage() {
                     if (catalogItem) setSelectedItem(catalogItem);
                   }}
                   getItemName={(catalogItemId) => catalogItemMap.get(catalogItemId)?.name}
+                  mealDeal={comboMealDealMap.get(combo._id) ?? null}
+                  onAddMealDeal={handleAddMealDeal}
                 />
               ))}
             </div>
@@ -1018,6 +1103,8 @@ export default function BusinessUnitPage() {
                     if (catalogItem) setSelectedItem(catalogItem);
                   }}
                   getItemName={(catalogItemId) => catalogItemMap.get(catalogItemId)?.name}
+                  mealDeal={partyPackMealDealMap.get(pack._id) ?? null}
+                  onAddMealDeal={handleAddMealDeal}
                 />
               ))}
             </div>
@@ -1044,6 +1131,14 @@ export default function BusinessUnitPage() {
           <ItemDetailsModal
             selectedItem={selectedItem}
             onClose={onCloseModal}
+            mealDeal={
+              selectedItem.itemType === "combo"
+                ? comboMealDealMap.get(selectedItem.sourceId) ?? null
+                : selectedItem.itemType === "partyPack"
+                  ? partyPackMealDealMap.get(selectedItem.sourceId) ?? null
+                  : null
+            }
+            onAddMealDeal={handleAddMealDeal}
           />
         )}
       </div>

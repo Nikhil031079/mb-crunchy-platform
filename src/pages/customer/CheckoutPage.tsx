@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useAction, useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingCart,
@@ -38,9 +38,11 @@ import { useAuth } from "@/hooks/use-auth";
 
 // Customer components
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
-import { openRazorpayCheckout } from "@/hooks/use-razorpay";
 import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 import { PhoneInput } from "@/components/customer/PhoneInput";
+
+// Payment
+import { openRazorpayCheckout } from "@/hooks/use-razorpay";
 
 // Shared components
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -63,7 +65,7 @@ import type {
 import type { Id } from "@convex/_generated/dataModel";
 
 // ============================================================================
-// CheckoutPage ΓÇö Contact form, delivery/pickup, order summary, submit
+// CheckoutPage — Contact form, delivery/pickup, order summary, submit
 // ============================================================================
 
 interface CheckoutForm {
@@ -91,7 +93,7 @@ const INITIAL_FORM: CheckoutForm = {
 };
 
 // ============================================================================
-// Idempotency key ΓÇö stable per order intent, reused across retries so a
+// Idempotency key — stable per order intent, reused across retries so a
 // double-click, network retry or browser refresh can never create a duplicate
 // order. Persisted in sessionStorage so it survives a refresh mid-submit; it
 // is cleared only after the order is successfully created.
@@ -115,7 +117,7 @@ function clearIdempotencyKey() {
 }
 
 // ============================================================================
-// Order confirmation persistence ΓÇö survives browser refresh so the
+// Order confirmation persistence — survives browser refresh so the
 // confirmation page can recover the order via a reactive Convex query.
 // Used by ALL order flows (outside-area, local delivery, pickup).
 // ============================================================================
@@ -130,7 +132,7 @@ function persistOrderConfirmation(orderNumber: string, phone: string) {
       JSON.stringify({ orderNumber, phone })
     );
   } catch {
-    // localStorage unavailable ΓÇö non-critical, fallback to fresh state
+    // localStorage unavailable — non-critical, fallback to fresh state
   }
 }
 
@@ -167,7 +169,7 @@ function clearPersistedOrderConfirmation() {
 }
 
 // ============================================================================
-// OutsideAreaConfirmation ΓÇö persistent, backend-driven order status page
+// OutsideAreaConfirmation — persistent, backend-driven order status page
 // for outside-area delivery orders. Uses a reactive Convex query so the
 // page updates in real-time when the admin sends a quote.
 // ============================================================================
@@ -234,7 +236,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
     );
   }
 
-  // Non-outside-area order ΓÇö shouldn't happen, but fallback
+  // Non-outside-area order — shouldn't happen, but fallback
   if (order.deliveryType !== "outside_area") {
     clearPersistedOrderConfirmation();
     return (
@@ -262,7 +264,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
     `Hi MB Crunchy,\n\nI have requested outside-area delivery.\n\nOrder: ${order.orderNumber}\nOrder value: ${formatCurrency(orderSubtotal)}\n\nPlease check delivery availability and confirm the delivery charge.`
   );
 
-  // ΓöÇΓöÇ QUOTE PENDING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── QUOTE PENDING ────────────────────────────────────────────────────────
   if (quoteStatus === "pending") {
     return (
       <div className="min-h-screen bg-background">
@@ -370,7 +372,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
     );
   }
 
-  // ΓöÇΓöÇ QUOTE QUOTED / ACCEPTED / REJECTED ΓÇö delegate to PaymentPendingCard ΓöÇΓöÇ
+  // ── QUOTE QUOTED / ACCEPTED / REJECTED — delegate to PaymentPendingCard ──
   // PaymentPendingCard handles: quote ready (accept/decline), quote accepted
   // (payment flow), quote rejected (cancelled state).
   const settings = (buSettings ?? null) as { paymentConfig?: { whatsappNumber?: string } } | null;
@@ -396,7 +398,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
             <h1 className="text-2xl font-bold tracking-tight">
               {quoteStatus === "quoted" && "Delivery Quote Ready"}
-              {quoteStatus === "accepted" && "Quote Accepted ΓÇö Complete Payment"}
+              {quoteStatus === "accepted" && "Quote Accepted — Complete Payment"}
               {quoteStatus === "rejected" && "Delivery Quote Declined"}
               {!quoteStatus && "Order Confirmed"}
             </h1>
@@ -492,7 +494,7 @@ export default function CheckoutPage() {
   const [redeemPoints, setRedeemPoints] = useState(0);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
-  // Order confirmation lookup ΓÇö after order creation, we subscribe to the
+  // Order confirmation lookup — after order creation, we subscribe to the
   // authoritative order record from Convex so the confirmation screen always
   // shows correct totals (not derived from the now-empty cart).
   const [confirmLookup, setConfirmLookup] = useState<{ phone: string; orderNumber: string } | null>(null);
@@ -508,7 +510,7 @@ export default function CheckoutPage() {
   );
 
   // ==========================================================================
-  // Data Fetching ΓÇö BU settings + global delivery policy
+  // Data Fetching — BU settings + global delivery policy
   // ==========================================================================
 
   // Use the first business unit from cart for settings queries
@@ -613,7 +615,8 @@ export default function CheckoutPage() {
   const pricing = useMemo(() => {
     const subtotal = cart.subtotal;
     const couponDiscount = couponApplied?.valid ? (couponApplied.discount ?? 0) : 0;
-    const discount = cart.discount + couponDiscount + loyaltyDiscount;
+    const mealDealDiscount = cart.mealDealSavings ?? 0;
+    const discount = cart.discount + couponDiscount + loyaltyDiscount + mealDealDiscount;
     const afterDiscount = Math.max(0, subtotal - discount);
 
     // Tax
@@ -642,10 +645,10 @@ export default function CheckoutPage() {
     const total = afterDiscount + deliveryFee + tax;
 
     return { subtotal, discount, afterDiscount, tax, taxRate, deliveryFee, freeDelivery, estimatedMinutes, total };
-  }, [cart.subtotal, cart.discount, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount]);
+  }, [cart.subtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount]);
 
   // ==========================================================================
-  // Defensive normalization ΓÇö deliveryType is only meaningful for delivery orders.
+  // Defensive normalization — deliveryType is only meaningful for delivery orders.
   // When orderType is "pickup", effectiveDeliveryType is undefined so stale
   // outside_area state can never leak into pricing, validation, or submission.
   // ==========================================================================
@@ -687,7 +690,7 @@ export default function CheckoutPage() {
       title: couponValidation.title,
     });
     toast.success("Coupon applied!", {
-      description: `${couponValidation.title} ΓÇö ${formatCurrency(couponValidation.discount ?? 0)} off`,
+      description: `${couponValidation.title} — ${formatCurrency(couponValidation.discount ?? 0)} off`,
     });
   }, [form.couponCode, couponValidation, cart.subtotal]);
 
@@ -832,6 +835,8 @@ export default function CheckoutPage() {
           paymentMethod: "razorpay",
           idempotencyKey: getOrCreateIdempotencyKey(),
           loyaltyPointsToRedeem: redeemPoints > 0 ? redeemPoints : undefined,
+          mealDealIds: cart.appliedMealDeals?.map((d) => d.mealDealId),
+          mealDealDiscount: cart.mealDealSavings > 0 ? cart.mealDealSavings : undefined,
         });
 
         const { orderId: newOrderId, orderNumber: newOrderNumber } = orderResult as { orderId: string; orderNumber: string };
@@ -981,7 +986,7 @@ export default function CheckoutPage() {
   }, [pendingOrder, form, createRazorpayOrder, verifyRazorpayPayment, clearCart]);
 
   // ==========================================================================
-  // Persisted order confirmation ΓÇö recovers confirmation page on refresh
+  // Persisted order confirmation — recovers confirmation page on refresh
   // (initialized above via activeLookup = confirmLookup ?? persistedOrder)
   // ==========================================================================
 
@@ -1008,7 +1013,7 @@ export default function CheckoutPage() {
         : order.paymentStatus === "failed"
           ? "Failed"
           : "Pending"
-      : "Processing";
+      : "Pending";
     const paymentColor = order
       ? order.paymentStatus === "paid"
         ? "text-emerald-600"
@@ -1077,7 +1082,7 @@ export default function CheckoutPage() {
               transition={{ delay: 0.25 }}
             >
               <h1 className="text-2xl font-bold tracking-tight">
-                Payment Recorded
+                Payment Submitted for Verification
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 Your payment has been recorded. We&apos;ll start preparing your order shortly.
@@ -1402,7 +1407,7 @@ export default function CheckoutPage() {
           </p>
         </motion.div>
 
-        {/* Loading State ΓÇö settings still loading */}
+        {/* Loading State — settings still loading */}
         {buSettings === undefined && cart.businessUnitIds[0] && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1457,7 +1462,7 @@ export default function CheckoutPage() {
                   </p>
                   <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
                     Your order is reserved for{" "}
-                    {formatCurrency(pendingOrder.amount)}. Complete the
+                    {formatCurrency(pendingOrder.amount)}. Complete the UPI
                     payment to confirm it.
                   </p>
                 </div>
@@ -1630,7 +1635,7 @@ export default function CheckoutPage() {
                     <div className="rounded-xl border border-border/60 p-6 space-y-4">
                       <h2 className="font-semibold">Delivery Details</h2>
 
-                      {/* Delivery Type Selection ΓÇö Local vs Outside Area */}
+                      {/* Delivery Type Selection — Local vs Outside Area */}
                       <div className="space-y-2">
                         <Label>Delivery Area</Label>
                         <RadioGroup
@@ -1968,7 +1973,7 @@ export default function CheckoutPage() {
                           <div className="text-xs text-muted-foreground">
                             {item.bundleItems.map((bi, i) => (
                               <span key={i}>
-                                {bi.quantity}├ù {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
+                                {bi.quantity}× {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
                               </span>
                             ))}
                           </div>
@@ -2032,7 +2037,7 @@ export default function CheckoutPage() {
                   </div>
                   {couponApplied?.valid && couponApplied.discount && (
                     <p className="text-xs text-emerald-600">
-                      {couponApplied.title} ΓÇö {formatCurrency(couponApplied.discount)} off
+                      {couponApplied.title} — {formatCurrency(couponApplied.discount)} off
                     </p>
                   )}
                   {couponApplied && !couponApplied.valid && couponApplied.error && (
@@ -2244,6 +2249,7 @@ export default function CheckoutPage() {
           </div>
         </form>
       </div>
+
     </div>
   );
 }

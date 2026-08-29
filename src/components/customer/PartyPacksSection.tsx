@@ -7,11 +7,25 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
+import { useMealDeals } from "@/hooks/use-meal-deals";
 
 import { SectionHeader } from "./SectionHeader";
 import { PartyPackCard, PartyPackCardSkeleton } from "./PartyPackCard";
 
-import type { BusinessUnit, PartyPack, CatalogItem } from "@/types";
+import type { BusinessUnit, PartyPack, CatalogItem, EnrichedMealDeal } from "@/types";
+
+/**
+ * Rule 17: Check whether a parent catalog item is eligible for a meal deal.
+ * - undefined or empty parentCatalogItemIds → all eligible parents allowed
+ * - non-empty parentCatalogItemIds → only listed IDs allowed
+ */
+function isParentAllowed(
+  parentCatalogItemId: string,
+  parentCatalogItemIds?: string[],
+): boolean {
+  if (!parentCatalogItemIds || parentCatalogItemIds.length === 0) return true;
+  return parentCatalogItemIds.includes(parentCatalogItemId);
+}
 
 // ============================================================================
 // PartyPacksSection — featured party packs across business units.
@@ -33,7 +47,7 @@ export function PartyPacksSection({
   onOpenItemDetails,
 }: PartyPacksSectionProps) {
   const navigate = useNavigate();
-  const { addItem } = useCart();
+  const { cart, addItem, applyMealDeal } = useCart();
   const { bySource, catalogItemMap } = useCatalogItemMap(businessUnits);
 
   const packsEnabled = useMemo(
@@ -63,6 +77,12 @@ export function PartyPacksSection({
     b3 ? { businessUnitId: b3 } : "skip",
   ) as PartyPack[] | undefined;
 
+  // Fetch active meal deals for each BU
+  const md0 = useMealDeals(b0);
+  const md1 = useMealDeals(b1);
+  const md2 = useMealDeals(b2);
+  const md3 = useMealDeals(b3);
+
   const expectedCount = Math.min(packsEnabled.length, MAX_BUSINESS_UNITS);
   const isLoading =
     expectedCount > 0 &&
@@ -83,14 +103,35 @@ export function PartyPacksSection({
 
   const firstBuSlug = packsEnabled[0]?.slug;
 
+  // Map each pack's catalogItemId → best applicable meal deal
+  const packMealDealMap = useMemo(() => {
+    const allDeals = [...(md0 ?? []), ...(md1 ?? []), ...(md2 ?? []), ...(md3 ?? [])];
+    if (allDeals.length === 0 || packs.length === 0) return new Map<string, EnrichedMealDeal>();
+
+    const map = new Map<string, EnrichedMealDeal>();
+    for (const pack of packs) {
+      const packCatalogItemId = bySource.get(pack._id)?._id;
+      const packDeals = allDeals.filter(
+        (d) =>
+          d.businessUnitId === pack.businessUnitId &&
+          d.applyToPartyPacks &&
+          isParentAllowed(packCatalogItemId ?? "", d.parentCatalogItemIds),
+      );
+      if (packDeals.length === 0) continue;
+      const best = packDeals.reduce((a, b) => (a.savings > b.savings ? a : b));
+      map.set(pack._id, best);
+    }
+    return map;
+  }, [md0, md1, md2, md3, packs, bySource]);
+
   const handleAddToCart = useCallback(
-    async (pack: PartyPack) => {
+    async (pack: PartyPack): Promise<boolean> => {
       const catalogItem = bySource.get(pack._id);
       if (!catalogItem) {
         toast.error("Item unavailable", {
           description: `${pack.name} is temporarily unavailable. Please try again.`,
         });
-        return;
+        return false;
       }
       const bundleItems = pack.items?.map((pi) => ({
         name: catalogItemMap.get(pi.catalogItemId)?.name ?? "Item",
@@ -110,8 +151,32 @@ export function PartyPacksSection({
       if (added) {
         toast.success("Added to cart", { description: pack.name });
       }
+      return added;
     },
     [addItem, bySource, catalogItemMap]
+  );
+
+  const handleAddMealDeal = useCallback(
+    async (deal: EnrichedMealDeal, sourceItem?: PartyPack) => {
+      let sourceParentCatalogItemId: string | undefined;
+      if (sourceItem) {
+        sourceParentCatalogItemId = bySource.get(sourceItem._id)?._id;
+        const parentAlreadyInCart = sourceParentCatalogItemId
+          ? cart.items.some((i) => i.catalogItemId === sourceParentCatalogItemId)
+          : false;
+        if (!parentAlreadyInCart) {
+          const added = await handleAddToCart(sourceItem);
+          if (!added) return;
+        }
+      }
+      try {
+        await applyMealDeal(deal, 1, sourceParentCatalogItemId);
+        toast.success("Meal deal applied", { description: deal.name });
+      } catch {
+        toast.error("Could not apply meal deal");
+      }
+    },
+    [applyMealDeal, handleAddToCart, bySource, cart.items]
   );
 
   if (isLoading) {
@@ -164,6 +229,8 @@ export function PartyPacksSection({
                 if (catalogItem && onOpenItemDetails) onOpenItemDetails(catalogItem);
               }}
               getItemName={(catalogItemId) => catalogItemMap.get(catalogItemId)?.name}
+              mealDeal={packMealDealMap.get(pack._id) ?? null}
+              onAddMealDeal={handleAddMealDeal}
             />
           ))}
         </div>
