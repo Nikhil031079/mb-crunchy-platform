@@ -836,7 +836,7 @@ export default function CheckoutPage() {
           idempotencyKey: getOrCreateIdempotencyKey(),
           loyaltyPointsToRedeem: redeemPoints > 0 ? redeemPoints : undefined,
           mealDealIds: cart.appliedMealDeals?.map((d) => d.mealDealId),
-          mealDealDiscount: cart.mealDealSavings > 0 ? cart.mealDealSavings : undefined,
+          mealDealDiscount: (cart.mealDealSavings ?? 0) > 0 ? cart.mealDealSavings : undefined,
         });
 
         const { orderId: newOrderId, orderNumber: newOrderNumber } = orderResult as { orderId: string; orderNumber: string };

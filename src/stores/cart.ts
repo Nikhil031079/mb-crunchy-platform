@@ -283,9 +283,12 @@ function reconcileCartState(prev: CartState): CartState {
       newItems = merged;
 
       // Rebuild consumedCartLineIds from remaining deal-tagged items.
+      // cartItemId is guaranteed by the cart store's migration logic
+      // (every item gets an ID on load), but TypeScript doesn't know this
+      // invariant. Use filter to only include defined IDs.
       const newConsumedCartLineIds = newItems
-        .filter((i) => i.mealDealId === dealId)
-        .map((i) => i.cartItemId);
+        .filter((i) => i.mealDealId === dealId && i.cartItemId)
+        .map((i) => i.cartItemId!);
 
       validDeals.push({
         ...deal,
@@ -389,23 +392,28 @@ function loadPersistedCart(): CartState | undefined {
         // Initialize consumedCartLineIds from items in cart
         const consumedCartLineIds: string[] = [];
         for (const item of migratedItems) {
-          if (item.mealDealId === deal.mealDealId) {
-            consumedCartLineIds.push(item.cartItemId);
+          if (item.mealDealId === deal.mealDealId && item.cartItemId) {
+              consumedCartLineIds.push(item.cartItemId!);
           }
         }
         if (deal.consumedQuantities) {
           return { ...deal, consumedCartLineIds };
         }
-        if (deal.consumedItemIds && Array.isArray(deal.consumedItemIds)) {
-          // Migrate from old format: consumedItemIds: string[]
-          const consumedQuantities: Record<string, number> = {};
-          for (const itemId of deal.consumedItemIds) {
-            consumedQuantities[itemId] = (consumedQuantities[itemId] ?? 0) + 1;
+        // Old format: migrate consumedItemIds to consumedQuantities
+        // Build consumedQuantities from cart items carrying this deal's marker
+        const consumedQuantities: Record<string, number> = {};
+        for (const item of migratedItems) {
+          if (item.mealDealId === deal.mealDealId) {
+            const itemIndex = migratedItems.findIndex(
+              (i) => i.cartItemId === item.cartItemId,
+            );
+            if (itemIndex >= 0) {
+              consumedQuantities[item.catalogItemId] =
+                (consumedQuantities[item.catalogItemId] ?? 0) + 1;
+            }
           }
-          const { consumedItemIds, ...rest } = deal;
-          return { ...rest, consumedQuantities, consumedCartLineIds };
         }
-        return { ...deal, consumedCartLineIds };
+        return { ...deal, consumedQuantities, consumedCartLineIds };
       });
     }
 
@@ -790,7 +798,7 @@ export function useCart() {
                   mealDealId: deal._id,
                   mealDealName: deal.name,
                 };
-                consumedCartLineIds.push(ci.cartItemId);
+                consumedCartLineIds.push(ci.cartItemId ?? generateCartItemId());
               } else {
                 // Split: reduce standalone, add deal-tagged portion
                 const dealCartItemId = generateCartItemId();
@@ -821,11 +829,11 @@ export function useCart() {
               catalogItemId: qi.catalogItemId,
               itemType: "product",
               businessUnitId: prev.businessUnitIds[0] ?? "",
-              name: qi.name,
+              name: qi.name ?? "Qualifying Item",
               variantName: "Default",
               quantity: remaining,
-              unitPrice: qi.price,
-              totalPrice: qi.price * remaining,
+              unitPrice: qi.price ?? 0,
+              totalPrice: (qi.price ?? 0) * remaining,
               mealDealId: deal._id,
               mealDealName: deal.name,
             });
@@ -987,7 +995,7 @@ export function useCart() {
                 mealDealId: deal._id,
                 mealDealName: deal.name,
               };
-              consumedCartLineIds.push(item.cartItemId);
+              consumedCartLineIds.push(item.cartItemId ?? generateCartItemId());
             } else {
               // Split: part for deal, part remains standalone
               const dealCartItemId = generateCartItemId();

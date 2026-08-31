@@ -761,6 +761,9 @@ export interface CartItem {
   image?: string;
   /** Included items for combos / party packs — resolved at add-to-cart time. */
   bundleItems?: Array<{ name: string; quantity: number }>;
+  mealDealId?: string;
+  mealDealName?: string;
+  cartItemId?: string;
 }
 
 /**
@@ -782,7 +785,74 @@ export interface CartState {
   total: number;
   note?: string;
   notice?: CartNotice;
+  mealDealSavings?: number;
+  appliedMealDeals?: CartAppliedMealDeal[];
 }
+
+// ============================================================================
+// Meal Deal Types
+// ============================================================================
+
+export type MealDealStatus = "active" | "inactive";
+
+export interface MealDeal {
+  businessUnitId: string;
+  name: string;
+  status: MealDealStatus;
+  dealPrice: number;
+  qualifyingItems: MealDealQualifyingItem[];
+  applyToCombos: boolean;
+  applyToPartyPacks: boolean;
+  parentCatalogItemIds?: string[];
+  cartSmartDetection?: boolean;
+  displayOrder: number;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
+}
+
+export interface MealDealQualifyingItem {
+  catalogItemId: string;
+  quantity: number;
+  name?: string;
+  price?: number;
+  compareAtPrice?: number;
+}
+
+export interface EnrichedMealDeal {
+  _id: string;
+  businessUnitId: string;
+  name: string;
+  status: MealDealStatus;
+  dealPrice: number;
+  savings: number;
+  qualifyingItems: MealDealQualifyingItem[];
+  applyToCombos: boolean;
+  applyToPartyPacks: boolean;
+  parentCatalogItemIds?: string[];
+  cartSmartDetection?: boolean;
+  displayOrder: number;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
+}
+
+export interface CartAppliedMealDeal {
+  mealDealId: string;
+  name: string;
+  dealPrice: number;
+  savings: number;
+  quantity: number;
+  discount?: number;
+  applyToCombos?: boolean;
+  applyToPartyPacks?: boolean;
+  parentCatalogItemIds?: string[];
+  sourceParentCatalogItemId?: string;
+  consumedQuantities: Record<string, number>;
+  consumedCartLineIds: string[];
+}
+
+export type MealDealRecord = EnrichedMealDeal;
 
 // ============================================================================
 // API Response Types

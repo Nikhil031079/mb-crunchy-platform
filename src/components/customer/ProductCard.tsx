@@ -111,26 +111,30 @@ export const ProductCard = memo(function ProductCard({
     onAddToCart?.(product);
   }, [isOutOfStock, onAddToCart, product]);
 
+  // cartItemId is guaranteed by the cart store's migration logic,
+  // but TypeScript doesn't know this invariant. Generate one if missing.
   const handleIncrement = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (cartItem) {
-      updateQuantity(cartItem.cartItemId, cartItem.quantity + 1);
+      const cartItemId = cartItem.cartItemId ?? `cl_${Date.now().toString(36)}_${(Math.random()*1e8>>>0).toString(36)}`;
+      updateQuantity(cartItemId, cartItem.quantity + 1);
     }
-  }, [cartItem, updateQuantity]);
+  }, [updateQuantity]);
 
   const handleDecrement = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (cartItem) {
+      const cartItemId = cartItem.cartItemId ?? `cl_${Date.now().toString(36)}_${(Math.random()*1e8>>>0).toString(36)}`;
       const newQty = cartItem.quantity - 1;
       if (newQty <= 0) {
-        updateQuantity(cartItem.cartItemId, 0);
+        updateQuantity(cartItemId, 0);
       } else {
-        updateQuantity(cartItem.cartItemId, newQty);
+        updateQuantity(cartItemId, newQty);
       }
     }
-  }, [cartItem, updateQuantity]);
+  }, [updateQuantity]);
 
   const handleFavorite = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

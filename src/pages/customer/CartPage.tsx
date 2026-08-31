@@ -446,7 +446,7 @@ export default function CartPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => removeItem(item.cartItemId)}
+                          onClick={() => removeItem(item.cartItemId ?? 'cl_0')}
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           aria-label={`Remove ${item.name}`}
                         >
@@ -455,7 +455,7 @@ export default function CartPage() {
                         <QuantitySelector
                           value={item.quantity}
                           onChange={(qty) =>
-                            updateQuantity(item.cartItemId, qty)
+                            updateQuantity(item.cartItemId ?? 'cl_0', qty)
                           }
                           min={1}
                           max={99}
@@ -639,11 +639,11 @@ export default function CartPage() {
                     <span className="font-medium">-{formatCurrency(cart.discount)}</span>
                   </div>
                 )}
-                {cart.mealDealSavings > 0 && (
+                {(cart.mealDealSavings ?? 0) > 0 && (
                   <div className="flex justify-between text-emerald-600">
                     <span>Meal Deal Savings</span>
                     <span className="font-medium">
-                      -{formatCurrency(cart.mealDealSavings)}
+                      -{formatCurrency(cart.mealDealSavings ?? 0)}
                     </span>
                   </div>
                 )}

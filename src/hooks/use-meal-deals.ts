@@ -217,7 +217,7 @@ export function useCartMealDealDetection(
           if (a.missing > 0) {
             missingItems.push({
               catalogItemId: a.qi.catalogItemId,
-              name: a.qi.name,
+              name: a.qi.name ?? "Qualifying Item",
               quantity: a.missing,
             });
           }
