@@ -2,9 +2,9 @@
 // MB CRUNCHY - Admin Meal Deals Types
 // ============================================================================
 
-import type { MealDeal, MealDealQualifyingItem } from "@/types";
+import type { MealDealStatus } from "@/types";
 
-export type MealDealStatus = "active" | "inactive";
+export type { MealDealStatus };
 
 export interface MealDealRecord {
   id: string;
@@ -13,7 +13,7 @@ export interface MealDealRecord {
   name: string;
   status: MealDealStatus;
   dealPrice: number;
-  qualifyingItems: MealDealQualifyingItem[];
+  qualifyingItems: AdminQualifyingItem[];
   applyToCombos: boolean;
   applyToPartyPacks: boolean;
   parentCatalogItemIds?: string[];
@@ -21,12 +21,19 @@ export interface MealDealRecord {
   displayOrder: number;
 }
 
+/** Admin qualifying item: raw catalog item IDs for alternatives (not enriched). */
+export interface AdminQualifyingItem {
+  catalogItemId: string;
+  quantity: number;
+  alternatives?: string[];
+}
+
 export interface MealDealFormValues {
   businessUnitId: string;
   name: string;
   status: MealDealStatus;
   dealPrice: number;
-  qualifyingItems: MealDealQualifyingItem[];
+  qualifyingItems: AdminQualifyingItem[];
   applyToCombos: boolean;
   applyToPartyPacks: boolean;
   parentCatalogItemIds?: string[];

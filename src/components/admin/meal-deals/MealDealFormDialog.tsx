@@ -34,7 +34,7 @@ import {
 import { Check, ChevronsUpDown, Plus, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import type { MealDealFormValues } from "./types";
+import type { MealDealFormValues, AdminQualifyingItem } from "./types";
 
 interface CatalogItemOption {
   id: string;
@@ -153,7 +153,7 @@ export function MealDealFormDialog({
   const addQualifyingItem = () => {
     setValues((prev) => ({
       ...prev,
-      qualifyingItems: [...prev.qualifyingItems, { catalogItemId: "", quantity: 1 }],
+      qualifyingItems: [...prev.qualifyingItems, { catalogItemId: "", quantity: 1, alternatives: [] }],
     }));
   };
 
@@ -170,6 +170,29 @@ export function MealDealFormDialog({
       qualifyingItems: prev.qualifyingItems.map((qi, i) =>
         i === index ? { ...qi, [field]: value } : qi
       ),
+    }));
+  };
+
+  const addAlternative = (qiIndex: number, altCatalogItemId: string) => {
+    setValues((prev) => ({
+      ...prev,
+      qualifyingItems: prev.qualifyingItems.map((qi, i) => {
+        if (i !== qiIndex) return qi;
+        const existing = qi.alternatives ?? [];
+        if (existing.includes(altCatalogItemId)) return qi;
+        if (altCatalogItemId === qi.catalogItemId) return qi;
+        return { ...qi, alternatives: [...existing, altCatalogItemId] };
+      }),
+    }));
+  };
+
+  const removeAlternative = (qiIndex: number, altCatalogItemId: string) => {
+    setValues((prev) => ({
+      ...prev,
+      qualifyingItems: prev.qualifyingItems.map((qi, i) => {
+        if (i !== qiIndex) return qi;
+        return { ...qi, alternatives: (qi.alternatives ?? []).filter((id) => id !== altCatalogItemId) };
+      }),
     }));
   };
 
@@ -329,46 +352,105 @@ export function MealDealFormDialog({
                 Add Item
               </Button>
             </div>
-            <div className="space-y-2">
-              {values.qualifyingItems.map((qi, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <Select
-                    value={qi.catalogItemId}
-                    onValueChange={(v) => updateQualifyingItem(index, "catalogItemId", v)}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Select product" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {eligibleItems
-                        .filter((ei) => ei.id === qi.catalogItemId || !usedItemIds.has(ei.id))
-                        .map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name} — {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(item.price)}
-                          </SelectItem>
+            <div className="space-y-3">
+              {values.qualifyingItems.map((qi, index) => {
+                const altItems = (qi.alternatives ?? [])
+                  .map((altId) => eligibleItems.find((ei) => ei.id === altId))
+                  .filter(Boolean);
+                const usedAltIds = new Set([
+                  qi.catalogItemId,
+                  ...(qi.alternatives ?? []),
+                ]);
+                const availableForAlt = eligibleItems.filter(
+                  (ei) => !usedAltIds.has(ei.id),
+                );
+
+                return (
+                  <div key={index} className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={qi.catalogItemId}
+                        onValueChange={(v) => updateQualifyingItem(index, "catalogItemId", v)}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Select product" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eligibleItems
+                            .filter((ei) => ei.id === qi.catalogItemId || !usedItemIds.has(ei.id))
+                            .map((item) => (
+                              <SelectItem key={item.id} value={item.id}>
+                                {item.name} — {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(item.price)}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min="1"
+                        className="w-20"
+                        value={qi.quantity}
+                        onChange={(e) => updateQualifyingItem(index, "quantity", Number(e.target.value))}
+                      />
+                      {values.qualifyingItems.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeQualifyingItem(index)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Alternatives */}
+                    {altItems.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pl-1">
+                        {altItems.map((alt) => alt && (
+                          <span
+                            key={alt.id}
+                            className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-0.5 text-xs"
+                          >
+                            {alt.name}
+                            <button
+                              type="button"
+                              className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive"
+                              onClick={() => removeAlternative(index, alt.id)}
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </span>
                         ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min="1"
-                    className="w-20"
-                    value={qi.quantity}
-                    onChange={(e) => updateQualifyingItem(index, "quantity", Number(e.target.value))}
-                  />
-                  {values.qualifyingItems.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeQualifyingItem(index)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                      </div>
+                    )}
+
+                    {/* Add alternative */}
+                    {availableForAlt.length > 0 && (
+                      <div className="pl-1">
+                        <Select
+                          value=""
+                          onValueChange={(v) => {
+                            if (v) addAlternative(index, v);
+                          }}
+                        >
+                          <SelectTrigger className="h-7 text-xs text-muted-foreground w-auto">
+                            <SelectValue placeholder="+ Add alternative" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableForAlt.map((item) => (
+                              <SelectItem key={item.id} value={item.id}>
+                                {item.name} — {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(item.price)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {individualTotal > 0 && (
               <p className="text-xs text-muted-foreground">

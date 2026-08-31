@@ -96,10 +96,10 @@ export default function CartPage() {
   // Handle meal deal apply from smart detection: open variant dialog if needed
   const handleCartMealDealApply = useCallback(
     (deal: import("@/types").EnrichedMealDeal, sourceParentCatalogItemId?: string) => {
-      const needsVariantSelection = deal.qualifyingItems.some(
-        (qi) => qi.variants && qi.variants.length > 1,
+      const needsSelection = deal.qualifyingItems.some(
+        (qi) => (qi.alternatives && qi.alternatives.length > 0) || (qi.variants && qi.variants.length > 1),
       );
-      if (needsVariantSelection) {
+      if (needsSelection) {
         setPendingMealDeal({ deal, sourceParentCatalogItemId });
         setVariantDialogOpen(true);
       } else {
@@ -110,13 +110,14 @@ export default function CartPage() {
   );
 
   const handleVariantDialogConfirm = useCallback(
-    async (variantSelections: Record<string, string>) => {
+    async (selections: import("@/components/customer/MealDealVariantDialog").MealDealSelections) => {
       if (!pendingMealDeal) return;
       await applyMealDeal(
         pendingMealDeal.deal,
         1,
         pendingMealDeal.sourceParentCatalogItemId,
-        variantSelections,
+        selections.variantSelections,
+        selections.itemSelections,
       );
       setPendingMealDeal(null);
     },

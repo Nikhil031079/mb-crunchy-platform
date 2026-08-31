@@ -825,10 +825,12 @@ export const create = mutation({
           throw new Error("One or more meal deals are no longer active");
         }
 
-        // Verify qualifying items exist in the order with sufficient quantities
+        // Verify qualifying items exist in the order with sufficient quantities.
+        // Allow primary catalogItemId OR any alternative.
         for (const qi of dealDoc.qualifyingItems) {
+          const allowedIds = [qi.catalogItemId, ...((qi as any).alternatives ?? [])];
           const matchingItem = items.find(
-            (item) => item.catalogItemId === qi.catalogItemId
+            (item) => allowedIds.includes(item.catalogItemId)
           );
           if (!matchingItem || matchingItem.quantity < qi.quantity) {
             throw new Error(
@@ -837,14 +839,25 @@ export const create = mutation({
           }
         }
 
-        // Calculate server-side discount from current catalog prices
+        // Calculate server-side discount using the ACTUAL catalog prices
+        // from the order items (which may include alternative products).
         let serverIndividualTotal = 0;
         for (const qi of dealDoc.qualifyingItems) {
-          const catalogItem = await ctx.db.get(qi.catalogItemId);
-          if (!catalogItem) {
-            throw new Error(`Meal deal qualifying item ${qi.catalogItemId} not found`);
+          const allowedIds = [qi.catalogItemId, ...((qi as any).alternatives ?? [])];
+          const matchingItem = items.find(
+            (item) => allowedIds.includes(item.catalogItemId)
+          );
+          if (matchingItem) {
+            // Use the order line's unitPrice which was resolved against the catalog.
+            serverIndividualTotal += matchingItem.unitPrice * qi.quantity;
+          } else {
+            // Fallback to primary product price if somehow not found.
+            const catalogItem = await ctx.db.get(qi.catalogItemId);
+            if (!catalogItem) {
+              throw new Error(`Meal deal qualifying item ${qi.catalogItemId} not found`);
+            }
+            serverIndividualTotal += catalogItem.price * qi.quantity;
           }
-          serverIndividualTotal += catalogItem.price * qi.quantity;
         }
 
         const dealDiscount = serverIndividualTotal - dealDoc.dealPrice;

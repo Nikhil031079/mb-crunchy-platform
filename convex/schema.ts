@@ -334,6 +334,7 @@ const offers = defineTable({
 const mealDealQualifyingItem = v.object({
   catalogItemId: v.id("catalogItems"),
   quantity: v.number(),
+  alternatives: v.optional(v.array(v.id("catalogItems"))),
 });
 
 const mealDeals = defineTable({

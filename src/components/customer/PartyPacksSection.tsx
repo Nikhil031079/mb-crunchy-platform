@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { PartyPopper } from "lucide-react";
@@ -7,10 +7,11 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
-import { useMealDeals } from "@/hooks/use-meal-deals";
+import { useMealDeals, needsMealDealSelection } from "@/hooks/use-meal-deals";
 
 import { SectionHeader } from "./SectionHeader";
 import { PartyPackCard, PartyPackCardSkeleton } from "./PartyPackCard";
+import { MealDealVariantDialog } from "./MealDealVariantDialog";
 
 import type { BusinessUnit, PartyPack, CatalogItem, EnrichedMealDeal } from "@/types";
 
@@ -49,6 +50,11 @@ export function PartyPacksSection({
   const navigate = useNavigate();
   const { cart, addItem, applyMealDeal } = useCart();
   const { bySource, catalogItemMap } = useCatalogItemMap(businessUnits);
+  const [pendingMealDeal, setPendingMealDeal] = useState<{
+    deal: EnrichedMealDeal;
+    sourceParentCatalogItemId?: string;
+  } | null>(null);
+  const [variantDialogOpen, setVariantDialogOpen] = useState(false);
 
   const packsEnabled = useMemo(
     () => businessUnits.filter((bu) => bu.enablePartyPacks),
@@ -169,14 +175,40 @@ export function PartyPacksSection({
           if (!added) return;
         }
       }
-      try {
-        await applyMealDeal(deal, 1, sourceParentCatalogItemId);
-        toast.success("Meal deal applied", { description: deal.name });
-      } catch {
-        toast.error("Could not apply meal deal");
+
+      if (needsMealDealSelection(deal)) {
+        setPendingMealDeal({ deal, sourceParentCatalogItemId });
+        setVariantDialogOpen(true);
+      } else {
+        try {
+          await applyMealDeal(deal, 1, sourceParentCatalogItemId);
+          toast.success("Meal deal applied", { description: deal.name });
+        } catch {
+          toast.error("Could not apply meal deal");
+        }
       }
     },
     [applyMealDeal, handleAddToCart, bySource, cart.items]
+  );
+
+  const handleDialogConfirm = useCallback(
+    async (selections: import("./MealDealVariantDialog").MealDealSelections) => {
+      if (!pendingMealDeal) return;
+      try {
+        await applyMealDeal(
+          pendingMealDeal.deal,
+          1,
+          pendingMealDeal.sourceParentCatalogItemId,
+          selections.variantSelections,
+          selections.itemSelections,
+        );
+        toast.success("Meal deal applied", { description: pendingMealDeal.deal.name });
+      } catch {
+        toast.error("Could not apply meal deal");
+      }
+      setPendingMealDeal(null);
+    },
+    [pendingMealDeal, applyMealDeal],
   );
 
   if (isLoading) {
@@ -235,6 +267,15 @@ export function PartyPacksSection({
           ))}
         </div>
       </div>
+
+      {pendingMealDeal && (
+        <MealDealVariantDialog
+          open={variantDialogOpen}
+          onOpenChange={setVariantDialogOpen}
+          deal={pendingMealDeal.deal}
+          onConfirm={handleDialogConfirm}
+        />
+      )}
     </section>
   );
 }

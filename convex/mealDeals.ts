@@ -77,6 +77,62 @@ export const getActiveForCustomer = query({
               }
             }
 
+            // Resolve alternative products with their own variant data.
+            let alternatives: Array<{
+              catalogItemId: string;
+              name: string;
+              price: number;
+              compareAtPrice?: number;
+              defaultVariantName?: string;
+              variants?: Array<{ optionName: string; optionValue: string; price: number; active: boolean }>;
+            }> | undefined;
+
+            if (qi.alternatives && qi.alternatives.length > 0) {
+              const altResults = await Promise.all(
+                qi.alternatives.map(async (altId) => {
+                  const altCatalogItem = await ctx.db.get(altId);
+                  if (!altCatalogItem || altCatalogItem.status !== "active" || altCatalogItem.deletedAt) {
+                    return null;
+                  }
+
+                  let altVariants: Array<{ optionName: string; optionValue: string; price: number; active: boolean }> | undefined;
+                  let altDefaultVariantName: string | undefined;
+                  if (altCatalogItem.itemType === "product" && altCatalogItem.sourceId) {
+                    const altSourceDoc = await ctx.db.get(altCatalogItem.sourceId as any);
+                    if (altSourceDoc && "variants" in altSourceDoc) {
+                      const altProductVariants = (altSourceDoc as any).variants;
+                      if (Array.isArray(altProductVariants) && altProductVariants.length > 0) {
+                        altVariants = altProductVariants
+                          .filter((v: any) => v.active)
+                          .map((v: any) => ({
+                            optionName: v.optionName as string,
+                            optionValue: v.optionValue as string,
+                            price: v.price as number,
+                            active: v.active as boolean,
+                          }));
+                        const altDefaultV = altProductVariants.find((v: any) => v.isDefault) ?? altProductVariants[0];
+                        altDefaultVariantName = altDefaultV?.optionValue;
+                      }
+                    }
+                  }
+
+                  return {
+                    catalogItemId: altId,
+                    name: altCatalogItem.name,
+                    price: altCatalogItem.price,
+                    compareAtPrice: altCatalogItem.compareAtPrice,
+                    ...(altDefaultVariantName ? { defaultVariantName: altDefaultVariantName } : {}),
+                    ...(altVariants && altVariants.length > 0 ? { variants: altVariants } : {}),
+                  };
+                })
+              );
+
+              const validAlts = altResults.filter(Boolean);
+              if (validAlts.length > 0) {
+                alternatives = validAlts as NonNullable<typeof alternatives>;
+              }
+            }
+
             return {
               catalogItemId: qi.catalogItemId,
               quantity: qi.quantity,
@@ -85,6 +141,7 @@ export const getActiveForCustomer = query({
               compareAtPrice: catalogItem.compareAtPrice,
               ...(defaultVariantName ? { defaultVariantName } : {}),
               ...(variants && variants.length > 0 ? { variants } : {}),
+              ...(alternatives ? { alternatives } : {}),
             };
           })
         );
@@ -159,6 +216,7 @@ export const create = mutation({
       v.object({
         catalogItemId: v.id("catalogItems"),
         quantity: v.number(),
+        alternatives: v.optional(v.array(v.id("catalogItems"))),
       })
     ),
     applyToCombos: v.boolean(),
@@ -183,6 +241,28 @@ export const create = mutation({
       }
       if (item.quantity < 1) {
         throw new Error("Qualifying item quantity must be at least 1");
+      }
+
+      if (item.alternatives && item.alternatives.length > 0) {
+        if (item.alternatives.includes(item.catalogItemId)) {
+          throw new Error("Primary product cannot be an alternative");
+        }
+        const seen = new Set<string>();
+        for (const altId of item.alternatives) {
+          if (seen.has(altId)) {
+            throw new Error("Duplicate alternative product");
+          }
+          seen.add(altId);
+          const altItem = await ctx.db.get(altId);
+          if (!altItem) {
+            throw new Error(`Alternative catalog item ${altId} not found`);
+          }
+          if (altItem.businessUnitId !== args.businessUnitId) {
+            throw new Error(
+              `Alternative catalog item "${altItem.name}" belongs to a different business unit`
+            );
+          }
+        }
       }
     }
 
@@ -252,6 +332,7 @@ export const update = mutation({
         v.object({
           catalogItemId: v.id("catalogItems"),
           quantity: v.number(),
+          alternatives: v.optional(v.array(v.id("catalogItems"))),
         })
       )
     ),
@@ -289,6 +370,28 @@ export const update = mutation({
         }
         if (item.quantity < 1) {
           throw new Error("Qualifying item quantity must be at least 1");
+        }
+
+        if (item.alternatives && item.alternatives.length > 0) {
+          if (item.alternatives.includes(item.catalogItemId)) {
+            throw new Error("Primary product cannot be an alternative");
+          }
+          const seen = new Set<string>();
+          for (const altId of item.alternatives) {
+            if (seen.has(altId)) {
+              throw new Error("Duplicate alternative product");
+            }
+            seen.add(altId);
+            const altItem = await ctx.db.get(altId);
+            if (!altItem) {
+              throw new Error(`Alternative catalog item ${altId} not found`);
+            }
+            if (altItem.businessUnitId !== businessUnitId) {
+              throw new Error(
+                `Alternative catalog item "${altItem.name}" belongs to a different business unit`
+              );
+            }
+          }
         }
       }
 
@@ -389,8 +492,9 @@ export const validateMealDealForOrder = query({
     }
 
     for (const qi of deal.qualifyingItems) {
+      const allowedIds = [qi.catalogItemId, ...((qi as any).alternatives ?? [])];
       const cartItem = args.cartItems.find(
-        (ci) => ci.catalogItemId === qi.catalogItemId
+        (ci) => allowedIds.includes(ci.catalogItemId)
       );
       if (!cartItem || cartItem.quantity < qi.quantity) {
         return { valid: false, error: "Insufficient qualifying items" };
@@ -399,8 +503,9 @@ export const validateMealDealForOrder = query({
 
     const individualTotal = deal.qualifyingItems.reduce(
       (sum, qi) => {
+        const allowedIds = [qi.catalogItemId, ...((qi as any).alternatives ?? [])];
         const cartItem = args.cartItems.find(
-          (ci) => ci.catalogItemId === qi.catalogItemId
+          (ci) => allowedIds.includes(ci.catalogItemId)
         );
         return sum + (cartItem?.quantity ?? 0) * qi.quantity;
       },

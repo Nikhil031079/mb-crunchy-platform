@@ -551,12 +551,12 @@ export default function BusinessUnitPage() {
         }
       }
 
-      // Check if any qualifying item has multiple variants.
-      const needsVariantSelection = deal.qualifyingItems.some(
-        (qi) => qi.variants && qi.variants.length > 1,
+      // Check if any qualifying item has multiple variants or alternatives.
+      const needsSelection = deal.qualifyingItems.some(
+        (qi) => (qi.alternatives && qi.alternatives.length > 0) || (qi.variants && qi.variants.length > 1),
       );
 
-      if (needsVariantSelection) {
+      if (needsSelection) {
         // Open the variant selection dialog.
         setPendingMealDeal({ deal, sourceParentCatalogItemId });
         setVariantDialogOpen(true);
@@ -568,13 +568,14 @@ export default function BusinessUnitPage() {
   );
 
   const handleVariantDialogConfirm = useCallback(
-    async (variantSelections: Record<string, string>) => {
+    async (selections: import("@/components/customer/MealDealVariantDialog").MealDealSelections) => {
       if (!pendingMealDeal) return;
       await applyMealDeal(
         pendingMealDeal.deal,
         1,
         pendingMealDeal.sourceParentCatalogItemId,
-        variantSelections,
+        selections.variantSelections,
+        selections.itemSelections,
       );
       setPendingMealDeal(null);
     },

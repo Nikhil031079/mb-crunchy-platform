@@ -56,6 +56,9 @@ function toCreateArgs(values: MealDealFormValues) {
     qualifyingItems: values.qualifyingItems.map((item) => ({
       catalogItemId: item.catalogItemId as any,
       quantity: item.quantity,
+      ...(item.alternatives && item.alternatives.length > 0
+        ? { alternatives: item.alternatives.map((id) => id as any) }
+        : {}),
     })),
     applyToCombos: values.applyToCombos,
     applyToPartyPacks: values.applyToPartyPacks,
@@ -76,6 +79,9 @@ function toUpdateArgs(id: string, values: MealDealFormValues) {
     qualifyingItems: values.qualifyingItems.map((item) => ({
       catalogItemId: item.catalogItemId as any,
       quantity: item.quantity,
+      ...(item.alternatives && item.alternatives.length > 0
+        ? { alternatives: item.alternatives.map((id) => id as any) }
+        : {}),
     })),
     applyToCombos: values.applyToCombos,
     applyToPartyPacks: values.applyToPartyPacks,

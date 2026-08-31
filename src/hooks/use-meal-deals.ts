@@ -166,16 +166,20 @@ export function useCartMealDealDetection(
       }> = [];
 
       for (const qi of deal.qualifyingItems) {
+        const allowedIds = [qi.catalogItemId, ...(qi.alternatives?.map((a) => a.catalogItemId) ?? [])];
         const physicalQty = buCartItems
           .filter(
             (ci) =>
-              ci.catalogItemId === qi.catalogItemId &&
+              allowedIds.includes(ci.catalogItemId) &&
               ci.itemType !== "combo" &&
               ci.itemType !== "partyPack",
           )
           .reduce((sum, ci) => sum + ci.quantity, 0);
 
-        const consumedQty = consumedQuantities[qi.catalogItemId] ?? 0;
+        const consumedQty = allowedIds.reduce(
+          (sum, id) => sum + (consumedQuantities[id] ?? 0),
+          0,
+        );
         const availableUnconsumed = Math.max(0, physicalQty - consumedQty);
         const missing = Math.max(0, qi.quantity - availableUnconsumed);
 
@@ -240,4 +244,19 @@ export function useCartMealDealDetection(
   }, [deals, cartItems, consumedQuantities, businessUnitId]);
 
   return matches;
+}
+
+// ============================================================================
+// Shared Selection Detection
+//
+// Every Meal Deal entry point should call this to determine whether the
+// customer must make a product/variant selection before the deal can be applied.
+// ============================================================================
+
+export function needsMealDealSelection(deal: EnrichedMealDeal): boolean {
+  for (const qi of deal.qualifyingItems) {
+    if (qi.alternatives && qi.alternatives.length > 0) return true;
+    if (qi.variants && qi.variants.length > 1) return true;
+  }
+  return false;
 }

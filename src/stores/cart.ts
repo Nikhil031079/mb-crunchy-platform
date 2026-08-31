@@ -752,6 +752,7 @@ export function useCart() {
       quantity: number = 1,
       sourceParentCatalogItemId?: string,
       variantSelections?: Record<string, string>,
+      itemSelections?: Record<string, string>,
     ): Promise<boolean> => {
       // Rule 17: Validate source parent is allowed by parentCatalogItemIds.
       if (
@@ -761,53 +762,96 @@ export function useCart() {
         return false;
       }
 
-      // Verify all qualifying items are available
+      // Verify all qualifying items (including selected alternatives) are available.
+      const allAllowedIds: string[] = [];
       for (const qi of deal.qualifyingItems) {
-        const result = await verifyCatalogItemIds([qi.catalogItemId]);
-        if (result[qi.catalogItemId] === false) {
+        allAllowedIds.push(qi.catalogItemId);
+        if (qi.alternatives) {
+          for (const alt of qi.alternatives) {
+            allAllowedIds.push(alt.catalogItemId);
+          }
+        }
+      }
+      const verificationResult = await verifyCatalogItemIds(allAllowedIds);
+      for (const id of allAllowedIds) {
+        if (verificationResult[id] === false) {
+          const qi = deal.qualifyingItems.find((q) => q.catalogItemId === id);
+          const alt = deal.qualifyingItems.flatMap((q) => q.alternatives ?? []).find((a) => a.catalogItemId === id);
           toast.error("Meal deal unavailable", {
-            description: `${qi.name} is no longer available.`,
+            description: `${(alt?.name ?? qi?.name) ?? "An item"} is no longer available.`,
           });
           return false;
         }
       }
+
+      // Capture actual savings for toast (setState is synchronous).
+      let computedSavings = deal.savings;
 
       setState((prev) => {
         const newItems = [...prev.items];
         const consumedQuantities: Record<string, number> = {};
         const consumedCartLineIds: string[] = [];
         const consumedVariants: Record<string, string> = {};
+        const consumedItems: Record<string, string> = {};
+        let actualIndividualTotal = 0;
 
-        // Allocate existing standalone qualifying items first; only add
-        // the shortfall so Path A never inflates quantities.
-        for (const qi of deal.qualifyingItems) {
+        deal.qualifyingItems.forEach((qi, idx) => {
+          const slotKey = String(idx);
           const needed = qi.quantity * quantity;
           let remaining = needed;
 
-          // Resolve the selected variant for this qualifying item.
-          const selectedVariant =
-            variantSelections?.[qi.catalogItemId] ??
-            qi.defaultVariantName ??
-            "Default";
-          consumedVariants[qi.catalogItemId] = selectedVariant;
+          // 1. Determine selected catalogItemId for this slot.
+          const selectedCatalogItemId = itemSelections?.[slotKey] ?? qi.catalogItemId;
+          consumedItems[slotKey] = selectedCatalogItemId;
 
-          // Find the price for the selected variant.
-          const variantInfo = qi.variants?.find(
+          // 2. Determine selected product data: primary or alternative.
+          const isAlternative = selectedCatalogItemId !== qi.catalogItemId;
+          const selectedAlt = isAlternative
+            ? qi.alternatives?.find((a) => a.catalogItemId === selectedCatalogItemId)
+            : undefined;
+
+          const selectedProductName = isAlternative && selectedAlt
+            ? (selectedAlt.name ?? qi.name ?? "Qualifying Item")
+            : (qi.name ?? "Qualifying Item");
+
+          const selectedProductPrice = isAlternative && selectedAlt
+            ? selectedAlt.price
+            : (qi.price ?? 0);
+
+          const selectedVariants = isAlternative && selectedAlt
+            ? selectedAlt.variants
+            : qi.variants;
+
+          const selectedProductDefaultVariant = isAlternative && selectedAlt
+            ? selectedAlt.defaultVariantName
+            : qi.defaultVariantName;
+
+          // 3. Determine selected variant using the selected product's own defaults.
+          const selectedVariant =
+            variantSelections?.[slotKey] ??
+            selectedProductDefaultVariant ??
+            "Default";
+          consumedVariants[selectedCatalogItemId] = selectedVariant;
+
+          // 4. Resolve variant price from the selected product's variants.
+          const variantInfo = selectedVariants?.find(
             (v) => v.optionValue === selectedVariant,
           );
-          const variantUnitPrice = variantInfo?.price ?? qi.price ?? 0;
+          const variantUnitPrice = variantInfo?.price ?? selectedProductPrice;
 
-          // Find all standalone (non-deal) items matching this qualifying product
+          // 5. Accumulate actual individual total from selected prices.
+          actualIndividualTotal += variantUnitPrice * needed;
+
+          // Find all standalone (non-deal) items matching this selected product + variant.
           for (let i = 0; i < newItems.length && remaining > 0; i++) {
             const ci = newItems[i];
             if (
-              ci.catalogItemId === qi.catalogItemId &&
+              ci.catalogItemId === selectedCatalogItemId &&
               ci.variantName === selectedVariant &&
               !ci.mealDealId
             ) {
               const take = Math.min(ci.quantity, remaining);
               if (take === ci.quantity) {
-                // Tag entire item as deal
                 newItems[i] = {
                   ...ci,
                   mealDealId: deal._id,
@@ -815,7 +859,6 @@ export function useCart() {
                 };
                 consumedCartLineIds.push(ci.cartItemId ?? generateCartItemId());
               } else {
-                // Split: reduce standalone, add deal-tagged portion
                 const dealCartItemId = generateCartItemId();
                 newItems[i] = {
                   ...ci,
@@ -836,15 +879,15 @@ export function useCart() {
             }
           }
 
-          // Add any remaining shortfall as new deal-tagged items
+          // Add any remaining shortfall as new deal-tagged items.
           if (remaining > 0) {
             const dealCartItemId = generateCartItemId();
             newItems.push({
               cartItemId: dealCartItemId,
-              catalogItemId: qi.catalogItemId,
+              catalogItemId: selectedCatalogItemId,
               itemType: "product",
               businessUnitId: prev.businessUnitIds[0] ?? "",
-              name: qi.name ?? "Qualifying Item",
+              name: selectedProductName,
               variantName: selectedVariant,
               quantity: remaining,
               unitPrice: variantUnitPrice,
@@ -855,21 +898,28 @@ export function useCart() {
             consumedCartLineIds.push(dealCartItemId);
           }
 
-          consumedQuantities[qi.catalogItemId] =
-            (consumedQuantities[qi.catalogItemId] ?? 0) + needed;
-        }
+          consumedQuantities[selectedCatalogItemId] =
+            (consumedQuantities[selectedCatalogItemId] ?? 0) + needed;
+        });
+
+        // Compute savings from actual selected product prices, not stale primary prices.
+        const actualSavings = Math.max(0, actualIndividualTotal - deal.dealPrice);
+        computedSavings = actualSavings;
 
         // Track the applied meal deal with per-item consumed quantities
         const appliedDeal: CartAppliedMealDeal = {
           mealDealId: deal._id,
           name: deal.name,
           dealPrice: deal.dealPrice,
-          savings: deal.savings,
+          savings: actualSavings,
           quantity,
           consumedQuantities,
           consumedCartLineIds,
           ...(Object.keys(consumedVariants).length > 0
             ? { consumedVariants }
+            : {}),
+          ...(Object.keys(consumedItems).length > 0
+            ? { consumedItems }
             : {}),
           applyToCombos: deal.applyToCombos,
           applyToPartyPacks: deal.applyToPartyPacks,
@@ -906,6 +956,10 @@ export function useCart() {
                     ...(d.consumedVariants ?? {}),
                     ...consumedVariants,
                   },
+                  consumedItems: {
+                    ...(d.consumedItems ?? {}),
+                    ...consumedItems,
+                  },
                 }
               : d
           );
@@ -931,7 +985,7 @@ export function useCart() {
       });
 
       toast.success(`${deal.name} applied!`, {
-        description: `You're saving ${new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(deal.savings * quantity)}`,
+        description: `You're saving ${new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(computedSavings * quantity)}`,
       });
 
       return true;
@@ -950,28 +1004,37 @@ export function useCart() {
       }
 
       for (const qi of deal.qualifyingItems) {
-        const result = await verifyCatalogItemIds([qi.catalogItemId]);
-        if (result[qi.catalogItemId] === false) {
-          toast.error("Meal deal unavailable", {
-            description: `${qi.name} is no longer available.`,
-          });
-          return false;
+        const allowedIds = [qi.catalogItemId, ...(qi.alternatives?.map((a) => a.catalogItemId) ?? [])];
+        const result = await verifyCatalogItemIds(allowedIds);
+        for (const id of allowedIds) {
+          if (result[id] === false) {
+            const alt = qi.alternatives?.find((a) => a.catalogItemId === id);
+            toast.error("Meal deal unavailable", {
+              description: `${alt?.name ?? qi.name} is no longer available.`,
+            });
+            return false;
+          }
         }
       }
 
+      // Capture actual savings for toast (setState is synchronous).
+      let allocComputedSavings = deal.savings;
+
       setState((prev) => {
         // Find existing qualifying items (not already part of a deal).
+        // Consider primary catalogItemId AND alternatives for each slot.
         const availableByQi: Array<{
           qi: (typeof deal.qualifyingItems)[number];
           indices: number[];
         }> = [];
 
         for (const qi of deal.qualifyingItems) {
+          const allowedIds = [qi.catalogItemId, ...(qi.alternatives?.map((a) => a.catalogItemId) ?? [])];
           const indices: number[] = [];
           for (let i = 0; i < prev.items.length; i++) {
             const ci = prev.items[i];
             if (
-              ci.catalogItemId === qi.catalogItemId &&
+              allowedIds.includes(ci.catalogItemId) &&
               !ci.mealDealId
             ) {
               indices.push(i);
@@ -1002,15 +1065,21 @@ export function useCart() {
         const newItems = [...prev.items];
         const consumedQuantities: Record<string, number> = {};
         const consumedCartLineIds: string[] = [];
+        const consumedVariants: Record<string, string> = {};
+        const consumedItems: Record<string, string> = {};
+        let allocIndividualTotal = 0;
 
-        for (const { qi, indices } of availableByQi) {
+        deal.qualifyingItems.forEach((qi, idx) => {
+          const slotKey = String(idx);
+          const allowedIds = [qi.catalogItemId, ...(qi.alternatives?.map((a) => a.catalogItemId) ?? [])];
+          const indices = availableByQi[idx]?.indices ?? [];
+
           let remaining = qi.quantity * setsToAllocate;
           for (const idx of indices) {
             if (remaining <= 0) break;
             const item = newItems[idx];
             const take = Math.min(item.quantity, remaining);
             if (take === item.quantity) {
-              // Tag the entire item
               newItems[idx] = {
                 ...item,
                 mealDealId: deal._id,
@@ -1018,7 +1087,6 @@ export function useCart() {
               };
               consumedCartLineIds.push(item.cartItemId ?? generateCartItemId());
             } else {
-              // Split: part for deal, part remains standalone
               const dealCartItemId = generateCartItemId();
               newItems[idx] = {
                 ...item,
@@ -1036,32 +1104,38 @@ export function useCart() {
               consumedCartLineIds.push(dealCartItemId);
             }
             remaining -= take;
-          }
-          consumedQuantities[qi.catalogItemId] =
-            (consumedQuantities[qi.catalogItemId] ?? 0) +
-            qi.quantity * setsToAllocate;
-        }
 
-        // Build consumed variants from the allocated items.
-        const consumedVariants: Record<string, string> = {};
-        for (const { qi } of availableByQi) {
-          // Use the variant from the first allocated item for this qualifying item.
-          const matchingIdx = availableByQi.find((a) => a.qi.catalogItemId === qi.catalogItemId)?.indices[0];
-          if (matchingIdx !== undefined && newItems[matchingIdx]) {
-            consumedVariants[qi.catalogItemId] = newItems[matchingIdx].variantName;
+            // Track which product was actually consumed for this slot.
+            if (!consumedItems[slotKey]) {
+              consumedItems[slotKey] = item.catalogItemId;
+              consumedVariants[item.catalogItemId] = item.variantName;
+              consumedQuantities[item.catalogItemId] = (consumedQuantities[item.catalogItemId] ?? 0) + take;
+            } else {
+              consumedQuantities[item.catalogItemId] = (consumedQuantities[item.catalogItemId] ?? 0) + take;
+            }
+
+            // Accumulate actual individual total from the consumed items' prices.
+            allocIndividualTotal += item.unitPrice * take;
           }
-        }
+        });
+
+        // Compute savings from actual consumed item prices, not stale primary prices.
+        const allocActualSavings = Math.max(0, allocIndividualTotal - deal.dealPrice);
+        allocComputedSavings = allocActualSavings;
 
         const appliedDeal: CartAppliedMealDeal = {
           mealDealId: deal._id,
           name: deal.name,
           dealPrice: deal.dealPrice,
-          savings: deal.savings,
+          savings: allocActualSavings,
           quantity: setsToAllocate,
           consumedQuantities,
           consumedCartLineIds,
           ...(Object.keys(consumedVariants).length > 0
             ? { consumedVariants }
+            : {}),
+          ...(Object.keys(consumedItems).length > 0
+            ? { consumedItems }
             : {}),
           applyToCombos: deal.applyToCombos,
           applyToPartyPacks: deal.applyToPartyPacks,
@@ -1097,6 +1171,10 @@ export function useCart() {
                     ...(d.consumedVariants ?? {}),
                     ...consumedVariants,
                   },
+                  consumedItems: {
+                    ...(d.consumedItems ?? {}),
+                    ...consumedItems,
+                  },
                 }
               : d,
           );
@@ -1117,7 +1195,7 @@ export function useCart() {
       });
 
       toast.success(`${deal.name} applied!`, {
-        description: `You're saving ${new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(deal.savings)}`,
+        description: `You're saving ${new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(allocComputedSavings)}`,
       });
 
       return true;

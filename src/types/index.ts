@@ -826,6 +826,20 @@ export interface MealDealQualifyingItem {
     price: number;
     active: boolean;
   }>;
+  /** Alternative products for this qualifying slot (e.g. Peri Peri Fries OR French Fries). */
+  alternatives?: Array<{
+    catalogItemId: string;
+    name: string;
+    price: number;
+    compareAtPrice?: number;
+    defaultVariantName?: string;
+    variants?: Array<{
+      optionName: string;
+      optionValue: string;
+      price: number;
+      active: boolean;
+    }>;
+  }>;
 }
 
 export interface EnrichedMealDeal {
@@ -861,6 +875,8 @@ export interface CartAppliedMealDeal {
   consumedCartLineIds: string[];
   /** Per-qualifying-item variant selections: catalogItemId → variantName. */
   consumedVariants?: Record<string, string>;
+  /** Per-qualifying-slot selected product: slotIndex → selected catalogItemId. */
+  consumedItems?: Record<string, string>;
 }
 
 export type MealDealRecord = EnrichedMealDeal;
