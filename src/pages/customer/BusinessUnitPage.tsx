@@ -42,6 +42,7 @@ import {
   StoreStatusBadge,
   FlashSalesSection,
 } from "@/components/customer";
+import { MealDealVariantDialog } from "@/components/customer/MealDealVariantDialog";
 import { getStockStatus, getProductStockStatus } from "@/components/customer/StockBadge";
 import type { StockInfo } from "@/components/customer/StockBadge";
 
@@ -63,7 +64,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product, CatalogItem } from "@/types";
+import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product, CatalogItem, EnrichedMealDeal } from "@/types";
 import type { Id } from "@convex/_generated/dataModel";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
@@ -117,6 +118,13 @@ export default function BusinessUnitPage() {
   // Modal state
   const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
   const onCloseModal = () => setSelectedItem(null);
+
+  // Meal Deal variant selection dialog
+  const [variantDialogOpen, setVariantDialogOpen] = useState(false);
+  const [pendingMealDeal, setPendingMealDeal] = useState<{
+    deal: EnrichedMealDeal;
+    sourceParentCatalogItemId?: string;
+  } | null>(null);
 
   // Cart
   const { cart, addItem, applyMealDeal } = useCart();
@@ -542,9 +550,35 @@ export default function BusinessUnitPage() {
           if (!added) return;
         }
       }
-      await applyMealDeal(deal, 1, sourceParentCatalogItemId);
+
+      // Check if any qualifying item has multiple variants.
+      const needsVariantSelection = deal.qualifyingItems.some(
+        (qi) => qi.variants && qi.variants.length > 1,
+      );
+
+      if (needsVariantSelection) {
+        // Open the variant selection dialog.
+        setPendingMealDeal({ deal, sourceParentCatalogItemId });
+        setVariantDialogOpen(true);
+      } else {
+        await applyMealDeal(deal, 1, sourceParentCatalogItemId);
+      }
     },
     [applyMealDeal, handleAddCombo, handleAddPartyPack, businessUnit, storeIsOpen, nextOpenTime, bySource, cart.items]
+  );
+
+  const handleVariantDialogConfirm = useCallback(
+    async (variantSelections: Record<string, string>) => {
+      if (!pendingMealDeal) return;
+      await applyMealDeal(
+        pendingMealDeal.deal,
+        1,
+        pendingMealDeal.sourceParentCatalogItemId,
+        variantSelections,
+      );
+      setPendingMealDeal(null);
+    },
+    [pendingMealDeal, applyMealDeal],
   );
 
   // Set page title
@@ -1139,6 +1173,16 @@ export default function BusinessUnitPage() {
                   : null
             }
             onAddMealDeal={handleAddMealDeal}
+          />
+        )}
+
+        {/* Meal Deal variant selection dialog */}
+        {pendingMealDeal && (
+          <MealDealVariantDialog
+            open={variantDialogOpen}
+            onOpenChange={setVariantDialogOpen}
+            deal={pendingMealDeal.deal}
+            onConfirm={handleVariantDialogConfirm}
           />
         )}
       </div>

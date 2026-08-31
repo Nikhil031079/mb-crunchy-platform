@@ -817,6 +817,15 @@ export interface MealDealQualifyingItem {
   name?: string;
   price?: number;
   compareAtPrice?: number;
+  /** Default variant to include in the deal (e.g. "Thums Up" for Cool Drink). */
+  defaultVariantName?: string;
+  /** Available variants for this qualifying product, for variant selection UI. */
+  variants?: Array<{
+    optionName: string;
+    optionValue: string;
+    price: number;
+    active: boolean;
+  }>;
 }
 
 export interface EnrichedMealDeal {
@@ -850,6 +859,8 @@ export interface CartAppliedMealDeal {
   sourceParentCatalogItemId?: string;
   consumedQuantities: Record<string, number>;
   consumedCartLineIds: string[];
+  /** Per-qualifying-item variant selections: catalogItemId → variantName. */
+  consumedVariants?: Record<string, string>;
 }
 
 export type MealDealRecord = EnrichedMealDeal;

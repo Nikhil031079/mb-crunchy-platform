@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,6 +34,7 @@ import { QuantitySelector } from "@/components/customer";
 import { ProductCard, ProductCardSkeleton } from "@/components/customer";
 import { FrequentlyBoughtTogetherSection } from "@/components/customer/FrequentlyBoughtTogetherSection";
 import { RecentlyViewedSection } from "@/components/customer/RecentlyViewedSection";
+import { MealDealVariantDialog } from "@/components/customer/MealDealVariantDialog";
 
 // Shared components
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -54,6 +55,13 @@ export default function CartPage() {
   const navigate = useNavigate();
   const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem, dismissNotice, applyMealDeal, allocateExistingMealDeal, removeMealDeal } = useCart();
   const addToCart = useAddToCart();
+
+  // Meal Deal variant selection dialog
+  const [variantDialogOpen, setVariantDialogOpen] = useState(false);
+  const [pendingMealDeal, setPendingMealDeal] = useState<{
+    deal: import("@/types").EnrichedMealDeal;
+    sourceParentCatalogItemId?: string;
+  } | null>(null);
 
   // Page title
   useEffect(() => {
@@ -84,6 +92,36 @@ export default function CartPage() {
       }
     }
   }, [activeDeals, cart.appliedMealDeals, removeMealDeal]);
+
+  // Handle meal deal apply from smart detection: open variant dialog if needed
+  const handleCartMealDealApply = useCallback(
+    (deal: import("@/types").EnrichedMealDeal, sourceParentCatalogItemId?: string) => {
+      const needsVariantSelection = deal.qualifyingItems.some(
+        (qi) => qi.variants && qi.variants.length > 1,
+      );
+      if (needsVariantSelection) {
+        setPendingMealDeal({ deal, sourceParentCatalogItemId });
+        setVariantDialogOpen(true);
+      } else {
+        applyMealDeal(deal, 1, sourceParentCatalogItemId);
+      }
+    },
+    [applyMealDeal],
+  );
+
+  const handleVariantDialogConfirm = useCallback(
+    async (variantSelections: Record<string, string>) => {
+      if (!pendingMealDeal) return;
+      await applyMealDeal(
+        pendingMealDeal.deal,
+        1,
+        pendingMealDeal.sourceParentCatalogItemId,
+        variantSelections,
+      );
+      setPendingMealDeal(null);
+    },
+    [pendingMealDeal, applyMealDeal],
+  );
 
   const buSettings = useQuery(
     api.settings.getBusinessUnitSettings,
@@ -364,7 +402,7 @@ export default function CartPage() {
                   size="sm"
                   className="shrink-0 gap-1.5"
                   onClick={() => isPartial
-                    ? applyMealDeal(match.deal, 1, match.sourceParentCatalogItemId)
+                    ? handleCartMealDealApply(match.deal, match.sourceParentCatalogItemId)
                     : allocateExistingMealDeal(match.deal, match.sourceParentCatalogItemId)
                   }
                 >
@@ -588,7 +626,7 @@ export default function CartPage() {
                         size="sm"
                         className="shrink-0 h-7 gap-1 text-xs"
                         onClick={() => isPartial
-                          ? applyMealDeal(match.deal, 1, match.sourceParentCatalogItemId)
+                          ? handleCartMealDealApply(match.deal, match.sourceParentCatalogItemId)
                           : allocateExistingMealDeal(match.deal, match.sourceParentCatalogItemId)
                         }
                       >
@@ -759,6 +797,16 @@ export default function CartPage() {
         />
       )}
       <RecentlyViewedSection businessUnits={activeBUs ?? []} />
+
+      {/* Meal Deal variant selection dialog */}
+      {pendingMealDeal && (
+        <MealDealVariantDialog
+          open={variantDialogOpen}
+          onOpenChange={setVariantDialogOpen}
+          deal={pendingMealDeal.deal}
+          onConfirm={handleVariantDialogConfirm}
+        />
+      )}
     </div>
   );
 }

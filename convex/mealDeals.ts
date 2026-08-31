@@ -54,12 +54,37 @@ export const getActiveForCustomer = query({
             if (!catalogItem || catalogItem.status !== "active" || catalogItem.deletedAt) {
               return null;
             }
+
+            // Resolve variant data from the source product for variant selection.
+            let variants: Array<{ optionName: string; optionValue: string; price: number; active: boolean }> | undefined;
+            let defaultVariantName: string | undefined;
+            if (catalogItem.itemType === "product" && catalogItem.sourceId) {
+              const sourceDoc = await ctx.db.get(catalogItem.sourceId as any);
+              if (sourceDoc && "variants" in sourceDoc) {
+                const productVariants = (sourceDoc as any).variants;
+                if (Array.isArray(productVariants) && productVariants.length > 0) {
+                  variants = productVariants
+                    .filter((v: any) => v.active)
+                    .map((v: any) => ({
+                      optionName: v.optionName as string,
+                      optionValue: v.optionValue as string,
+                      price: v.price as number,
+                      active: v.active as boolean,
+                    }));
+                  const defaultV = productVariants.find((v: any) => v.isDefault) ?? productVariants[0];
+                  defaultVariantName = defaultV?.optionValue;
+                }
+              }
+            }
+
             return {
               catalogItemId: qi.catalogItemId,
               quantity: qi.quantity,
               name: catalogItem.name,
               price: catalogItem.price,
               compareAtPrice: catalogItem.compareAtPrice,
+              ...(defaultVariantName ? { defaultVariantName } : {}),
+              ...(variants && variants.length > 0 ? { variants } : {}),
             };
           })
         );

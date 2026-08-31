@@ -751,6 +751,7 @@ export function useCart() {
       deal: EnrichedMealDeal,
       quantity: number = 1,
       sourceParentCatalogItemId?: string,
+      variantSelections?: Record<string, string>,
     ): Promise<boolean> => {
       // Rule 17: Validate source parent is allowed by parentCatalogItemIds.
       if (
@@ -775,6 +776,7 @@ export function useCart() {
         const newItems = [...prev.items];
         const consumedQuantities: Record<string, number> = {};
         const consumedCartLineIds: string[] = [];
+        const consumedVariants: Record<string, string> = {};
 
         // Allocate existing standalone qualifying items first; only add
         // the shortfall so Path A never inflates quantities.
@@ -782,12 +784,25 @@ export function useCart() {
           const needed = qi.quantity * quantity;
           let remaining = needed;
 
+          // Resolve the selected variant for this qualifying item.
+          const selectedVariant =
+            variantSelections?.[qi.catalogItemId] ??
+            qi.defaultVariantName ??
+            "Default";
+          consumedVariants[qi.catalogItemId] = selectedVariant;
+
+          // Find the price for the selected variant.
+          const variantInfo = qi.variants?.find(
+            (v) => v.optionValue === selectedVariant,
+          );
+          const variantUnitPrice = variantInfo?.price ?? qi.price ?? 0;
+
           // Find all standalone (non-deal) items matching this qualifying product
           for (let i = 0; i < newItems.length && remaining > 0; i++) {
             const ci = newItems[i];
             if (
               ci.catalogItemId === qi.catalogItemId &&
-              ci.variantName === "Default" &&
+              ci.variantName === selectedVariant &&
               !ci.mealDealId
             ) {
               const take = Math.min(ci.quantity, remaining);
@@ -830,10 +845,10 @@ export function useCart() {
               itemType: "product",
               businessUnitId: prev.businessUnitIds[0] ?? "",
               name: qi.name ?? "Qualifying Item",
-              variantName: "Default",
+              variantName: selectedVariant,
               quantity: remaining,
-              unitPrice: qi.price ?? 0,
-              totalPrice: (qi.price ?? 0) * remaining,
+              unitPrice: variantUnitPrice,
+              totalPrice: variantUnitPrice * remaining,
               mealDealId: deal._id,
               mealDealName: deal.name,
             });
@@ -853,6 +868,9 @@ export function useCart() {
           quantity,
           consumedQuantities,
           consumedCartLineIds,
+          ...(Object.keys(consumedVariants).length > 0
+            ? { consumedVariants }
+            : {}),
           applyToCombos: deal.applyToCombos,
           applyToPartyPacks: deal.applyToPartyPacks,
           ...(deal.parentCatalogItemIds
@@ -884,6 +902,10 @@ export function useCart() {
                   quantity: d.quantity + quantity,
                   consumedQuantities: mergedConsumed,
                   consumedCartLineIds: [...(d.consumedCartLineIds ?? []), ...consumedCartLineIds],
+                  consumedVariants: {
+                    ...(d.consumedVariants ?? {}),
+                    ...consumedVariants,
+                  },
                 }
               : d
           );
@@ -950,7 +972,6 @@ export function useCart() {
             const ci = prev.items[i];
             if (
               ci.catalogItemId === qi.catalogItemId &&
-              ci.variantName === "Default" &&
               !ci.mealDealId
             ) {
               indices.push(i);
@@ -1021,6 +1042,16 @@ export function useCart() {
             qi.quantity * setsToAllocate;
         }
 
+        // Build consumed variants from the allocated items.
+        const consumedVariants: Record<string, string> = {};
+        for (const { qi } of availableByQi) {
+          // Use the variant from the first allocated item for this qualifying item.
+          const matchingIdx = availableByQi.find((a) => a.qi.catalogItemId === qi.catalogItemId)?.indices[0];
+          if (matchingIdx !== undefined && newItems[matchingIdx]) {
+            consumedVariants[qi.catalogItemId] = newItems[matchingIdx].variantName;
+          }
+        }
+
         const appliedDeal: CartAppliedMealDeal = {
           mealDealId: deal._id,
           name: deal.name,
@@ -1029,6 +1060,9 @@ export function useCart() {
           quantity: setsToAllocate,
           consumedQuantities,
           consumedCartLineIds,
+          ...(Object.keys(consumedVariants).length > 0
+            ? { consumedVariants }
+            : {}),
           applyToCombos: deal.applyToCombos,
           applyToPartyPacks: deal.applyToPartyPacks,
           ...(deal.parentCatalogItemIds
@@ -1059,6 +1093,10 @@ export function useCart() {
                   quantity: d.quantity + setsToAllocate,
                   consumedQuantities: mergedConsumed,
                   consumedCartLineIds: [...(d.consumedCartLineIds ?? []), ...consumedCartLineIds],
+                  consumedVariants: {
+                    ...(d.consumedVariants ?? {}),
+                    ...consumedVariants,
+                  },
                 }
               : d,
           );
