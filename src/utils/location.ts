@@ -75,12 +75,25 @@ export function haversineDistance(
 // Kitchen Serviceability
 // ---------------------------------------------------------------------------
 
+/**
+ * Safety buffer for PIN-code-derived locations near the delivery boundary.
+ *
+ * PIN centroids represent the geographic centre of a postal area, which may
+ * differ from the customer's actual address by 1-5 km in urban areas. When
+ * a PIN-resolved point falls within this many kilometres of the radius
+ * boundary, we treat it as uncertain and ask for a more precise location.
+ *
+ * GPS and address-geocoded locations are not subject to this buffer.
+ */
+export const PIN_APPROXIMATION_BUFFER_KM = 2;
+
 export type ServiceabilityReason =
   | "OUTSIDE_RADIUS"
   | "NO_CUSTOMER_COORDINATES"
   | "NO_KITCHEN_ORIGIN"
   | "BU_DELIVERY_DISABLED"
-  | "NO_RADIUS_CONFIGURED";
+  | "NO_RADIUS_CONFIGURED"
+  | "NEAR_BOUNDARY_APPROXIMATE";
 
 export interface KitchenServiceability {
   serviceable: boolean;
@@ -146,6 +159,24 @@ export function checkKitchenServiceability(
     customerLocation.latitude!,
     customerLocation.longitude!,
   );
+
+  // 6. PIN approximation safety: if the customer's coordinates were derived
+  //    from a PIN code centroid, apply a buffer near the delivery boundary.
+  //    PIN centroids can be 1-5 km from the actual address. When the resolved
+  //    point is close to the radius edge, we cannot reliably confirm serviceability
+  //    and request a more precise location.
+  if (
+    customerLocation.resolution === "pincode" &&
+    distanceKm > bu.deliveryRadiusKm - PIN_APPROXIMATION_BUFFER_KM &&
+    distanceKm <= bu.deliveryRadiusKm
+  ) {
+    return {
+      serviceable: false,
+      distanceKm,
+      radiusKm: bu.deliveryRadiusKm,
+      reason: "NEAR_BOUNDARY_APPROXIMATE",
+    };
+  }
 
   const serviceable = distanceKm <= bu.deliveryRadiusKm;
 

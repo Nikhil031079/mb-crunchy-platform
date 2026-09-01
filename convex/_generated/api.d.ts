@@ -23,6 +23,7 @@ import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as deliveryPolicies from "../deliveryPolicies.js";
 import type * as deliveryZones from "../deliveryZones.js";
+import type * as geocode from "../geocode.js";
 import type * as homepageSections from "../homepageSections.js";
 import type * as http from "../http.js";
 import type * as inAppNotifications from "../inAppNotifications.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   customers: typeof customers;
   deliveryPolicies: typeof deliveryPolicies;
   deliveryZones: typeof deliveryZones;
+  geocode: typeof geocode;
   homepageSections: typeof homepageSections;
   http: typeof http;
   inAppNotifications: typeof inAppNotifications;

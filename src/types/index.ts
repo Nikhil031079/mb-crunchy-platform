@@ -799,6 +799,9 @@ export interface CartState {
 /** How the customer's location coordinates were obtained. */
 export type LocationSource = "browser" | "address" | "manual";
 
+/** Precision of the resolved coordinates. GPS = exact; pincode = postal-area centroid; address = geocoded. */
+export type LocationResolution = "gps" | "pincode" | "address";
+
 /** Reusable representation of a selected delivery location. */
 export interface CustomerLocation {
   /** Geographic latitude — absent when not yet resolved (PIN/address-only). */
@@ -813,6 +816,8 @@ export interface CustomerLocation {
   landmark?: string;
   /** How the coordinates were obtained. */
   source: LocationSource;
+  /** Precision of the resolved coordinates. GPS = exact; pincode = postal-area centroid; address = geocoded. */
+  resolution?: LocationResolution;
   /** Timestamp when this location was selected (ms since epoch). */
   selectedAt: number;
 }

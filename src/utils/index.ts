@@ -246,6 +246,7 @@ export {
   isValidIndianPin,
   haversineDistance,
   checkKitchenServiceability,
+  PIN_APPROXIMATION_BUFFER_KM,
 } from "./location";
 export type {
   KitchenServiceability,

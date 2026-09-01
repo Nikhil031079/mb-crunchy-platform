@@ -1498,9 +1498,11 @@ export default function CheckoutPage() {
                 <p className="mt-1 text-sm text-red-700 dark:text-red-300">
                   {kitchenServiceability.reason === "NO_CUSTOMER_COORDINATES"
                     ? "Set your delivery location to check availability."
-                    : kitchenServiceability.distanceKm !== null && kitchenServiceability.radiusKm !== null
-                      ? `Approx. ${kitchenServiceability.distanceKm} km away — delivery radius is ${kitchenServiceability.radiusKm} km.`
-                      : "Choose pickup or change your delivery location."}
+                    : kitchenServiceability.reason === "NEAR_BOUNDARY_APPROXIMATE"
+                      ? "Your PIN is near our delivery boundary. Please use GPS or enter your full address for precise availability."
+                      : kitchenServiceability.distanceKm !== null && kitchenServiceability.radiusKm !== null
+                        ? `Approx. ${kitchenServiceability.distanceKm} km away — delivery radius is ${kitchenServiceability.radiusKm} km.`
+                        : "Choose pickup or change your delivery location."}
                 </p>
               </div>
             </div>
@@ -1737,13 +1739,15 @@ export default function CheckoutPage() {
                                 <p className="text-xs text-muted-foreground">
                                   {kitchenServiceability?.reason === "NO_CUSTOMER_COORDINATES"
                                     ? "Not available until a delivery location is set."
-                                    : kitchenServiceability?.reason === "NO_KITCHEN_ORIGIN" ||
-                                        kitchenServiceability?.reason === "NO_RADIUS_CONFIGURED"
-                                      ? "Kitchen delivery is currently unavailable."
-                                      : kitchenServiceability?.distanceKm !== null &&
-                                          kitchenServiceability?.radiusKm !== null
-                                        ? `Not available for your location \u00B7 Kitchen radius: ${kitchenServiceability.radiusKm} km`
-                                        : "Not available for your current location"}
+                                    : kitchenServiceability?.reason === "NEAR_BOUNDARY_APPROXIMATE"
+                                      ? "PIN near boundary — use GPS or full address for precise availability."
+                                      : kitchenServiceability?.reason === "NO_KITCHEN_ORIGIN" ||
+                                          kitchenServiceability?.reason === "NO_RADIUS_CONFIGURED"
+                                        ? "Kitchen delivery is currently unavailable."
+                                        : kitchenServiceability?.distanceKm !== null &&
+                                            kitchenServiceability?.radiusKm !== null
+                                          ? `Not available for your location \u00B7 Kitchen radius: ${kitchenServiceability.radiusKm} km`
+                                          : "Not available for your current location"}
                                 </p>
                               ) : (
                                 <p className="text-xs text-muted-foreground">
@@ -2319,7 +2323,9 @@ export default function CheckoutPage() {
                   <p className="text-center text-xs text-red-600">
                     {kitchenServiceability?.reason === "NO_CUSTOMER_COORDINATES"
                       ? "Please set your delivery location to continue."
-                      : "MB Kitchen does not deliver to this location. Change location, choose pickup, or remove Kitchen items."}
+                      : kitchenServiceability?.reason === "NEAR_BOUNDARY_APPROXIMATE"
+                        ? "Your PIN is near the delivery boundary. Please use GPS or enter your full address."
+                        : "MB Kitchen does not deliver to this location. Change location, choose pickup, or remove Kitchen items."}
                   </p>
                 )}
 
