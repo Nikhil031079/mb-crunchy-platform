@@ -61,3 +61,11 @@ Always:
 3. Implement.
 4. Self-review.
 5. Verify the project builds successfully.
+
+---
+
+## Deployment History
+
+| Date | Commit | Frontend | Cloudflare | Notes |
+|------|--------|----------|------------|-------|
+| 2026-08-31 | `fb5d19a` | `fb5d19ae` | `d97925f3` | Phase 25C: Kitchen delivery serviceability (Haversine origin-radius check) |
