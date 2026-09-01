@@ -39,6 +39,9 @@ export interface BusinessUnit extends Timestamps {
   enableCheckout: boolean;
   enableDelivery: boolean;
   enablePickup: boolean;
+  originLatitude?: number;
+  originLongitude?: number;
+  deliveryRadiusKm?: number;
   deletedAt?: number;
 }
 
@@ -787,6 +790,31 @@ export interface CartState {
   notice?: CartNotice;
   mealDealSavings?: number;
   appliedMealDeals?: CartAppliedMealDeal[];
+}
+
+// ============================================================================
+// Customer Location
+// ============================================================================
+
+/** How the customer's location coordinates were obtained. */
+export type LocationSource = "browser" | "address" | "manual";
+
+/** Reusable representation of a selected delivery location. */
+export interface CustomerLocation {
+  /** Geographic latitude — absent when not yet resolved (PIN/address-only). */
+  latitude?: number;
+  /** Geographic longitude — absent when not yet resolved (PIN/address-only). */
+  longitude?: number;
+  /** 6-digit Indian PIN code. */
+  zipCode?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  landmark?: string;
+  /** How the coordinates were obtained. */
+  source: LocationSource;
+  /** Timestamp when this location was selected (ms since epoch). */
+  selectedAt: number;
 }
 
 // ============================================================================

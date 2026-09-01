@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,6 +12,7 @@ import {
   Package,
   UserCircle,
   Package as PackageIcon,
+  MapPin,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -30,8 +31,11 @@ import {
 import { ROUTES } from "@/constants";
 import { useBranding } from "@/hooks/use-branding";
 import { cn } from "@/lib/utils";
+import { checkKitchenServiceability } from "@/utils";
 
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
+import { LocationPickerModal } from "@/components/customer/LocationPickerModal";
+import { useLocationStore } from "@/stores/location";
 
 import type { BusinessUnit, BusinessUnitSettings } from "@/types";
 
@@ -53,13 +57,26 @@ export function CustomerNavbar({
   onSignOut,
 }: CustomerNavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { siteName, logo } = useBranding();
+  const customerLocation = useLocationStore();
 
   const activeBusinessUnits = businessUnits.filter(
     (bu) => bu.status === "active" && bu.homepageVisible,
   );
+
+  // Kitchen serviceability per BU — uses the location store
+  const serviceabilityMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof checkKitchenServiceability>>();
+    for (const bu of activeBusinessUnits) {
+      if (bu.enableDelivery && bu.originLatitude !== undefined && bu.originLongitude !== undefined) {
+        map.set(bu._id, checkKitchenServiceability(customerLocation.location, bu));
+      }
+    }
+    return map;
+  }, [activeBusinessUnits, customerLocation.location]);
 
   const userInitials = user?.name
     ? user.name
@@ -91,10 +108,29 @@ export function CustomerNavbar({
             </span>
           </Link>
 
+          {/* Location — desktop */}
+          <button
+            type="button"
+            onClick={() => setLocationPickerOpen(true)}
+            className="hidden md:flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary"
+          >
+            <MapPin className="h-4 w-4 shrink-0" />
+            <span className="max-w-[160px] truncate">
+              {customerLocation.location?.zipCode
+                ? customerLocation.location.zipCode
+                : customerLocation.location?.city
+                  ? customerLocation.location.city
+                    : customerLocation.location?.address
+                      ? customerLocation.location.address.slice(0, 24)
+                      : "Select location"}
+            </span>
+          </button>
+
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1">
             {activeBusinessUnits.map((bu) => {
               const settings = settingsMap?.get(bu._id);
+              const svc = serviceabilityMap.get(bu._id);
               return (
                 <Link
                   key={bu._id}
@@ -112,6 +148,21 @@ export function CustomerNavbar({
                       <StoreStatusDot
                         isOpen={settings.isOpen}
                         openingHours={settings.openingHours}
+                      />
+                    )}
+                    {svc && customerLocation.hasLocation && (
+                      <span
+                        className={cn(
+                          "inline-block h-1.5 w-1.5 rounded-full",
+                          svc.serviceable ? "bg-emerald-500" : "bg-red-400",
+                        )}
+                        title={
+                          svc.serviceable
+                            ? `Delivery available (~${svc.distanceKm} km)`
+                            : svc.reason === "NO_CUSTOMER_COORDINATES"
+                              ? "Set location to check delivery"
+                              : `Not available (~${svc.distanceKm} km, radius ${svc.radiusKm} km)`
+                        }
                       />
                     )}
                   </span>
@@ -222,6 +273,21 @@ export function CustomerNavbar({
             className="overflow-hidden border-t border-border/60"
           >
             <nav className="mx-auto max-w-7xl px-4 py-3 space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setLocationPickerOpen(true);
+                }}
+                className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary w-full"
+              >
+                <MapPin className="h-4 w-4" />
+                {customerLocation.location?.zipCode
+                  ? `PIN ${customerLocation.location.zipCode}`
+                  : customerLocation.location?.address
+                    ? customerLocation.location.address.slice(0, 30)
+                    : "Select delivery location"}
+              </button>
               {activeBusinessUnits.map((bu) => {
                 const settings = settingsMap?.get(bu._id);
                 return (
@@ -317,6 +383,13 @@ export function CustomerNavbar({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <LocationPickerModal
+        open={locationPickerOpen}
+        onOpenChange={setLocationPickerOpen}
+        onLocationSelected={customerLocation.set}
+        currentLocation={customerLocation.location}
+      />
     </header>
   );
 }

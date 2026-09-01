@@ -734,6 +734,8 @@ export const create = mutation({
     loyaltyPointsToRedeem: v.optional(v.number()),
     mealDealIds: v.optional(v.array(v.string())),
     mealDealDiscount: v.optional(v.number()),
+    customerLatitude: v.optional(v.number()),
+    customerLongitude: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -928,6 +930,65 @@ export const create = mutation({
     // Delivery orders must always carry a destination address.
     if (args.orderType === "delivery" && !args.deliveryAddress?.trim()) {
       throw new Error("Delivery address is required");
+    }
+
+    // ----------------------------------------------------------------------
+    // 4a. Kitchen delivery serviceability — server-authoritative radius check.
+    //     Fail closed: if enableDelivery is true but configuration is
+    //     incomplete, delivery is NOT accepted.
+    // ----------------------------------------------------------------------
+    if (args.orderType === "delivery") {
+      const bu = await ctx.db.get(args.businessUnitId);
+      if (bu && bu.enableDelivery) {
+        // Verify origin coordinates are present and valid
+        const hasOrigin =
+          bu.originLatitude !== undefined &&
+          bu.originLongitude !== undefined &&
+          typeof bu.originLatitude === "number" && Number.isFinite(bu.originLatitude) &&
+          typeof bu.originLongitude === "number" && Number.isFinite(bu.originLongitude) &&
+          bu.originLatitude >= -90 && bu.originLatitude <= 90 &&
+          bu.originLongitude >= -180 && bu.originLongitude <= 180;
+        const hasRadius = bu.deliveryRadiusKm !== undefined && typeof bu.deliveryRadiusKm === "number" && bu.deliveryRadiusKm > 0;
+
+        if (!hasOrigin || !hasRadius) {
+          throw new Error("MB Kitchen delivery is currently unavailable. Admin has not configured delivery origin or radius.");
+        }
+
+        // TypeScript narrowing: these are guaranteed defined + valid after checks above
+        const originLat = bu.originLatitude as number;
+        const originLng = bu.originLongitude as number;
+        const radiusKm = bu.deliveryRadiusKm as number;
+
+        // Validate customer coordinates
+        const customerLat = args.customerLatitude;
+        const customerLng = args.customerLongitude;
+
+        if (customerLat === undefined || customerLng === undefined) {
+          throw new Error("Please provide a delivery location with coordinates for Kitchen delivery.");
+        }
+
+        if (typeof customerLat !== "number" || !Number.isFinite(customerLat) || customerLat < -90 || customerLat > 90) {
+          throw new Error("Invalid delivery location coordinates.");
+        }
+        if (typeof customerLng !== "number" || !Number.isFinite(customerLng) || customerLng < -180 || customerLng > 180) {
+          throw new Error("Invalid delivery location coordinates.");
+        }
+
+        // Compute distance server-side using Haversine
+        const toRad = (deg: number) => (deg * Math.PI) / 180;
+        const EARTH_RADIUS_KM = 6371;
+        const dLat = toRad(customerLat - originLat);
+        const dLon = toRad(customerLng - originLng);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(originLat)) * Math.cos(toRad(customerLat)) * Math.sin(dLon / 2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distanceKm = Math.round(EARTH_RADIUS_KM * c * 100) / 100;
+
+        if (distanceKm > radiusKm) {
+          throw new Error(`${bu.name} does not deliver to this location (approx. ${distanceKm} km away, delivery radius is ${radiusKm} km).`);
+        }
+      }
     }
 
     const afterDiscount = Math.max(0, subtotal - discount);

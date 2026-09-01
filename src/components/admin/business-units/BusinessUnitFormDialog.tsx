@@ -58,6 +58,31 @@ function BusinessUnitForm({ businessUnit, isEditing, onSubmit, onCancel }: Busin
         <div className="grid gap-2"><Label htmlFor={`${formId}-color`}>Theme color</Label><div className="flex gap-2"><Input id={`${formId}-color`} value={values.themeColor} onChange={(event) => update("themeColor", event.target.value)} pattern="#[0-9a-fA-F]{6}" title="Use a six digit hex color, e.g. #E85D04." required /><Input type="color" value={values.themeColor} onChange={(event) => update("themeColor", event.target.value)} aria-label="Choose theme color" className="w-12 p-1" /></div></div>
         <div className="grid gap-2"><Label htmlFor={`${formId}-combos`}>Enable Combos</Label><Switch id={`${formId}-combos`} checked={values.enableCombos ?? false} onCheckedChange={(checked) => update("enableCombos", checked)} /></div><div className="grid gap-2"><Label htmlFor={`${formId}-partypacks`}>Enable Party Packs</Label><Switch id={`${formId}-partypacks`} checked={values.enablePartyPacks ?? false} onCheckedChange={(checked) => update("enablePartyPacks", checked)} /></div>
         <div className="flex items-center justify-between rounded-lg border p-3"><div><Label htmlFor={`${formId}-visible`}>Show on homepage</Label><p className="mt-1 text-xs text-muted-foreground">Allow customers to discover this unit from the homepage.</p></div><Switch id={`${formId}-visible`} checked={values.homepageVisible} onCheckedChange={(checked) => update("homepageVisible", checked)} /></div>
+
+        {/* ── Delivery Settings ── */}
+        <div className="rounded-lg border border-border/60 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-semibold">Delivery Settings</p>
+            <p className="text-xs text-muted-foreground">Configure delivery origin and radius for this business unit.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-origin-lat`}>Origin Latitude</Label>
+              <Input id={`${formId}-origin-lat`} type="number" step="any" min="-90" max="90" value={values.originLatitude ?? ""} onChange={(event) => update("originLatitude", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 17.385" />
+              <p className="text-[10px] text-muted-foreground">Kitchen&apos;s physical location.</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-origin-lng`}>Origin Longitude</Label>
+              <Input id={`${formId}-origin-lng`} type="number" step="any" min="-180" max="180" value={values.originLongitude ?? ""} onChange={(event) => update("originLongitude", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 78.4867" />
+              <p className="text-[10px] text-muted-foreground">Must be set with latitude.</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-radius`}>Delivery Radius (km)</Label>
+              <Input id={`${formId}-radius`} type="number" step="0.1" min="0.1" value={values.deliveryRadiusKm ?? ""} onChange={(event) => update("deliveryRadiusKm", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 15" />
+              <p className="text-[10px] text-muted-foreground">Customers beyond this radius cannot receive delivery.</p>
+            </div>
+          </div>
+        </div>
       </form>
       <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId}>{isEditing ? "Save changes" : "Create business unit"}</Button></DialogFooter>
   </>;

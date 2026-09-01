@@ -17,19 +17,21 @@ import {
   AlertTriangle,
   X,
   UtensilsCrossed,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
-import { filterCatalogItemIds, formatCurrency } from "@/utils";
+import { filterCatalogItemIds, formatCurrency, checkKitchenServiceability } from "@/utils";
 
 // Hooks
 import { useCart, setActiveDeals } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCartMealDealDetection, useMealDeals } from "@/hooks/use-meal-deals";
+import { useLocationStore } from "@/stores/location";
 import { QuantitySelector } from "@/components/customer";
 import { ProductCard, ProductCardSkeleton } from "@/components/customer";
 import { FrequentlyBoughtTogetherSection } from "@/components/customer/FrequentlyBoughtTogetherSection";
@@ -211,6 +213,24 @@ export default function CartPage() {
     return totalSaved;
   }, [cart.items]);
 
+  // Kitchen serviceability for cart warning
+  const customerLocation = useLocationStore();
+  const activeBUsForSvc = useQuery(api.businessUnits.getActive) as BusinessUnit[] | undefined;
+
+  const kitchenServiceability = useMemo(() => {
+    if (!activeBUsForSvc || cart.items.length === 0) return null;
+    // Check each BU in the cart that has delivery origin configured
+    for (const bu of activeBUsForSvc) {
+      if (!bu.enableDelivery) continue;
+      if (bu.originLatitude === undefined || bu.originLongitude === undefined) continue;
+      const hasKitchenItems = cart.items.some((item) => item.businessUnitId === bu._id);
+      if (!hasKitchenItems) continue;
+      const svc = checkKitchenServiceability(customerLocation.location, bu);
+      if (!svc.serviceable) return { buName: bu.name, ...svc };
+    }
+    return null;
+  }, [activeBUsForSvc, cart.items, customerLocation.location]);
+
   // ==========================================================================
   // Empty Cart
   // ==========================================================================
@@ -267,6 +287,28 @@ export default function CartPage() {
             Clear Cart
           </Button>
         </motion.div>
+
+        {/* Kitchen Serviceability Warning */}
+        {kitchenServiceability && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.05 }}
+            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30"
+          >
+            <div className="flex items-start gap-2.5">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div className="flex-1 text-sm text-amber-800 dark:text-amber-200">
+                <p>
+                  <span className="font-medium">{kitchenServiceability.buName} items</span> are not available for delivery to your current location.
+                </p>
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  You can change your location, choose pickup if available, or remove these items to continue.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ================================================================ */}
         {/* FREE DELIVERY PROGRESS BAR                                      */}

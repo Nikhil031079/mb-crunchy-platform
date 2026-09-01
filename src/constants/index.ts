@@ -233,6 +233,7 @@ export const STORAGE_KEYS = {
   SETTINGS: "mb-crunchy-settings",
   RECENTLY_VIEWED: "mb-crunchy-recently-viewed",
   BROWSING_PREFERENCE: "mb-crunchy-browsing-preference",
+  LOCATION: "mb-crunchy-location-v1",
 } as const;
 
 // ============================================================================

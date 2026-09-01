@@ -28,13 +28,14 @@ import { api } from "@convex/_generated/api";
 
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/utils";
+import { formatCurrency, checkKitchenServiceability } from "@/utils";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 
 // Hooks
 import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocationStore } from "@/stores/location";
 
 // Customer components
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
@@ -538,6 +539,32 @@ export default function CheckoutPage() {
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
 
+  // Kitchen serviceability
+  const customerLocation = useLocationStore();
+  const activeBUs = useQuery(api.businessUnits.getAll) as
+    | { _id: string; name: string; slug: string; enableDelivery: boolean; originLatitude?: number; originLongitude?: number; deliveryRadiusKm?: number }[]
+    | undefined;
+
+  const kitchenServiceability = useMemo(() => {
+    if (!activeBUs || cart.items.length === 0) return null;
+    for (const bu of activeBUs) {
+      if (!bu.enableDelivery) continue;
+      if (bu.originLatitude === undefined || bu.originLongitude === undefined) continue;
+      const hasKitchenItems = cart.items.some((item) => item.businessUnitId === bu._id);
+      if (!hasKitchenItems) continue;
+      const svc = checkKitchenServiceability(customerLocation.location, bu);
+      if (!svc.serviceable) return { buName: bu.name, ...svc };
+    }
+    return null;
+  }, [activeBUs, cart.items, customerLocation.location]);
+
+  // Can the customer place a delivery order with Kitchen items?
+  const canPlaceKitchenDelivery = useMemo(() => {
+    if (!kitchenServiceability) return true; // no issue
+    if (form.orderType === "pickup") return true; // pickup bypasses delivery radius
+    return false; // Kitchen items + delivery + outside radius
+  }, [kitchenServiceability, form.orderType]);
+
   // ==========================================================================
   // Customer Profile + Saved Addresses + Loyalty
   // ==========================================================================
@@ -837,6 +864,8 @@ export default function CheckoutPage() {
           loyaltyPointsToRedeem: redeemPoints > 0 ? redeemPoints : undefined,
           mealDealIds: cart.appliedMealDeals?.map((d) => d.mealDealId),
           mealDealDiscount: (cart.mealDealSavings ?? 0) > 0 ? cart.mealDealSavings : undefined,
+          customerLatitude: customerLocation.location?.latitude,
+          customerLongitude: customerLocation.location?.longitude,
         });
 
         const { orderId: newOrderId, orderNumber: newOrderNumber } = orderResult as { orderId: string; orderNumber: string };
@@ -1439,6 +1468,32 @@ export default function CheckoutPage() {
                   {nextOpenTime
                     ? `Orders can be placed starting ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
                     : "Please try again during business hours."}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Kitchen Delivery Serviceability Warning */}
+        {kitchenServiceability && form.orderType === "delivery" && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30"
+          >
+            <div className="flex items-start gap-3">
+              <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+              <div>
+                <p className="font-medium text-red-800 dark:text-red-200">
+                  {kitchenServiceability.buName} does not deliver to this location
+                </p>
+                <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+                  {kitchenServiceability.reason === "NO_CUSTOMER_COORDINATES"
+                    ? "Set your delivery location to check availability."
+                    : kitchenServiceability.distanceKm !== null && kitchenServiceability.radiusKm !== null
+                      ? `Approx. ${kitchenServiceability.distanceKm} km away — delivery radius is ${kitchenServiceability.radiusKm} km.`
+                      : "Choose pickup or change your delivery location."}
                 </p>
               </div>
             </div>
@@ -2207,7 +2262,7 @@ export default function CheckoutPage() {
                     "w-full text-base font-semibold h-12 transition-all",
                     isSubmitting && "opacity-80"
                   )}
-                  disabled={isSubmitting || !storeIsOpen}
+                  disabled={isSubmitting || !storeIsOpen || !canPlaceKitchenDelivery}
                 >
                   {isSubmitting ? (
                     <>
@@ -2220,6 +2275,8 @@ export default function CheckoutPage() {
                     </>
                   ) : !storeIsOpen ? (
                     "Store is Closed"
+                  ) : !canPlaceKitchenDelivery ? (
+                    "Kitchen Delivery Not Available"
                   ) : effectiveDeliveryType === "outside_area" ? (
                     <>
                       <MessageCircle className="mr-2 h-5 w-5" />
@@ -2232,6 +2289,14 @@ export default function CheckoutPage() {
                     </>
                   )}
                 </Button>
+
+                {!canPlaceKitchenDelivery && (
+                  <p className="text-center text-xs text-red-600">
+                    {kitchenServiceability?.reason === "NO_CUSTOMER_COORDINATES"
+                      ? "Please set your delivery location to continue."
+                      : "MB Kitchen does not deliver to this location. Change location, choose pickup, or remove Kitchen items."}
+                  </p>
+                )}
 
                 {!storeIsOpen && (
                   <p className="text-center text-xs text-amber-600">

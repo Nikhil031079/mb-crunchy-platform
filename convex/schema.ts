@@ -37,6 +37,10 @@ const businessUnits = defineTable({
   enableCheckout: v.boolean(),
   enableDelivery: v.boolean(),
   enablePickup: v.boolean(),
+  // Kitchen delivery origin and radius — optional, per-BU.
+  originLatitude: v.optional(v.number()),
+  originLongitude: v.optional(v.number()),
+  deliveryRadiusKm: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),

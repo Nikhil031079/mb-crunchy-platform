@@ -13,6 +13,9 @@ export interface BusinessUnit {
   logoUrl?: string;
   enableCombos?: boolean;
   enablePartyPacks?: boolean;
+  originLatitude?: number;
+  originLongitude?: number;
+  deliveryRadiusKm?: number;
 }
 
 export interface BusinessUnitFormValues {
@@ -25,6 +28,9 @@ export interface BusinessUnitFormValues {
   logoUrl: string;
   enableCombos?: boolean;
   enablePartyPacks?: boolean;
+  originLatitude?: number;
+  originLongitude?: number;
+  deliveryRadiusKm?: number;
 }
 
 export type BusinessUnitSortKey = "name" | "slug" | "status" | "displayOrder";

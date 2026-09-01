@@ -16,6 +16,8 @@ import {
   ShoppingBag,
   AlertTriangle,
   Clock,
+  MapPin,
+  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +29,8 @@ import { useCart, setActiveDeals } from "@/stores/cart";
 import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 import { useMealDeals } from "@/hooks/use-meal-deals";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
+import { checkKitchenServiceability } from "@/utils";
+import { useLocationStore } from "@/stores/location";
 
 // Customer reusable components
 import {
@@ -212,6 +216,15 @@ export default function BusinessUnitPage() {
 
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
+
+  // Kitchen serviceability
+  const customerLocation = useLocationStore();
+  const serviceability = useMemo(() => {
+    if (!businessUnit) return null;
+    if (!businessUnit.enableDelivery) return null;
+    if (businessUnit.originLatitude === undefined || businessUnit.originLongitude === undefined) return null;
+    return checkKitchenServiceability(customerLocation.location, businessUnit);
+  }, [businessUnit, customerLocation.location]);
 
   const { bySource, catalogItemMap } = useCatalogItemMap(
     businessUnit ? [businessUnit] : undefined
@@ -770,6 +783,50 @@ export default function BusinessUnitPage() {
                 {nextOpenTime
                   ? `Orders resume ${nextOpenTime.dayLabel} at ${nextOpenTime.timeFormatted}.`
                   : "Ordering is temporarily unavailable."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kitchen Delivery Serviceability Banner */}
+      {serviceability && storeIsOpen && (
+        <div className={cn(
+          "border-b",
+          serviceability.serviceable
+            ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
+            : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30",
+        )}>
+          <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-2.5">
+              {serviceability.serviceable ? (
+                <Truck className="h-4 w-4 text-emerald-600 shrink-0" />
+              ) : (
+                <MapPin className="h-4 w-4 text-red-500 shrink-0" />
+              )}
+              <p className={cn(
+                "text-sm",
+                serviceability.serviceable
+                  ? "text-emerald-800 dark:text-emerald-200"
+                  : "text-red-800 dark:text-red-200",
+              )}>
+                {serviceability.serviceable ? (
+                  <>
+                    <span className="font-medium">Delivery available</span>
+                    {serviceability.distanceKm !== null && (
+                      <span> — approx. {serviceability.distanceKm} km away</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium">Kitchen delivery is not available to this location.</span>{" "}
+                    {serviceability.reason === "NO_CUSTOMER_COORDINATES"
+                      ? "Set your delivery location to check availability."
+                      : serviceability.distanceKm !== null && serviceability.radiusKm !== null
+                        ? `Approx. ${serviceability.distanceKm} km away — radius is ${serviceability.radiusKm} km.`
+                        : "Select a closer delivery location."}
+                  </>
+                )}
               </p>
             </div>
           </div>

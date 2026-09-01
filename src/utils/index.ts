@@ -240,3 +240,15 @@ export type {
   SeasonalContext,
   RankedGroup,
 } from "./personalization";
+export {
+  isValidCoordinate,
+  hasValidLocationCoordinates,
+  isValidIndianPin,
+  haversineDistance,
+  checkKitchenServiceability,
+} from "./location";
+export type {
+  KitchenServiceability,
+  ServiceabilityBU,
+  ServiceabilityReason,
+} from "./location";

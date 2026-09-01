@@ -89,6 +89,9 @@ export const create = mutation({
     enableCheckout: v.boolean(),
     enableDelivery: v.boolean(),
     enablePickup: v.boolean(),
+    originLatitude: v.optional(v.number()),
+    originLongitude: v.optional(v.number()),
+    deliveryRadiusKm: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -96,6 +99,23 @@ export const create = mutation({
     // Enforce unique slug
     if (await slugExists(ctx, args.slug)) {
       throw new Error(`Slug "${args.slug}" is already in use`);
+    }
+
+    // Validate origin coordinates — both or neither
+    if (args.originLatitude !== undefined && args.originLongitude === undefined) {
+      throw new Error("Both origin latitude and longitude must be provided together");
+    }
+    if (args.originLongitude !== undefined && args.originLatitude === undefined) {
+      throw new Error("Both origin latitude and longitude must be provided together");
+    }
+    if (args.originLatitude !== undefined && (args.originLatitude < -90 || args.originLatitude > 90)) {
+      throw new Error("Origin latitude must be between -90 and 90");
+    }
+    if (args.originLongitude !== undefined && (args.originLongitude < -180 || args.originLongitude > 180)) {
+      throw new Error("Origin longitude must be between -180 and 180");
+    }
+    if (args.deliveryRadiusKm !== undefined && args.deliveryRadiusKm <= 0) {
+      throw new Error("Delivery radius must be greater than 0");
     }
 
     const { sessionToken: _, ...insertArgs } = args;
@@ -132,6 +152,9 @@ export const update = mutation({
     enableCheckout: v.optional(v.boolean()),
     enableDelivery: v.optional(v.boolean()),
     enablePickup: v.optional(v.boolean()),
+    originLatitude: v.optional(v.number()),
+    originLongitude: v.optional(v.number()),
+    deliveryRadiusKm: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -143,8 +166,39 @@ export const update = mutation({
       throw new Error(`Slug "${fields.slug}" is already in use`);
     }
 
+    // Validate origin coordinates — both or neither
+    if (fields.originLatitude !== undefined && fields.originLongitude === undefined) {
+      // Check if existing doc has a longitude — if so, this is a partial update
+      const existing = await ctx.db.get(id);
+      if (!existing?.originLongitude) {
+        throw new Error("Both origin latitude and longitude must be provided together");
+      }
+    }
+    if (fields.originLongitude !== undefined && fields.originLatitude === undefined) {
+      const existing = await ctx.db.get(id);
+      if (!existing?.originLatitude) {
+        throw new Error("Both origin latitude and longitude must be provided together");
+      }
+    }
+    if (fields.originLatitude !== undefined && (fields.originLatitude < -90 || fields.originLatitude > 90)) {
+      throw new Error("Origin latitude must be between -90 and 90");
+    }
+    if (fields.originLongitude !== undefined && (fields.originLongitude < -180 || fields.originLongitude > 180)) {
+      throw new Error("Origin longitude must be between -180 and 180");
+    }
+    if (fields.deliveryRadiusKm !== undefined && fields.deliveryRadiusKm <= 0) {
+      throw new Error("Delivery radius must be greater than 0");
+    }
+
+    // Handle explicit clearing of origin coordinates
+    const patchFields: Record<string, unknown> = { ...fields };
+    if (fields.originLatitude === null || fields.originLongitude === null) {
+      patchFields.originLatitude = undefined;
+      patchFields.originLongitude = undefined;
+    }
+
     await ctx.db.patch(id, {
-      ...fields,
+      ...patchFields,
       updatedAt: Date.now(),
     });
   },
