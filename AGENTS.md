@@ -69,3 +69,4 @@ Always:
 | Date | Commit | Frontend | Cloudflare | Notes |
 |------|--------|----------|------------|-------|
 | 2026-08-31 | `fb5d19a` | `fb5d19ae` | `d97925f3` | Phase 25C: Kitchen delivery serviceability (Haversine origin-radius check) |
+| 2026-09-01 | `81ef7c8` | — | — | Phase 25C-UI: Align checkout Delivery Area RadioGroup with Kitchen serviceability (pending deploy) |
