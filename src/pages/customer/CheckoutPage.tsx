@@ -548,8 +548,7 @@ export default function CheckoutPage() {
   const kitchenServiceability = useMemo(() => {
     if (!activeBUs || cart.items.length === 0) return null;
     for (const bu of activeBUs) {
-      if (!bu.enableDelivery) continue;
-      if (bu.originLatitude === undefined || bu.originLongitude === undefined) continue;
+      if (!bu.slug.includes("kitchen")) continue;
       const hasKitchenItems = cart.items.some((item) => item.businessUnitId === bu._id);
       if (!hasKitchenItems) continue;
       const svc = checkKitchenServiceability(customerLocation.location, bu);
@@ -681,6 +680,14 @@ export default function CheckoutPage() {
   // ==========================================================================
   const effectiveDeliveryType =
     form.orderType === "delivery" ? form.deliveryType : undefined;
+
+  // Whether "Local Delivery" should be shown as unavailable in the Delivery Area
+  // RadioGroup. This integrates Kitchen serviceability with the legacy Delivery
+  // Area selector without automatically switching the customer's selection.
+  const localDeliveryUnavailable =
+    form.orderType === "delivery" &&
+    !!kitchenServiceability &&
+    !kitchenServiceability.serviceable;
 
   // ==========================================================================
   // Coupon Validation
@@ -1700,35 +1707,53 @@ export default function CheckoutPage() {
                           }
                           className="space-y-2"
                         >
-                          {/* Local Delivery */}
-                           <label
-                            className={cn(
-                              "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-all",
-                              effectiveDeliveryType === "local"
-                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "border-border/60 bg-card hover:border-border"
-                            )}
-                          >
+                           {/* Local Delivery */}
+                            <label
+                              className={cn(
+                                "flex items-center gap-3 rounded-lg border p-3 transition-all",
+                                localDeliveryUnavailable
+                                  ? "border-border/40 bg-secondary/30 opacity-60 cursor-not-allowed"
+                                  : effectiveDeliveryType === "local"
+                                    ? "cursor-pointer border-primary bg-primary/5 ring-1 ring-primary"
+                                    : "cursor-pointer border-border/60 bg-card hover:border-border"
+                              )}
+                            >
                             <RadioGroupItem value="local" className="sr-only" />
                             <div
                               className={cn(
                                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
-                                effectiveDeliveryType === "local"
-                                  ? "bg-primary/10 text-primary"
-                                  : "bg-secondary text-muted-foreground"
+                                localDeliveryUnavailable
+                                  ? "bg-secondary text-muted-foreground/50"
+                                  : effectiveDeliveryType === "local"
+                                    ? "bg-primary/10 text-primary"
+                                    : "bg-secondary text-muted-foreground"
                               )}
                             >
                               <Truck className="h-4 w-4" />
                             </div>
                             <div className="flex-1">
                               <p className="text-sm font-medium">Local Delivery</p>
-                              <p className="text-xs text-muted-foreground">
-                                {deliveryPolicy?.fixedFee !== undefined
-                                  ? `${formatCurrency(deliveryPolicy.fixedFee)}${deliveryPolicy.estimatedMinutes ? ` \u00B7 ~${deliveryPolicy.estimatedMinutes} min` : ""}`
-                                  : "Delivery available"}
-                                {deliveryPolicy?.minimumOrder ? ` \u00B7 Min ${formatCurrency(deliveryPolicy.minimumOrder)}` : ""}
-                                {deliveryPolicy?.freeDeliveryThreshold ? ` \u00B7 Free above ${formatCurrency(deliveryPolicy.freeDeliveryThreshold)}` : ""}
-                              </p>
+                              {localDeliveryUnavailable ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {kitchenServiceability?.reason === "NO_CUSTOMER_COORDINATES"
+                                    ? "Not available until a delivery location is set."
+                                    : kitchenServiceability?.reason === "NO_KITCHEN_ORIGIN" ||
+                                        kitchenServiceability?.reason === "NO_RADIUS_CONFIGURED"
+                                      ? "Kitchen delivery is currently unavailable."
+                                      : kitchenServiceability?.distanceKm !== null &&
+                                          kitchenServiceability?.radiusKm !== null
+                                        ? `Not available for your location \u00B7 Kitchen radius: ${kitchenServiceability.radiusKm} km`
+                                        : "Not available for your current location"}
+                                </p>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  {deliveryPolicy?.fixedFee !== undefined
+                                    ? `${formatCurrency(deliveryPolicy.fixedFee)}${deliveryPolicy.estimatedMinutes ? ` \u00B7 ~${deliveryPolicy.estimatedMinutes} min` : ""}`
+                                    : "Delivery available"}
+                                  {deliveryPolicy?.minimumOrder ? ` \u00B7 Min ${formatCurrency(deliveryPolicy.minimumOrder)}` : ""}
+                                  {deliveryPolicy?.freeDeliveryThreshold ? ` \u00B7 Free above ${formatCurrency(deliveryPolicy.freeDeliveryThreshold)}` : ""}
+                                </p>
+                              )}
                             </div>
                             {deliveryPolicy?.fixedFee !== undefined && (
                               <span className="text-sm font-semibold">
@@ -1769,7 +1794,7 @@ export default function CheckoutPage() {
                       </div>
 
                       {/* Local Delivery Info */}
-                      {effectiveDeliveryType === "local" && deliveryPolicy && (
+                      {effectiveDeliveryType === "local" && deliveryPolicy && !localDeliveryUnavailable && (
                         <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 space-y-2">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <Truck className="h-4 w-4 text-primary" />
