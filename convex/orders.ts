@@ -841,26 +841,33 @@ export const create = mutation({
 
         // Calculate server-side discount using the ACTUAL catalog prices
         // from the order items (which may include alternative products).
+        // Apply surcharge: difference between alternative price and base qualifying price.
         let serverIndividualTotal = 0;
+        let serverTotalSurcharge = 0;
         for (const qi of dealDoc.qualifyingItems) {
           const allowedIds = [qi.catalogItemId, ...((qi as any).alternatives ?? [])];
           const matchingItem = items.find(
             (item) => allowedIds.includes(item.catalogItemId)
           );
+
+          // Fetch base qualifying item price for surcharge calculation.
+          const baseCatalogItem = await ctx.db.get(qi.catalogItemId);
+          if (!baseCatalogItem) {
+            throw new Error(`Meal deal base qualifying item ${qi.catalogItemId} not found`);
+          }
+          const basePrice = baseCatalogItem.price;
+
           if (matchingItem) {
-            // Use the order line's unitPrice which was resolved against the catalog.
             serverIndividualTotal += matchingItem.unitPrice * qi.quantity;
+            // Surcharge: selected price minus base qualifying price.
+            serverTotalSurcharge += Math.max(0, matchingItem.unitPrice - basePrice) * qi.quantity;
           } else {
-            // Fallback to primary product price if somehow not found.
-            const catalogItem = await ctx.db.get(qi.catalogItemId);
-            if (!catalogItem) {
-              throw new Error(`Meal deal qualifying item ${qi.catalogItemId} not found`);
-            }
-            serverIndividualTotal += catalogItem.price * qi.quantity;
+            serverIndividualTotal += basePrice * qi.quantity;
           }
         }
 
-        const dealDiscount = serverIndividualTotal - dealDoc.dealPrice;
+        const effectiveDealPrice = dealDoc.dealPrice + serverTotalSurcharge;
+        const dealDiscount = serverIndividualTotal - effectiveDealPrice;
         if (dealDiscount > 0) {
           mealDealDiscount += dealDiscount;
         }

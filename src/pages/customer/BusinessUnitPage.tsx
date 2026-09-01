@@ -23,7 +23,7 @@ import { api } from "@convex/_generated/api";
 
 import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
-import { useCart } from "@/stores/cart";
+import { useCart, setActiveDeals } from "@/stores/cart";
 import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 import { useMealDeals } from "@/hooks/use-meal-deals";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
@@ -220,6 +220,14 @@ export default function BusinessUnitPage() {
   // Meal deal eligibility for combos and party packs — per-item filtering
   // respects parentCatalogItemIds (Rule 17).
   const activeDeals = useMealDeals(businessUnit?._id ?? null);
+
+  // PHASE 24M: Feed active deals into the cart store so reconciliation can
+  // recompute pricing from canonical deal definitions.
+  useEffect(() => {
+    if (activeDeals !== undefined && businessUnit?._id) {
+      setActiveDeals(activeDeals, businessUnit._id);
+    }
+  }, [activeDeals, businessUnit?._id]);
 
   // ==========================================================================
   // Derived State

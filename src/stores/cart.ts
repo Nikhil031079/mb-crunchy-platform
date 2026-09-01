@@ -31,6 +31,39 @@ function isParentAllowed(
   return parentCatalogItemIds.includes(parentCatalogItemId);
 }
 
+// ============================================================================
+// Active Meal Deal Definitions Cache — Business-Unit-Aware
+//
+// Components that fetch active deals (CartPage, BusinessUnitPage) call
+// `setActiveDeals(deals, businessUnitId)` so that `reconcileCartState()`
+// can recompute pricing from the canonical deal definitions rather than
+// trusting stale persisted pricing fields.
+//
+// The cache tracks deals per Business Unit so that loading one BU's deals
+// does not invalidate another BU's cached deals.
+// ============================================================================
+
+// Per-BU cache: businessUnitId → Map<dealId, EnrichedMealDeal>
+let activeDealsByBu: Map<string, Map<string, EnrichedMealDeal>> = new Map();
+
+// Flat lookup cache derived from activeDealsByBu (rebuilt on any change).
+let activeDealsById: Map<string, EnrichedMealDeal> = new Map();
+
+// Track which Business Units have had their Meal Deal queries resolve successfully.
+// Used by reconcileCartState to distinguish "BU not queried yet" from "BU queried and empty".
+// A deal belonging to an unqueried BU is PRESERVED; a deal belonging to a confirmed-empty BU is STRIPPED.
+let loadedDealBusinessUnits: Set<string> = new Set();
+
+function rebuildActiveDealsById(): void {
+  const next = new Map<string, EnrichedMealDeal>();
+  for (const buMap of activeDealsByBu.values()) {
+    for (const [id, deal] of buMap) {
+      next.set(id, deal);
+    }
+  }
+  activeDealsById = next;
+}
+
 let cartLineCounter = 0;
 function generateCartItemId(): string {
   return `cl_${Date.now().toString(36)}_${(++cartLineCounter).toString(36)}`;
@@ -81,6 +114,12 @@ function computeMealDealSavings(appliedMealDeals: CartAppliedMealDeal[] | undefi
  * (Rule 8), the deal is reconciled DOWN: deal.quantity is reduced,
  * consumedQuantities is recalculated, and excess items are stripped of their
  * deal markers.
+ *
+ * PHASE 24M: When active deal definitions are available (via the module-level
+ * `activeDealsById` cache populated by `setActiveDeals()`), pricing is
+ * recomputed from the current canonical deal definition + actual cart item
+ * prices.  Persisted `effectiveDealPrice`, `savings`, and `dealPrice` are
+ * NEVER trusted as authoritative.
  */
 function reconcileCartState(prev: CartState): CartState {
   if (!prev.appliedMealDeals || prev.appliedMealDeals.length === 0) {
@@ -96,31 +135,50 @@ function reconcileCartState(prev: CartState): CartState {
   for (const deal of prev.appliedMealDeals) {
     const dealId = deal.mealDealId;
 
+    // ── PHASE 24M: Check if deal definition is still active ──
+    const dealDef = activeDealsById.get(dealId);
+    if (!dealDef) {
+      // Deal not found in active deals cache. Determine whether to strip or preserve.
+      //
+      // Case 1: The deal's BU has NOT been confirmed loaded yet.
+      //         → PRESERVE the deal temporarily. When the BU query resolves,
+      //           reconciliation will run again and either validate or strip.
+      //
+      // Case 2: The deal's BU HAS been confirmed loaded and returned no definition.
+      //         → The deal is genuinely inactive/removed/deactivated.
+      //         → Strip ALL deal markers. Products remain as normal standalone items.
+      if (!loadedDealBusinessUnits.has(deal.businessUnitId)) {
+        // BU not confirmed yet — preserve deal as-is.
+        validDeals.push(deal);
+        continue;
+      }
+      // BU confirmed loaded, deal not found — strip.
+      changed = true;
+      newItems = newItems.map((item) => {
+        if (item.mealDealId === dealId) {
+          const { mealDealId: _m, mealDealName: _n, ...rest } = item;
+          return rest;
+        }
+        return item;
+      });
+      continue;
+    }
+
     // 1. At least one cart item must carry this deal's marker.
     const hasDealItems = newItems.some(
       (item) => item.mealDealId === dealId,
     );
 
     // 2. Parent must still exist — backward-compatible check.
-    //    Case A: Rule 17 multi-parent deal (parentCatalogItemIds is non-empty).
-    //            Use eligibleParentQty (Constraint A below) as the parent gate.
-    //            sourceParentCatalogItemId is NOT required to remain in cart.
-    //    Case B: Legacy/single-parent deal (parentCatalogItemIds is undefined/empty).
-    //            Use sourceParentCatalogItemId as the parent gate (existing behavior).
     const isRule17Deal =
       deal.parentCatalogItemIds !== undefined &&
       deal.parentCatalogItemIds.length > 0;
     let parentInCart: boolean;
     if (!deal.sourceParentCatalogItemId) {
-      // No parent gating at all (e.g. catalogItem-based deals).
       parentInCart = true;
     } else if (isRule17Deal) {
-      // Rule 17: parent existence is validated by Constraint A (eligibleParentQty).
-      // Set true here; if no eligible parents exist, Constraint A will reduce
-      // maxValidDeals → 0, which triggers the strip-all path below.
       parentInCart = true;
     } else {
-      // Legacy: sourceParentCatalogItemId must remain in cart.
       parentInCart = newItems.some(
         (item) => item.catalogItemId === deal.sourceParentCatalogItemId,
       );
@@ -140,9 +198,6 @@ function reconcileCartState(prev: CartState): CartState {
     }
 
     // 3. Compute the maximum number of valid deal sets from ALL constraints.
-    //    This unifies the quantity-sufficiency check and the parent-cap check
-    //    into a single value, enabling partial reduction (N → M) instead of
-    //    only binary invalidation.
     let maxValidDeals = deal.quantity;
 
     // Constraint A: Parent quantity cap (Rule 8 + Rule 17 targeted parents).
@@ -174,7 +229,6 @@ function reconcileCartState(prev: CartState): CartState {
     }
 
     // Constraint B: Per-product deal-tagged quantity sufficiency.
-    // Count only items currently carrying this deal's marker for each product.
     for (const [itemId, totalConsumed] of Object.entries(
       deal.consumedQuantities,
     )) {
@@ -190,6 +244,140 @@ function reconcileCartState(prev: CartState): CartState {
         Math.floor(dealTaggedQty / perDeal),
       );
     }
+
+    // ── PHASE 24M: Validate allocation against current deal definition ──
+    // Verify that all consumed items are still qualifying items in the current
+    // deal definition.  Items whose catalogItemId is no longer a qualifying
+    // item or alternative must be stripped.
+    let allocationValid = true;
+    const allQualifyingIds = new Set<string>();
+    for (const qi of dealDef.qualifyingItems) {
+      allQualifyingIds.add(qi.catalogItemId);
+      for (const alt of qi.alternatives ?? []) {
+        allQualifyingIds.add(alt.catalogItemId);
+      }
+    }
+    for (const itemId of Object.keys(deal.consumedQuantities)) {
+      if (!allQualifyingIds.has(itemId)) {
+        allocationValid = false;
+        break;
+      }
+    }
+
+    if (!allocationValid) {
+      changed = true;
+      newItems = newItems.map((item) => {
+        if (item.mealDealId === dealId) {
+          const { mealDealId: _m, mealDealName: _n, ...rest } = item;
+          return rest;
+        }
+        return item;
+      });
+      continue;
+    }
+
+    // ── PHASE 24M: Recompute pricing from canonical deal definition ──
+    // Reconstruct slot allocations from the deal definition + cart items,
+    // then recompute effectiveDealPrice and savings from current prices.
+    let recomputedEffectiveDealPrice = deal.effectiveDealPrice;
+    let recomputedSavings = deal.savings;
+
+    // Reconstruct which catalogItemId was selected per qualifying slot.
+    const dealTaggedItems = newItems.filter((i) => i.mealDealId === dealId);
+    const reconstructedSlotMap: Array<{ catalogItemId: string; variantName: string; quantity: number }> = [];
+    const availableByCatalogId = new Map<string, CartItem[]>();
+    for (const item of dealTaggedItems) {
+      const existing = availableByCatalogId.get(item.catalogItemId) ?? [];
+      existing.push(item);
+      availableByCatalogId.set(item.catalogItemId, existing);
+    }
+    const claimedCartLineIds = new Set<string>();
+
+    for (const qi of dealDef.qualifyingItems) {
+      const needed = qi.quantity * deal.quantity;
+      let allocated = 0;
+
+      // Try primary qualifying item first.
+      const primaryItems = availableByCatalogId.get(qi.catalogItemId) ?? [];
+      for (const item of primaryItems) {
+        if (claimedCartLineIds.has(item.cartItemId ?? "")) continue;
+        const take = Math.min(item.quantity, needed - allocated);
+        if (take > 0) {
+          reconstructedSlotMap.push({
+            catalogItemId: qi.catalogItemId,
+            variantName: item.variantName,
+            quantity: take,
+          });
+          if (item.cartItemId) claimedCartLineIds.add(item.cartItemId);
+          allocated += take;
+        }
+        if (allocated >= needed) break;
+      }
+
+      // If not enough primary items, try alternatives.
+      if (allocated < needed) {
+        for (const alt of qi.alternatives ?? []) {
+          if (allocated >= needed) break;
+          const altItems = availableByCatalogId.get(alt.catalogItemId) ?? [];
+          for (const item of altItems) {
+            if (claimedCartLineIds.has(item.cartItemId ?? "")) continue;
+            const take = Math.min(item.quantity, needed - allocated);
+            if (take > 0) {
+              reconstructedSlotMap.push({
+                catalogItemId: alt.catalogItemId,
+                variantName: item.variantName,
+                quantity: take,
+              });
+              if (item.cartItemId) claimedCartLineIds.add(item.cartItemId);
+              allocated += take;
+            }
+            if (allocated >= needed) break;
+          }
+        }
+      }
+    }
+
+    // Compute individual total and surcharge from reconstructed allocations.
+    // These are totals across ALL deal quantities — we need per-set values for savings.
+    let individualTotalAllQty = 0;
+    let totalSurchargeAllQty = 0;
+    // Map EVERY allowed catalogItemId (primary + alternatives) to the slot's base price.
+    // This ensures surcharge is computed as (alternativePrice - slotBasePrice), not (alternativePrice - 0).
+    const basePriceMap = new Map<string, number>();
+    for (const qi of dealDef.qualifyingItems) {
+      const slotBasePrice = qi.basePrice ?? qi.price ?? 0;
+      basePriceMap.set(qi.catalogItemId, slotBasePrice);
+      for (const alt of qi.alternatives ?? []) {
+        basePriceMap.set(alt.catalogItemId, slotBasePrice);
+      }
+    }
+
+    for (const slot of reconstructedSlotMap) {
+      const dealTaggedItem = dealTaggedItems.find(
+        (i) =>
+          i.catalogItemId === slot.catalogItemId &&
+          i.variantName === slot.variantName &&
+          claimedCartLineIds.has(i.cartItemId ?? ""),
+      );
+      const unitPrice = dealTaggedItem?.unitPrice ?? 0;
+      individualTotalAllQty += unitPrice * slot.quantity;
+
+      // Surcharge: difference between consumed item's price and base qualifying price.
+      const basePrice = basePriceMap.get(slot.catalogItemId) ?? 0;
+      totalSurchargeAllQty += Math.max(0, unitPrice - basePrice) * slot.quantity;
+    }
+
+    // Per-set values: savings field is per-set because computeMealDealSavings
+    // multiplies by deal.quantity.  effectiveDealPrice is also per-set.
+    const perSetIndividualTotal = deal.quantity > 0
+      ? individualTotalAllQty / deal.quantity
+      : 0;
+    const perSetSurcharge = deal.quantity > 0
+      ? totalSurchargeAllQty / deal.quantity
+      : 0;
+
+    recomputedEffectiveDealPrice = dealDef.dealPrice + perSetSurcharge;
+    recomputedSavings = Math.max(0, perSetIndividualTotal - recomputedEffectiveDealPrice);
 
     // 4. Act on maxValidDeals.
     if (maxValidDeals <= 0) {
@@ -283,27 +471,42 @@ function reconcileCartState(prev: CartState): CartState {
       newItems = merged;
 
       // Rebuild consumedCartLineIds from remaining deal-tagged items.
-      // cartItemId is guaranteed by the cart store's migration logic
-      // (every item gets an ID on load), but TypeScript doesn't know this
-      // invariant. Use filter to only include defined IDs.
+      const newConsumedCartLineIds = newItems
+        .filter((i) => i.mealDealId === dealId && i.cartItemId)
+        .map((i) => i.cartItemId!);
+
+      // Recompute pricing for the reduced quantity.
+      // reducedSavings is per-set (computeMealDealSavings multiplies by quantity).
+      const reducedSavings = recomputedSavings;
+
+      validDeals.push({
+        ...deal,
+        quantity: newDealQty,
+        effectiveDealPrice: recomputedEffectiveDealPrice,
+        savings: reducedSavings,
+        consumedQuantities: newConsumed,
+        consumedCartLineIds: newConsumedCartLineIds,
+      });
+    } else {
+      // ── maxValidDeals === deal.quantity: deal is structurally valid ──
+      // PHASE 24M: Recompute pricing and rebuild consumedCartLineIds.
       const newConsumedCartLineIds = newItems
         .filter((i) => i.mealDealId === dealId && i.cartItemId)
         .map((i) => i.cartItemId!);
 
       validDeals.push({
         ...deal,
-        quantity: newDealQty,
-        consumedQuantities: newConsumed,
+        effectiveDealPrice: recomputedEffectiveDealPrice,
+        savings: recomputedSavings,
         consumedCartLineIds: newConsumedCartLineIds,
       });
-    } else {
-      // ── maxValidDeals === deal.quantity: deal is valid, keep as-is ──
-      validDeals.push(deal);
     }
   }
 
-  if (!changed) return { ...prev, mealDealSavings: computeMealDealSavings(prev.appliedMealDeals) };
-
+  // ── PHASE 24M: Always return with recomputed pricing ──
+  // Even when no structural changes occurred (items stripped, quantity reduced),
+  // pricing may have been recomputed from canonical deal definitions.
+  // Use the validDeals array which contains recomputed effectiveDealPrice/savings.
   const subtotal = calculateSubtotal(newItems);
   const businessUnitIds =
     newItems.length > 0
@@ -385,9 +588,16 @@ function loadPersistedCart(): CartState | undefined {
     let appliedMealDeals = parsed.appliedMealDeals;
     if (appliedMealDeals && appliedMealDeals.length > 0) {
       appliedMealDeals = appliedMealDeals.map((deal) => {
+        // PHASE 24P: Ensure businessUnitId exists. Old persisted deals may lack it.
+        // Infer from the deal's cart items if missing.
+        const dealBuId = (deal as any).businessUnitId as string | undefined;
+        const resolvedBuId = dealBuId
+          ?? migratedItems.find((i) => i.mealDealId === deal.mealDealId)?.businessUnitId
+          ?? "";
+
         if (deal.consumedCartLineIds) {
-          // Already in new format
-          return deal;
+          // Already in new format — just ensure businessUnitId
+          return resolvedBuId !== dealBuId ? { ...deal, businessUnitId: resolvedBuId } : deal;
         }
         // Initialize consumedCartLineIds from items in cart
         const consumedCartLineIds: string[] = [];
@@ -413,7 +623,7 @@ function loadPersistedCart(): CartState | undefined {
             }
           }
         }
-        return { ...deal, consumedQuantities, consumedCartLineIds };
+        return { ...deal, businessUnitId: resolvedBuId, consumedQuantities, consumedCartLineIds };
       });
     }
 
@@ -560,6 +770,62 @@ function setState(updater: (prev: CartState) => CartState): void {
   if (next === state) return;
   state = next;
   emit();
+}
+
+// ============================================================================
+// Active Meal Deal Definitions — setter + re-reconciliation trigger
+// ============================================================================
+
+/**
+ * Feed the currently-active meal deal definitions for a specific Business Unit
+ * into the cart store.  Must be called by any component that fetches deals via
+ * `useMealDeals()` so that reconciliation can recompute pricing from canonical
+ * definitions.
+ *
+ * Replaces only the given BU's cached deals.  Other BUs' deals are preserved.
+ * If the set of active deals changed, the cart is immediately re-reconciled.
+ *
+ * @param deals - The active deals for this BU, or undefined if still loading.
+ *                - undefined: query is still loading — do NOT mark BU as confirmed.
+ *                - []: query succeeded with no deals — mark BU as confirmed-empty.
+ *                - [...]: query succeeded with deals — mark BU as confirmed.
+ * @param businessUnitId - The BU these deals belong to.
+ * @param confirmed - Whether the query has resolved successfully (not loading, not error).
+ *                    When false, the BU is NOT added to loadedDealBusinessUnits,
+ *                    meaning deals from this BU will be preserved during reconciliation
+ *                    rather than stripped.
+ */
+export function setActiveDeals(
+  deals: EnrichedMealDeal[] | undefined,
+  businessUnitId: string,
+  confirmed: boolean = true,
+): void {
+  const prev = activeDealsByBu.get(businessUnitId);
+  const next = new Map((deals ?? []).map((d) => [d._id, d]));
+  activeDealsByBu.set(businessUnitId, next);
+  rebuildActiveDealsById();
+
+  // Only mark BU as confirmed when the query has actually resolved.
+  // undefined (loading) or error states must NOT mark BU as confirmed,
+  // so that reconciliation preserves deals from unqueried BUs.
+  if (confirmed) {
+    loadedDealBusinessUnits.add(businessUnitId);
+  }
+
+  if (!buMapEquals(prev, next)) {
+    setState((s) => reconcileCartState(s));
+  }
+}
+
+function buMapEquals(
+  a: Map<string, EnrichedMealDeal> | undefined,
+  b: Map<string, EnrichedMealDeal>,
+): boolean {
+  if (!a || a.size !== b.size) return false;
+  for (const [key, val] of a) {
+    if (b.get(key)?.updatedAt !== val.updatedAt) return false;
+  }
+  return true;
 }
 
 // ============================================================================
@@ -794,6 +1060,7 @@ export function useCart() {
         const consumedVariants: Record<string, string> = {};
         const consumedItems: Record<string, string> = {};
         let actualIndividualTotal = 0;
+        let totalSurcharge = 0;
 
         deal.qualifyingItems.forEach((qi, idx) => {
           const slotKey = String(idx);
@@ -839,7 +1106,11 @@ export function useCart() {
           );
           const variantUnitPrice = variantInfo?.price ?? selectedProductPrice;
 
-          // 5. Accumulate actual individual total from selected prices.
+          // 5. Accumulate surcharge: difference between selected and base qualifying price.
+          const basePrice = qi.basePrice ?? qi.price ?? 0;
+          totalSurcharge += Math.max(0, variantUnitPrice - basePrice) * needed;
+
+          // 6. Accumulate actual individual total from selected prices.
           actualIndividualTotal += variantUnitPrice * needed;
 
           // Find all standalone (non-deal) items matching this selected product + variant.
@@ -902,15 +1173,18 @@ export function useCart() {
             (consumedQuantities[selectedCatalogItemId] ?? 0) + needed;
         });
 
-        // Compute savings from actual selected product prices, not stale primary prices.
-        const actualSavings = Math.max(0, actualIndividualTotal - deal.dealPrice);
+        // Compute effective deal price with alternative surcharges and derive savings.
+        const effectiveDealPrice = deal.dealPrice + totalSurcharge;
+        const actualSavings = Math.max(0, actualIndividualTotal - effectiveDealPrice);
         computedSavings = actualSavings;
 
         // Track the applied meal deal with per-item consumed quantities
         const appliedDeal: CartAppliedMealDeal = {
           mealDealId: deal._id,
           name: deal.name,
+          businessUnitId: deal.businessUnitId,
           dealPrice: deal.dealPrice,
+          effectiveDealPrice,
           savings: actualSavings,
           quantity,
           consumedQuantities,
@@ -1068,6 +1342,7 @@ export function useCart() {
         const consumedVariants: Record<string, string> = {};
         const consumedItems: Record<string, string> = {};
         let allocIndividualTotal = 0;
+        let allocTotalSurcharge = 0;
 
         deal.qualifyingItems.forEach((qi, idx) => {
           const slotKey = String(idx);
@@ -1114,19 +1389,26 @@ export function useCart() {
               consumedQuantities[item.catalogItemId] = (consumedQuantities[item.catalogItemId] ?? 0) + take;
             }
 
+            // Accumulate surcharge: difference between consumed item price and base qualifying price.
+            const basePrice = qi.basePrice ?? qi.price ?? 0;
+            allocTotalSurcharge += Math.max(0, item.unitPrice - basePrice) * take;
+
             // Accumulate actual individual total from the consumed items' prices.
             allocIndividualTotal += item.unitPrice * take;
           }
         });
 
-        // Compute savings from actual consumed item prices, not stale primary prices.
-        const allocActualSavings = Math.max(0, allocIndividualTotal - deal.dealPrice);
+        // Compute effective deal price with alternative surcharges and derive savings.
+        const allocEffectiveDealPrice = deal.dealPrice + allocTotalSurcharge;
+        const allocActualSavings = Math.max(0, allocIndividualTotal - allocEffectiveDealPrice);
         allocComputedSavings = allocActualSavings;
 
         const appliedDeal: CartAppliedMealDeal = {
           mealDealId: deal._id,
           name: deal.name,
+          businessUnitId: deal.businessUnitId,
           dealPrice: deal.dealPrice,
+          effectiveDealPrice: allocEffectiveDealPrice,
           savings: allocActualSavings,
           quantity: setsToAllocate,
           consumedQuantities,

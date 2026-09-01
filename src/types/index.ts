@@ -816,6 +816,8 @@ export interface MealDealQualifyingItem {
   quantity: number;
   name?: string;
   price?: number;
+  /** Base (primary) catalog price used for alternative surcharge calculation. */
+  basePrice?: number;
   compareAtPrice?: number;
   /** Default variant to include in the deal (e.g. "Thums Up" for Cool Drink). */
   defaultVariantName?: string;
@@ -863,7 +865,11 @@ export interface EnrichedMealDeal {
 export interface CartAppliedMealDeal {
   mealDealId: string;
   name: string;
+  /** Business Unit that owns this meal deal definition. */
+  businessUnitId: string;
   dealPrice: number;
+  /** Actual deal price after alternative surcharges are applied. */
+  effectiveDealPrice: number;
   savings: number;
   quantity: number;
   discount?: number;

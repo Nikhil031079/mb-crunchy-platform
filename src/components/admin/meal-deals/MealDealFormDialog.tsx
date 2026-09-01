@@ -408,21 +408,34 @@ export function MealDealFormDialog({
                     {/* Alternatives */}
                     {altItems.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pl-1">
-                        {altItems.map((alt) => alt && (
-                          <span
-                            key={alt.id}
-                            className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-0.5 text-xs"
-                          >
-                            {alt.name}
-                            <button
-                              type="button"
-                              className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive"
-                              onClick={() => removeAlternative(index, alt.id)}
+                        {altItems.filter(Boolean).map((alt) => {
+                          const primaryItem = eligibleItems.find((ei) => ei.id === qi.catalogItemId);
+                          const surcharge = primaryItem ? alt!.price - primaryItem.price : 0;
+                          return (
+                            <span
+                              key={alt!.id}
+                              className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-0.5 text-xs"
                             >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          </span>
-                        ))}
+                              {alt!.name}
+                              {surcharge > 0 ? (
+                                <span className="text-amber-600 font-medium">
+                                  +{new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(surcharge)}
+                                </span>
+                              ) : surcharge < 0 ? (
+                                <span className="text-emerald-600 font-medium">
+                                  {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(surcharge)}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive"
+                                onClick={() => removeAlternative(index, alt!.id)}
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
 

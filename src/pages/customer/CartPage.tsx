@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { filterCatalogItemIds, formatCurrency } from "@/utils";
 
 // Hooks
-import { useCart } from "@/stores/cart";
+import { useCart, setActiveDeals } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCartMealDealDetection, useMealDeals } from "@/hooks/use-meal-deals";
@@ -82,16 +82,37 @@ export default function CartPage() {
     cart.appliedMealDeals,
   );
 
-  // Stale deal cleanup: remove applied deals that are no longer active
-  const activeDeals = useMealDeals(primaryBusinessUnitId);
+  // ── PHASE 24P: Multi-BU Meal Deal loading ──
+  // Derive distinct Business Unit IDs from cart items.
+  // Maximum 4 (MAX_BUSINESS_UNITS = 4 — matches existing codebase convention).
+  const cartBuIds = useMemo(() => {
+    const ids = cart.items.map((i) => i.businessUnitId).filter(Boolean);
+    return [...new Set(ids)].slice(0, 4);
+  }, [cart.items]);
+
+  // Fixed-hook architecture: exactly 4 useMealDeals calls, matching MAX_BUSINESS_UNITS.
+  // When a slot's BU ID is undefined, useMealDeals returns undefined (query skipped).
+  const activeDeals0 = useMealDeals(cartBuIds[0] ?? null);
+  const activeDeals1 = useMealDeals(cartBuIds[1] ?? null);
+  const activeDeals2 = useMealDeals(cartBuIds[2] ?? null);
+  const activeDeals3 = useMealDeals(cartBuIds[3] ?? null);
+
+  const allDealsResults = [activeDeals0, activeDeals1, activeDeals2, activeDeals3];
+
+  // Feed each BU's deals into the cart store's BU-aware cache.
+  // confirmed=true: query resolved (success or empty array).
+  // confirmed=false: query still loading or errored — do NOT mark BU as loaded.
   useEffect(() => {
-    if (activeDeals === undefined || !cart.appliedMealDeals || cart.appliedMealDeals.length === 0) return;
-    for (const applied of cart.appliedMealDeals) {
-      if (!activeDeals.some((d) => d._id === applied.mealDealId)) {
-        removeMealDeal(applied.mealDealId);
+    for (let i = 0; i < cartBuIds.length; i++) {
+      const buId = cartBuIds[i];
+      const deals = allDealsResults[i];
+      if (buId) {
+        // deals === undefined means query is still loading or errored.
+        // Pass confirmed=false to preserve any existing deals for this BU.
+        setActiveDeals(deals, buId, deals !== undefined);
       }
     }
-  }, [activeDeals, cart.appliedMealDeals, removeMealDeal]);
+  }, [cartBuIds, activeDeals0, activeDeals1, activeDeals2, activeDeals3]);
 
   // Handle meal deal apply from smart detection: open variant dialog if needed
   const handleCartMealDealApply = useCallback(
@@ -648,6 +669,11 @@ export default function CartPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
                       {applied.name}
+                      {applied.effectiveDealPrice !== applied.dealPrice && (
+                        <span className="font-normal ml-1">
+                          ({formatCurrency(applied.effectiveDealPrice)}/meal)
+                        </span>
+                      )}
                     </p>
                     <p className="text-[10px] text-emerald-600">
                       Save {formatCurrency(applied.savings * applied.quantity)}

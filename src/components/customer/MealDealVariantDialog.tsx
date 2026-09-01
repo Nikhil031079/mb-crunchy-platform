@@ -126,6 +126,32 @@ export function MealDealVariantDialog({
     onOpenChange(false);
   }, [deal, selectedProducts, selectedVariants, defaultProductSelections, defaultVariantSelections, onConfirm, onOpenChange]);
 
+  // Compute dynamic meal price based on current selections.
+  const dynamicPricing = useMemo(() => {
+    let totalSurcharge = 0;
+    let normalTotal = 0;
+
+    deal.qualifyingItems.forEach((qi, idx) => {
+      const slotKey = String(idx);
+      const selectedProductId = selectedProducts[slotKey] ?? qi.catalogItemId;
+      const isAlt = selectedProductId !== qi.catalogItemId;
+      const alt = isAlt ? qi.alternatives?.find((a) => a.catalogItemId === selectedProductId) : undefined;
+
+      const selectedPrice = isAlt && alt ? alt.price : (qi.price ?? 0);
+      const basePrice = qi.basePrice ?? qi.price ?? 0;
+      const needed = qi.quantity;
+
+      // Surcharge: selected price minus base qualifying price.
+      totalSurcharge += Math.max(0, selectedPrice - basePrice) * needed;
+      normalTotal += selectedPrice * needed;
+    });
+
+    const effectiveDealPrice = deal.dealPrice + totalSurcharge;
+    const savings = Math.max(0, normalTotal - effectiveDealPrice);
+
+    return { effectiveDealPrice, savings, normalTotal, totalSurcharge };
+  }, [deal, selectedProducts]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -281,6 +307,21 @@ export function MealDealVariantDialog({
         </div>
 
         <DialogFooter>
+          <div className="flex items-center justify-between w-full mr-auto">
+            <div className="text-sm">
+              <span className="font-semibold">{formatCurrency(dynamicPricing.effectiveDealPrice)}</span>
+              {dynamicPricing.totalSurcharge > 0 && (
+                <span className="text-muted-foreground text-xs ml-1.5">
+                  (includes +{formatCurrency(dynamicPricing.totalSurcharge)} upgrade)
+                </span>
+              )}
+              {dynamicPricing.savings > 0 && (
+                <span className="text-emerald-600 text-xs ml-1.5 font-medium">
+                  Save {formatCurrency(dynamicPricing.savings)}
+                </span>
+              )}
+            </div>
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

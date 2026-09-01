@@ -138,6 +138,7 @@ export const getActiveForCustomer = query({
               quantity: qi.quantity,
               name: catalogItem.name,
               price: catalogItem.price,
+              basePrice: catalogItem.price,
               compareAtPrice: catalogItem.compareAtPrice,
               ...(defaultVariantName ? { defaultVariantName } : {}),
               ...(variants && variants.length > 0 ? { variants } : {}),
