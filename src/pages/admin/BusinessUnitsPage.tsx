@@ -35,6 +35,7 @@ function fromConvex(doc: any): BusinessUnit {
     logoUrl: doc.logo ?? undefined,
     enableCombos: doc.enableCombos,
     enablePartyPacks: doc.enablePartyPacks,
+    serviceabilityMode: doc.serviceabilityMode ?? undefined,
   };
 }
 
@@ -54,6 +55,7 @@ function toCreateArgs(values: BusinessUnitFormValues) {
     enableCheckout: false,
     enableDelivery: false,
     enablePickup: false,
+    serviceabilityMode: values.serviceabilityMode ?? "coordinate_radius",
   };
 }
 
@@ -69,6 +71,7 @@ function toUpdateArgs(id: string, values: BusinessUnitFormValues) {
     status: values.status,
     enableCombos: values.enableCombos ?? false,
     enablePartyPacks: values.enablePartyPacks ?? false,
+    serviceabilityMode: values.serviceabilityMode,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

@@ -731,6 +731,9 @@ export const create = mutation({
     deliveryAddress: v.optional(v.string()),
     deliveryZoneId: v.optional(v.id("deliveryZones")),
     deliveryNotes: v.optional(v.string()),
+    destinationPincode: v.optional(v.string()),
+    destinationCity: v.optional(v.string()),
+    destinationState: v.optional(v.string()),
     offerId: v.optional(v.id("offers")),
     offerCode: v.optional(v.string()),
     paymentMethod: v.optional(v.string()),
@@ -962,6 +965,14 @@ export const create = mutation({
       throw new Error("Delivery address is required");
     }
 
+    // Validate destination pincode if provided (6-digit Indian pincode)
+    if (args.destinationPincode) {
+      const pincode = args.destinationPincode.trim();
+      if (!/^\d{6}$/.test(pincode)) {
+        throw new Error("Destination pincode must be a valid 6-digit number");
+      }
+    }
+
     // ----------------------------------------------------------------------
     // 4a. Kitchen delivery serviceability — server-authoritative radius check.
     //     Fail closed: if enableDelivery is true but configuration is
@@ -1095,6 +1106,9 @@ export const create = mutation({
       deliveryAddress: args.deliveryAddress,
       deliveryZoneId: args.deliveryZoneId,
       deliveryNotes: args.deliveryNotes,
+      destinationPincode: args.destinationPincode?.trim(),
+      destinationCity: args.destinationCity?.trim(),
+      destinationState: args.destinationState?.trim(),
       deliveryQuoteRequired,
       deliveryQuoteStatus,
       status: "awaiting_payment",

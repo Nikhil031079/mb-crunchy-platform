@@ -70,6 +70,11 @@ export interface Product {
   unit?: ProductUnit;
   vegNonVeg?: VegNonVeg;
   taxPercentage?: number;
+  weightGrams?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  shippable?: boolean;
   available: boolean;
   tags: string[];
   status: ProductStatus;
@@ -94,6 +99,11 @@ export interface ProductFormValues {
   unit: ProductUnit;
   vegNonVeg: VegNonVeg;
   taxPercentage: string;
+  weightGrams: string;
+  lengthCm: string;
+  widthCm: string;
+  heightCm: string;
+  shippable: boolean;
   available: boolean;
   tags: string;
   status: ProductStatus;

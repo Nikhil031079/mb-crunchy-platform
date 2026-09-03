@@ -37,6 +37,16 @@ const businessUnits = defineTable({
   enableCheckout: v.boolean(),
   enableDelivery: v.boolean(),
   enablePickup: v.boolean(),
+  // Delivery serviceability mode — determines how delivery availability is checked.
+  // "coordinate_radius" = Kitchen model (origin + radius, Haversine check)
+  // "pincode_region"    = Mart model (destination pincode, courier-based)
+  // "manual"            = Custom/manual serviceability
+  // Undefined on existing records defaults to "coordinate_radius" at runtime.
+  serviceabilityMode: v.optional(v.union(
+    v.literal("coordinate_radius"),
+    v.literal("pincode_region"),
+    v.literal("manual"),
+  )),
   // Kitchen delivery origin and radius — optional, per-BU.
   originLatitude: v.optional(v.number()),
   originLongitude: v.optional(v.number()),
@@ -112,6 +122,15 @@ const products = defineTable({
   unit: v.optional(v.union(v.literal("pcs"), v.literal("kg"), v.literal("litre"), v.literal("pack"), v.literal("dozen"), v.literal("box"))),
   vegNonVeg: v.optional(v.union(v.literal("veg"), v.literal("non-veg"))),
   taxPercentage: v.optional(v.number()),
+  // Shipping metadata — used for courier-based delivery (MB Mart).
+  // weightGrams: required for courier rate calculation when shippable.
+  // dimensions: optional, used for volumetric weight.
+  // shippable: whether this product can be shipped via courier (default true).
+  weightGrams: v.optional(v.number()),
+  lengthCm: v.optional(v.number()),
+  widthCm: v.optional(v.number()),
+  heightCm: v.optional(v.number()),
+  shippable: v.optional(v.boolean()),
   available: v.boolean(),
   metaTitle: v.optional(v.string()),
   metaDescription: v.optional(v.string()),
@@ -414,6 +433,10 @@ const orders = defineTable({
   deliveryAddress: v.optional(v.string()),
   deliveryZoneId: v.optional(v.id("deliveryZones")),
   deliveryNotes: v.optional(v.string()),
+  // Destination pincode — required for Mart courier delivery, optional for Kitchen.
+  destinationPincode: v.optional(v.string()),
+  destinationCity: v.optional(v.string()),
+  destinationState: v.optional(v.string()),
   deliveryQuoteRequired: v.optional(v.boolean()),
   deliveryQuoteStatus: v.optional(
     v.union(

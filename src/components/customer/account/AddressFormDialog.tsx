@@ -93,8 +93,8 @@ export function AddressFormDialog({
     if (!streetAddress.trim() || streetAddress.trim().length < 5) {
       newErrors.address = "Address must be at least 5 characters";
     }
-    if (zipCode.trim() && !/^[a-zA-Z0-9]{4,10}$/.test(zipCode.trim())) {
-      newErrors.zipCode = "ZIP/Pincode must be 4-10 alphanumeric characters";
+    if (zipCode.trim() && !/^\d{6}$/.test(zipCode.trim())) {
+      newErrors.zipCode = "Pincode must be a valid 6-digit number";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -211,7 +211,7 @@ export function AddressFormDialog({
             <Label htmlFor="addr-zip">ZIP / Pincode</Label>
             <Input
               id="addr-zip"
-              placeholder="4-digit or alphanumeric"
+              placeholder="6-digit pincode"
               value={zipCode}
               onChange={(e) => setZipCode(e.target.value)}
               className={cn(errors.zipCode && "border-destructive")}

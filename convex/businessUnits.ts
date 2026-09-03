@@ -89,6 +89,11 @@ export const create = mutation({
     enableCheckout: v.boolean(),
     enableDelivery: v.boolean(),
     enablePickup: v.boolean(),
+    serviceabilityMode: v.optional(v.union(
+      v.literal("coordinate_radius"),
+      v.literal("pincode_region"),
+      v.literal("manual"),
+    )),
     originLatitude: v.optional(v.number()),
     originLongitude: v.optional(v.number()),
     deliveryRadiusKm: v.optional(v.number()),
@@ -152,6 +157,11 @@ export const update = mutation({
     enableCheckout: v.optional(v.boolean()),
     enableDelivery: v.optional(v.boolean()),
     enablePickup: v.optional(v.boolean()),
+    serviceabilityMode: v.optional(v.union(
+      v.literal("coordinate_radius"),
+      v.literal("pincode_region"),
+      v.literal("manual"),
+    )),
     originLatitude: v.optional(v.number()),
     originLongitude: v.optional(v.number()),
     deliveryRadiusKm: v.optional(v.number()),

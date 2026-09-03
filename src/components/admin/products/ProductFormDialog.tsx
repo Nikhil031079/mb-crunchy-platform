@@ -16,6 +16,7 @@ const emptyValues: ProductFormValues = {
   businessUnitId: "", categoryId: "", name: "", slug: "", description: "", images: [],
   price: 0, compareAtPrice: "", variants: [emptyVariant(0)], hasVariants: false,
   sku: "", stockQuantity: "", unit: "pcs", vegNonVeg: "veg", taxPercentage: "0",
+  weightGrams: "", lengthCm: "", widthCm: "", heightCm: "", shippable: true,
   available: true, tags: "", status: "active", featured: false, displayOrder: 1,
 };
 
@@ -61,6 +62,11 @@ const toFormValues = (product?: Product): ProductFormValues => {
     unit: (product.unit ?? "pcs") as ProductUnit,
     vegNonVeg: (product.vegNonVeg ?? "veg") as VegNonVeg,
     taxPercentage: product.taxPercentage?.toString() ?? "0",
+    weightGrams: product.weightGrams?.toString() ?? "",
+    lengthCm: product.lengthCm?.toString() ?? "",
+    widthCm: product.widthCm?.toString() ?? "",
+    heightCm: product.heightCm?.toString() ?? "",
+    shippable: product.shippable ?? true,
     available: product.available,
     tags: product.tags.join(", "),
     status: product.status,
@@ -163,6 +169,11 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
       sku: values.sku.trim(),
       tags: values.tags.trim(),
       variants: trimmedVariants,
+      weightGrams: values.weightGrams,
+      lengthCm: values.lengthCm,
+      widthCm: values.widthCm,
+      heightCm: values.heightCm,
+      shippable: values.shippable,
     });
   };
 
@@ -351,6 +362,36 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2"><Label htmlFor={`${formId}-veg`}>Veg / Non-Veg</Label><Select value={values.vegNonVeg} onValueChange={(v) => update("vegNonVeg", v as VegNonVeg)}><SelectTrigger id={`${formId}-veg`}><SelectValue /></SelectTrigger><SelectContent>{vegNonVegOptions.map((o) => <SelectItem key={o} value={o}>{o === "veg" ? "Vegetarian" : "Non-Vegetarian"}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid gap-2"><Label htmlFor={`${formId}-tax`}>Tax % <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id={`${formId}-tax`} type="number" min="0" max="100" step="0.5" value={values.taxPercentage} onChange={(event) => update("taxPercentage", event.target.value)} placeholder="0" /></div>
+          </div>
+        </FormSection>
+
+        <FormSection title="Shipping" description="Shipping weight and package dimensions for courier delivery. Required for Mart products shipped via courier.">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label htmlFor={`${formId}-shippable`}>Shippable</Label>
+              <p className="text-xs text-muted-foreground">Product can be shipped via courier.</p>
+            </div>
+            <Switch id={`${formId}-shippable`} checked={values.shippable} onCheckedChange={(checked) => update("shippable", checked)} />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-weight`}>Shipping Weight (grams) <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Input id={`${formId}-weight`} type="number" min="0" step="1" value={values.weightGrams} onChange={(event) => update("weightGrams", event.target.value)} placeholder="e.g. 500" />
+              <p className="text-[10px] text-muted-foreground">Weight in grams. Required for courier delivery.</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-length`}>Length (cm) <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Input id={`${formId}-length`} type="number" min="0" step="0.1" value={values.lengthCm} onChange={(event) => update("lengthCm", event.target.value)} placeholder="e.g. 30" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-width`}>Width (cm) <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Input id={`${formId}-width`} type="number" min="0" step="0.1" value={values.widthCm} onChange={(event) => update("widthCm", event.target.value)} placeholder="e.g. 20" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${formId}-height`}>Height (cm) <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Input id={`${formId}-height`} type="number" min="0" step="0.1" value={values.heightCm} onChange={(event) => update("heightCm", event.target.value)} placeholder="e.g. 15" />
+            </div>
           </div>
         </FormSection>
 

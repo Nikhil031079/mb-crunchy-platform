@@ -39,6 +39,7 @@ export interface BusinessUnit extends Timestamps {
   enableCheckout: boolean;
   enableDelivery: boolean;
   enablePickup: boolean;
+  serviceabilityMode?: "coordinate_radius" | "pincode_region" | "manual";
   originLatitude?: number;
   originLongitude?: number;
   deliveryRadiusKm?: number;
@@ -125,6 +126,11 @@ export interface Product extends Timestamps {
   unit?: string;
   vegNonVeg?: string;
   taxPercentage?: number;
+  weightGrams?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  shippable?: boolean;
   available: boolean;
   metaTitle?: string;
   metaDescription?: string;

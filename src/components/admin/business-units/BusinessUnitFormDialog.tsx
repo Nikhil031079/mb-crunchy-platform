@@ -63,25 +63,63 @@ function BusinessUnitForm({ businessUnit, isEditing, onSubmit, onCancel }: Busin
         <div className="rounded-lg border border-border/60 p-4 space-y-3">
           <div>
             <p className="text-sm font-semibold">Delivery Settings</p>
-            <p className="text-xs text-muted-foreground">Configure delivery origin and radius for this business unit.</p>
+            <p className="text-xs text-muted-foreground">Configure how delivery availability is determined for this business unit.</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="grid gap-2">
-              <Label htmlFor={`${formId}-origin-lat`}>Origin Latitude</Label>
-              <Input id={`${formId}-origin-lat`} type="number" step="any" min="-90" max="90" value={values.originLatitude ?? ""} onChange={(event) => update("originLatitude", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 17.385" />
-              <p className="text-[10px] text-muted-foreground">Kitchen&apos;s physical location.</p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`${formId}-origin-lng`}>Origin Longitude</Label>
-              <Input id={`${formId}-origin-lng`} type="number" step="any" min="-180" max="180" value={values.originLongitude ?? ""} onChange={(event) => update("originLongitude", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 78.4867" />
-              <p className="text-[10px] text-muted-foreground">Must be set with latitude.</p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`${formId}-radius`}>Delivery Radius (km)</Label>
-              <Input id={`${formId}-radius`} type="number" step="0.1" min="0.1" value={values.deliveryRadiusKm ?? ""} onChange={(event) => update("deliveryRadiusKm", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 15" />
-              <p className="text-[10px] text-muted-foreground">Customers beyond this radius cannot receive delivery.</p>
-            </div>
+
+          {/* Serviceability Mode */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${formId}-serviceability-mode`}>Serviceability Mode</Label>
+            <Select
+              value={values.serviceabilityMode ?? "coordinate_radius"}
+              onValueChange={(val) => update("serviceabilityMode", val as "coordinate_radius" | "pincode_region" | "manual")}
+            >
+              <SelectTrigger id={`${formId}-serviceability-mode`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="coordinate_radius">Coordinate Radius</SelectItem>
+                <SelectItem value="pincode_region">Pincode Region</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              {values.serviceabilityMode === "pincode_region"
+                ? "Delivery availability checked by destination pincode (regional courier)."
+                : values.serviceabilityMode === "manual"
+                  ? "Delivery availability managed manually by admin."
+                  : "Delivery availability checked by distance from origin (local delivery)."}
+            </p>
           </div>
+
+          {/* Coordinate Radius fields — shown only for coordinate_radius mode */}
+          {(values.serviceabilityMode ?? "coordinate_radius") === "coordinate_radius" && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-2">
+                <Label htmlFor={`${formId}-origin-lat`}>Origin Latitude</Label>
+                <Input id={`${formId}-origin-lat`} type="number" step="any" min="-90" max="90" value={values.originLatitude ?? ""} onChange={(event) => update("originLatitude", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 17.385" />
+                <p className="text-[10px] text-muted-foreground">Physical location origin.</p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor={`${formId}-origin-lng`}>Origin Longitude</Label>
+                <Input id={`${formId}-origin-lng`} type="number" step="any" min="-180" max="180" value={values.originLongitude ?? ""} onChange={(event) => update("originLongitude", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 78.4867" />
+                <p className="text-[10px] text-muted-foreground">Must be set with latitude.</p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor={`${formId}-radius`}>Delivery Radius (km)</Label>
+                <Input id={`${formId}-radius`} type="number" step="0.1" min="0.1" value={values.deliveryRadiusKm ?? ""} onChange={(event) => update("deliveryRadiusKm", event.target.value === "" ? undefined : Number(event.target.value))} placeholder="e.g. 15" />
+                <p className="text-[10px] text-muted-foreground">Customers beyond this radius cannot receive delivery.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Pincode Region placeholder */}
+          {values.serviceabilityMode === "pincode_region" && (
+            <div className="rounded-md bg-secondary/50 p-3">
+              <p className="text-xs text-muted-foreground">
+                Pincode serviceability will be configured in Phase 26C. Products must have shipping weight configured for courier delivery.
+              </p>
+            </div>
+          )}
         </div>
       </form>
       <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId}>{isEditing ? "Save changes" : "Create business unit"}</Button></DialogFooter>

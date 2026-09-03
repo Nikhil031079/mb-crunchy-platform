@@ -61,6 +61,11 @@ export const create = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Authentication required");
 
+    // Validate pincode if provided (6-digit Indian pincode)
+    if (args.zipCode && !/^\d{6}$/.test(args.zipCode.trim())) {
+      throw new Error("Pincode must be a valid 6-digit number");
+    }
+
     const now = Date.now();
 
     // Verify customer ownership
@@ -109,6 +114,11 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Authentication required");
+
+    // Validate pincode if provided (6-digit Indian pincode)
+    if (args.zipCode && !/^\d{6}$/.test(args.zipCode.trim())) {
+      throw new Error("Pincode must be a valid 6-digit number");
+    }
 
     const now = Date.now();
     const { id, ...fields } = args;

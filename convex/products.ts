@@ -220,6 +220,11 @@ export const create = mutation({
     unit: v.optional(v.union(v.literal("pcs"), v.literal("kg"), v.literal("litre"), v.literal("pack"), v.literal("dozen"), v.literal("box"))),
     vegNonVeg: v.optional(v.union(v.literal("veg"), v.literal("non-veg"))),
     taxPercentage: v.optional(v.number()),
+    weightGrams: v.optional(v.number()),
+    lengthCm: v.optional(v.number()),
+    widthCm: v.optional(v.number()),
+    heightCm: v.optional(v.number()),
+    shippable: v.optional(v.boolean()),
     available: v.boolean(),
     status: v.union(v.literal("active"), v.literal("inactive"), v.literal("archived")),
     featured: v.boolean(),
@@ -232,6 +237,20 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+
+    // Validate shipping metadata
+    if (args.weightGrams !== undefined && args.weightGrams <= 0) {
+      throw new Error("Shipping weight must be greater than 0 grams");
+    }
+    if (args.lengthCm !== undefined && args.lengthCm <= 0) {
+      throw new Error("Package length must be greater than 0 cm");
+    }
+    if (args.widthCm !== undefined && args.widthCm <= 0) {
+      throw new Error("Package width must be greater than 0 cm");
+    }
+    if (args.heightCm !== undefined && args.heightCm <= 0) {
+      throw new Error("Package height must be greater than 0 cm");
+    }
 
     // Enforce unique slug within business unit (only non-deleted products block)
     const slugConflict = await findSlugConflict(ctx, args.businessUnitId, args.slug);
@@ -333,6 +352,11 @@ export const update = mutation({
     unit: v.optional(v.union(v.literal("pcs"), v.literal("kg"), v.literal("litre"), v.literal("pack"), v.literal("dozen"), v.literal("box"))),
     vegNonVeg: v.optional(v.union(v.literal("veg"), v.literal("non-veg"))),
     taxPercentage: v.optional(v.number()),
+    weightGrams: v.optional(v.number()),
+    lengthCm: v.optional(v.number()),
+    widthCm: v.optional(v.number()),
+    heightCm: v.optional(v.number()),
+    shippable: v.optional(v.boolean()),
     available: v.optional(v.boolean()),
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"), v.literal("archived"))),
     featured: v.optional(v.boolean()),
@@ -347,6 +371,20 @@ export const update = mutation({
     await requireAdminSession(ctx, args.sessionToken);
 
     const { id, sessionToken: _, ...fields } = args;
+
+    // Validate shipping metadata
+    if (fields.weightGrams !== undefined && fields.weightGrams !== null && fields.weightGrams <= 0) {
+      throw new Error("Shipping weight must be greater than 0 grams");
+    }
+    if (fields.lengthCm !== undefined && fields.lengthCm !== null && fields.lengthCm <= 0) {
+      throw new Error("Package length must be greater than 0 cm");
+    }
+    if (fields.widthCm !== undefined && fields.widthCm !== null && fields.widthCm <= 0) {
+      throw new Error("Package width must be greater than 0 cm");
+    }
+    if (fields.heightCm !== undefined && fields.heightCm !== null && fields.heightCm <= 0) {
+      throw new Error("Package height must be greater than 0 cm");
+    }
 
     const product = await ctx.db.get(id);
     if (!product) {

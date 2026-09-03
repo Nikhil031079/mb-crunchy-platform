@@ -13,6 +13,7 @@ export interface BusinessUnit {
   logoUrl?: string;
   enableCombos?: boolean;
   enablePartyPacks?: boolean;
+  serviceabilityMode?: "coordinate_radius" | "pincode_region" | "manual";
   originLatitude?: number;
   originLongitude?: number;
   deliveryRadiusKm?: number;
@@ -28,6 +29,7 @@ export interface BusinessUnitFormValues {
   logoUrl: string;
   enableCombos?: boolean;
   enablePartyPacks?: boolean;
+  serviceabilityMode?: "coordinate_radius" | "pincode_region" | "manual";
   originLatitude?: number;
   originLongitude?: number;
   deliveryRadiusKm?: number;
