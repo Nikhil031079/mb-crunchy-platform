@@ -187,3 +187,11 @@ export function checkKitchenServiceability(
     reason: serviceable ? undefined : "OUTSIDE_RADIUS",
   };
 }
+
+// ============================================================================
+// Mart Pincode Format Validation (client-side only — server is authoritative)
+// ============================================================================
+
+export function checkMartPincodeFormat(pincode: string): boolean {
+  return /^\d{6}$/.test(pincode);
+}

@@ -960,6 +960,24 @@ const admins = defineTable({
   .index("by_username", ["username"]);
 
 // ============================================================================
+// MART PINCODE SERVICEABILITY (Per-BU pincode coverage for courier delivery)
+// ============================================================================
+
+const martPincodeServiceability = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  pincode: v.string(),
+  city: v.optional(v.string()),
+  state: v.optional(v.string()),
+  status: v.union(v.literal("active"), v.literal("inactive")),
+  deliveryDays: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_bu_pincode", ["businessUnitId", "pincode"])
+  .index("by_business_unit", ["businessUnitId", "status"]);
+
+// ============================================================================
 // Export Schema (auth tables + business tables merged)
 // ============================================================================
 
@@ -997,6 +1015,7 @@ export default defineSchema({
   adminSessions,
   reviews,
   inAppNotifications,
+  martPincodeServiceability,
 }, {
   schemaValidation: false,
 });

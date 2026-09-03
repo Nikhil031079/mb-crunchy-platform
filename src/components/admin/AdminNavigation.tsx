@@ -10,6 +10,7 @@ import {
   Image,
   LayoutDashboard,
   LayoutTemplate,
+  MapPin,
   Package,
   PartyPopper,
   Settings,
@@ -49,6 +50,7 @@ const iconMap: Record<AdminNavigationIcon, ComponentType<{ className?: string }>
   BarChart3,
   Truck,
   UtensilsCrossed,
+  MapPin,
 };
 
 interface AdminNavigationProps {

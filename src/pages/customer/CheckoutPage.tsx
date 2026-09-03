@@ -28,7 +28,7 @@ import { api } from "@convex/_generated/api";
 
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
-import { formatCurrency, checkKitchenServiceability } from "@/utils";
+import { formatCurrency, checkKitchenServiceability, checkMartPincodeFormat } from "@/utils";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 
@@ -79,6 +79,7 @@ interface CheckoutForm {
   deliveryNotes: string;
   selectedZoneId: string;
   couponCode: string;
+  destinationPincode: string;
 }
 
 const INITIAL_FORM: CheckoutForm = {
@@ -91,6 +92,7 @@ const INITIAL_FORM: CheckoutForm = {
   deliveryNotes: "",
   selectedZoneId: "",
   couponCode: "",
+  destinationPincode: "",
 };
 
 // ============================================================================
@@ -576,7 +578,7 @@ export default function CheckoutPage() {
   // Kitchen serviceability
   const customerLocation = useLocationStore();
   const activeBUs = useQuery(api.businessUnits.getAll) as
-    | { _id: string; name: string; slug: string; enableDelivery: boolean; originLatitude?: number; originLongitude?: number; deliveryRadiusKm?: number }[]
+    | { _id: string; name: string; slug: string; enableDelivery: boolean; serviceabilityMode?: "coordinate_radius" | "pincode_region" | "manual"; originLatitude?: number; originLongitude?: number; deliveryRadiusKm?: number }[]
     | undefined;
 
   const kitchenServiceability = useMemo(() => {
@@ -597,6 +599,30 @@ export default function CheckoutPage() {
     if (form.orderType === "pickup") return true; // pickup bypasses delivery radius
     return false; // Kitchen items + delivery + outside radius
   }, [kitchenServiceability, form.orderType]);
+
+  // Mart serviceability — determine if selected BU uses pincode_region mode
+  const selectedBU = activeBUs?.find((bu) => bu._id === selectedCheckoutBU);
+  const isMartPincodeMode = selectedBU?.serviceabilityMode === "pincode_region";
+
+  // Server-side Mart pincode serviceability check
+  const martPincodeCheck = useQuery(
+    api.martPincodeServiceability.checkServiceability,
+    isMartPincodeMode && form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && selectedCheckoutBU
+      ? { businessUnitId: selectedCheckoutBU as Id<"businessUnits">, pincode: form.destinationPincode.trim() }
+      : "skip",
+  ) as { serviceable: boolean; reasonCode?: string; message?: string } | undefined;
+
+  // Can the customer place a delivery order with Mart items?
+  const canPlaceMartDelivery = useMemo(() => {
+    if (!isMartPincodeMode) return true; // not Mart pincode mode
+    if (form.orderType === "pickup") return true; // pickup bypasses delivery check
+    if (!form.destinationPincode || !checkMartPincodeFormat(form.destinationPincode)) return false;
+    if (martPincodeCheck === undefined) return false; // still loading
+    return martPincodeCheck.serviceable;
+  }, [isMartPincodeMode, form.orderType, form.destinationPincode, martPincodeCheck]);
+
+  // Combined delivery check — Kitchen + Mart
+  const canPlaceDelivery = canPlaceKitchenDelivery && canPlaceMartDelivery;
 
   // ==========================================================================
   // Customer Profile + Saved Addresses + Loyalty
@@ -658,6 +684,7 @@ export default function CheckoutPage() {
         ...prev,
         deliveryAddress: defaultAddr.address,
         deliveryNotes: defaultAddr.landmark ? `Landmark: ${defaultAddr.landmark}` : "",
+        destinationPincode: defaultAddr.zipCode || prev.destinationPincode,
       }));
     }
     setProfileAutoFilled(true);
@@ -843,6 +870,15 @@ export default function CheckoutPage() {
       newErrors.deliveryAddress = "Delivery address is required";
     }
 
+    // Mart pincode validation
+    if (form.orderType === "delivery" && isMartPincodeMode) {
+      if (!form.destinationPincode.trim()) {
+        newErrors.destinationPincode = "Pincode is required for delivery";
+      } else if (!checkMartPincodeFormat(form.destinationPincode)) {
+        newErrors.destinationPincode = "Enter a valid 6-digit pincode";
+      }
+    }
+
     // Local delivery minimum order check
     if (form.orderType === "delivery" && form.deliveryType === "local" && deliveryPolicy?.minimumOrder) {
       if (pricing.afterDiscount < deliveryPolicy.minimumOrder) {
@@ -906,6 +942,7 @@ export default function CheckoutPage() {
               : undefined,
           deliveryZoneId: undefined,
           deliveryNotes: form.deliveryNotes.trim() || undefined,
+          destinationPincode: form.destinationPincode.trim() || undefined,
           offerCode: couponApplied?.valid ? form.couponCode.trim() : undefined,
           paymentMethod: "razorpay",
           idempotencyKey: getOrCreateIdempotencyKey(),
@@ -1808,7 +1845,53 @@ export default function CheckoutPage() {
                     <div className="rounded-xl border border-border/60 p-6 space-y-4">
                       <h2 className="font-semibold">Delivery Details</h2>
 
-                      {/* Delivery Type Selection — Local vs Outside Area */}
+                      {/* Mart Pincode Delivery — when BU uses pincode_region mode */}
+                      {isMartPincodeMode ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Truck className="h-4 w-4 text-primary" />
+                            <Label className="text-sm font-medium">Courier Delivery</Label>
+                          </div>
+                          <div className="grid gap-2 sm:max-w-xs">
+                            <Label htmlFor="destinationPincode">Destination Pincode *</Label>
+                            <Input
+                              id="destinationPincode"
+                              value={form.destinationPincode}
+                              onChange={(e) => updateField("destinationPincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                              placeholder="6-digit pincode"
+                              maxLength={6}
+                              required
+                            />
+                            {errors.destinationPincode && (
+                              <p className="text-xs text-destructive">{errors.destinationPincode}</p>
+                            )}
+                          </div>
+                          {form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && martPincodeCheck !== undefined && (
+                            <div className={cn(
+                              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
+                              martPincodeCheck.serviceable
+                                ? "bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200"
+                                : "bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200"
+                            )}>
+                              {martPincodeCheck.serviceable ? (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  <span>Delivery available to {form.destinationPincode}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <span>{martPincodeCheck.message || "Delivery not available for this pincode"}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Shipping charges will be calculated at checkout based on courier rates.
+                          </p>
+                        </div>
+                      ) : (
+                      /* Kitchen Delivery Type Selection — Local vs Outside Area */
                       <div className="space-y-2">
                         <Label>Delivery Area</Label>
                         <RadioGroup
@@ -1905,8 +1988,9 @@ export default function CheckoutPage() {
                           </label>
                         </RadioGroup>
                       </div>
+                      )}
 
-                      {/* Local Delivery Info */}
+                      {/* Local Delivery Info — Kitchen only */}
                       {effectiveDeliveryType === "local" && deliveryPolicy && !localDeliveryUnavailable && (
                         <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 space-y-2">
                           <div className="flex items-center gap-2 text-sm font-medium">
@@ -1991,6 +2075,7 @@ export default function CheckoutPage() {
                                     deliveryNotes: addr.landmark
                                       ? `Landmark: ${addr.landmark}`
                                       : addr.deliveryInstructions || prev.deliveryNotes,
+                                    destinationPincode: addr.zipCode || prev.destinationPincode,
                                   }));
                                 }}
                               >
@@ -2402,7 +2487,7 @@ export default function CheckoutPage() {
                     "w-full text-base font-semibold h-12 transition-all",
                     isSubmitting && "opacity-80"
                   )}
-                  disabled={isSubmitting || !storeIsOpen || !canPlaceKitchenDelivery}
+                  disabled={isSubmitting || !storeIsOpen || !canPlaceDelivery}
                 >
                   {isSubmitting ? (
                     <>
@@ -2415,8 +2500,8 @@ export default function CheckoutPage() {
                     </>
                   ) : !storeIsOpen ? (
                     "Store is Closed"
-                  ) : !canPlaceKitchenDelivery ? (
-                    "Kitchen Delivery Not Available"
+                  ) : !canPlaceDelivery ? (
+                    !canPlaceKitchenDelivery ? "Kitchen Delivery Not Available" : "Delivery Not Available"
                   ) : effectiveDeliveryType === "outside_area" ? (
                     <>
                       <MessageCircle className="mr-2 h-5 w-5" />
@@ -2437,6 +2522,18 @@ export default function CheckoutPage() {
                       : kitchenServiceability?.reason === "NEAR_BOUNDARY_APPROXIMATE"
                         ? "Your PIN is near the delivery boundary. Please use GPS or enter your full address."
                         : "MB Kitchen does not deliver to this location. Change location, choose pickup, or remove Kitchen items."}
+                  </p>
+                )}
+
+                {isMartPincodeMode && !canPlaceMartDelivery && form.orderType === "delivery" && (
+                  <p className="text-center text-xs text-red-600">
+                    {!form.destinationPincode
+                      ? "Enter a destination pincode to check delivery availability."
+                      : !checkMartPincodeFormat(form.destinationPincode)
+                        ? "Enter a valid 6-digit pincode."
+                        : martPincodeCheck && !martPincodeCheck.serviceable
+                          ? martPincodeCheck.message || "Delivery is not available for this pincode."
+                          : "Checking delivery availability..."}
                   </p>
                 )}
 

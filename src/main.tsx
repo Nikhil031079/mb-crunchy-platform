@@ -50,6 +50,7 @@ const ReportsPage = lazy(() => import("@/pages/admin/ReportsPage"));
 const InventoryPage = lazy(() => import("@/pages/admin/InventoryPage"));
 const CustomersPage = lazy(() => import("@/pages/admin/CustomersPage"));
 const DeliveryZonesPage = lazy(() => import("@/pages/admin/DeliveryZonesPage"));
+const MartPincodeServiceabilityPage = lazy(() => import("@/pages/admin/MartPincodeServiceabilityPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
 const HomepageSectionsPage = lazy(() => import("@/pages/admin/HomepageSectionsPage"));
@@ -241,6 +242,7 @@ function AppRoutes() {
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="customers" element={<CustomersPage />} />
           <Route path="delivery-zones" element={<DeliveryZonesPage />} />
+          <Route path="mart-pincodes" element={<MartPincodeServiceabilityPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="banners" element={<BannersPage />} />
           <Route path="homepage-sections" element={<HomepageSectionsPage />} />

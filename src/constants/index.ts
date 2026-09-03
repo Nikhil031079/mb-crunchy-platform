@@ -32,6 +32,7 @@ export const ROUTES = {
     CUSTOMERS: "/admin/customers",
     SETTINGS: "/admin/settings",
     DELIVERY_ZONES: "/admin/delivery-zones",
+    MART_PINCODES: "/admin/mart-pincodes",
     BANNERS: "/admin/banners",
     HOMEPAGE_SECTIONS: "/admin/homepage-sections",
     FLASH_SALES: "/admin/flash-sales",
@@ -91,7 +92,8 @@ export type AdminNavigationIcon =
   | "Clock3"
   | "BarChart3"
   | "Truck"
-  | "UtensilsCrossed";
+  | "UtensilsCrossed"
+  | "MapPin";
 
 export interface AdminNavigationItem {
   label: string;
@@ -128,6 +130,7 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = [
       { label: "Offers", href: ROUTES.ADMIN.OFFERS, icon: "Tag" },
       { label: "Orders", href: ROUTES.ADMIN.ORDERS, icon: "ShoppingCart" },
       { label: "Delivery Zones", href: ROUTES.ADMIN.DELIVERY_ZONES, icon: "Truck" },
+      { label: "Mart Pincodes", href: ROUTES.ADMIN.MART_PINCODES, icon: "MapPin" },
       { label: "Reports", href: ROUTES.ADMIN.REPORTS, icon: "BarChart3" },
       { label: "Customers", href: ROUTES.ADMIN.CUSTOMERS, icon: "Users" },
     ],
