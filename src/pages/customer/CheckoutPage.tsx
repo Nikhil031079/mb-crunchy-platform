@@ -463,7 +463,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, clearCart, itemCount, dismissNotice } = useCart();
+  const { cart, clearCart, itemCount, dismissNotice, removeByBusinessUnit } = useCart();
   const createOrder = useMutation(api.orders.create);
   const createRazorpayOrder = useAction(api.razorpay.createOrder);
   const verifyRazorpayPayment = useAction(api.razorpay.verifyPayment);
@@ -495,6 +495,33 @@ export default function CheckoutPage() {
   const [redeemPoints, setRedeemPoints] = useState(0);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
+  // ==========================================================================
+  // Mixed-BU cart detection and BU selection for checkout
+  // ==========================================================================
+
+  const isMixedCart = cart.businessUnitIds.length > 1;
+
+  // The selected BU for checkout — null means "not yet chosen" for mixed carts.
+  // For single-BU carts, this is always the only BU.
+  const [selectedCheckoutBU, setSelectedCheckoutBU] = useState<string | null>(null);
+
+  // For single-BU carts, auto-select the only BU.
+  useEffect(() => {
+    if (!isMixedCart && cart.businessUnitIds.length === 1 && !selectedCheckoutBU) {
+      setSelectedCheckoutBU(cart.businessUnitIds[0]);
+    }
+    // If cart becomes single-BU after being mixed, auto-select
+    if (!isMixedCart && cart.businessUnitIds.length === 1) {
+      setSelectedCheckoutBU(cart.businessUnitIds[0]);
+    }
+  }, [isMixedCart, cart.businessUnitIds, selectedCheckoutBU]);
+
+  // Items belonging to the selected BU only
+  const checkoutItems = useMemo(() => {
+    if (!selectedCheckoutBU) return [];
+    return cart.items.filter((item) => item.businessUnitId === selectedCheckoutBU);
+  }, [cart.items, selectedCheckoutBU]);
+
   // Order confirmation lookup — after order creation, we subscribe to the
   // authoritative order record from Convex so the confirmation screen always
   // shows correct totals (not derived from the now-empty cart).
@@ -514,8 +541,15 @@ export default function CheckoutPage() {
   // Data Fetching — BU settings + global delivery policy
   // ==========================================================================
 
-  // Use the first business unit from cart for settings queries
-  const primaryBusinessUnitId = cart.businessUnitIds[0];
+  // Reset selected BU if its items were removed from the cart
+  useEffect(() => {
+    if (selectedCheckoutBU && !cart.businessUnitIds.includes(selectedCheckoutBU)) {
+      setSelectedCheckoutBU(null);
+    }
+  }, [selectedCheckoutBU, cart.businessUnitIds]);
+
+  // Use the selected checkout BU for settings queries
+  const primaryBusinessUnitId = selectedCheckoutBU ?? cart.businessUnitIds[0];
 
   const buSettings = useQuery(
     api.settings.getBusinessUnitSettings,
@@ -546,16 +580,16 @@ export default function CheckoutPage() {
     | undefined;
 
   const kitchenServiceability = useMemo(() => {
-    if (!activeBUs || cart.items.length === 0) return null;
+    if (!activeBUs || checkoutItems.length === 0) return null;
     for (const bu of activeBUs) {
       if (!bu.slug.includes("kitchen")) continue;
-      const hasKitchenItems = cart.items.some((item) => item.businessUnitId === bu._id);
+      const hasKitchenItems = checkoutItems.some((item) => item.businessUnitId === bu._id);
       if (!hasKitchenItems) continue;
       const svc = checkKitchenServiceability(customerLocation.location, bu);
       if (!svc.serviceable) return { buName: bu.name, ...svc };
     }
     return null;
-  }, [activeBUs, cart.items, customerLocation.location]);
+  }, [activeBUs, checkoutItems, customerLocation.location]);
 
   // Can the customer place a delivery order with Kitchen items?
   const canPlaceKitchenDelivery = useMemo(() => {
@@ -580,6 +614,13 @@ export default function CheckoutPage() {
   ) as CustomerAddress[] | undefined;
 
   const loyaltySettings = useQuery(api.loyalty.getSettings, {});
+
+  // Compute subtotal from checkout items only (selected BU)
+  const checkoutSubtotal = useMemo(
+    () => checkoutItems.reduce((sum, item) => sum + item.totalPrice, 0),
+    [checkoutItems],
+  );
+
   const loyaltyAccount = useQuery(
     api.loyalty.getBalance,
     customer?._id ? { customerId: customer._id as Id<"customers"> } : "skip",
@@ -590,7 +631,7 @@ export default function CheckoutPage() {
     customer?._id && loyaltySettings
       ? {
           customerId: customer._id as Id<"customers">,
-          orderTotal: cart.subtotal,
+          orderTotal: checkoutSubtotal,
         }
       : "skip",
   );
@@ -629,17 +670,17 @@ export default function CheckoutPage() {
   const loyaltyDiscount = useMemo(() => {
     if (!loyaltySettings || redeemPoints <= 0) return 0;
     const valuePerPoint = loyaltySettings.rupeesPerPointRedemption ?? 1;
-    const maxDiscountByPercent = cart.subtotal * (loyaltySettings.maxRedeemPercentOfOrder / 100);
+    const maxDiscountByPercent = checkoutSubtotal * (loyaltySettings.maxRedeemPercentOfOrder / 100);
     const rawDiscount = redeemPoints * valuePerPoint;
-    return Math.min(rawDiscount, maxDiscountByPercent, cart.subtotal);
-  }, [loyaltySettings, redeemPoints, cart.subtotal]);
+    return Math.min(rawDiscount, maxDiscountByPercent, checkoutSubtotal);
+  }, [loyaltySettings, redeemPoints, checkoutSubtotal]);
 
   // ==========================================================================
   // Pricing Calculation
   // ==========================================================================
 
   const pricing = useMemo(() => {
-    const subtotal = cart.subtotal;
+    const subtotal = checkoutSubtotal;
     const couponDiscount = couponApplied?.valid ? (couponApplied.discount ?? 0) : 0;
     const mealDealDiscount = cart.mealDealSavings ?? 0;
     const discount = cart.discount + couponDiscount + loyaltyDiscount + mealDealDiscount;
@@ -671,7 +712,7 @@ export default function CheckoutPage() {
     const total = afterDiscount + deliveryFee + tax;
 
     return { subtotal, discount, afterDiscount, tax, taxRate, deliveryFee, freeDelivery, estimatedMinutes, total };
-  }, [cart.subtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount]);
+  }, [checkoutSubtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount]);
 
   // ==========================================================================
   // Defensive normalization — deliveryType is only meaningful for delivery orders.
@@ -699,7 +740,7 @@ export default function CheckoutPage() {
       ? {
           code: form.couponCode.trim(),
           businessUnitId: primaryBusinessUnitId as any,
-          subtotal: cart.subtotal,
+          subtotal: checkoutSubtotal,
         }
       : "skip"
   );
@@ -822,7 +863,8 @@ export default function CheckoutPage() {
       e.preventDefault();
 
       if (!validate()) return;
-      if (cart.items.length === 0) return;
+      if (checkoutItems.length === 0) return;
+      if (!selectedCheckoutBU) return;
       if (!storeIsOpen) {
         toast.error("Store is currently closed", {
           description: nextOpenTime
@@ -836,13 +878,12 @@ export default function CheckoutPage() {
       setPaymentStatus("creating_order");
 
       try {
-        const primaryBusinessUnitId = cart.items[0]?.businessUnitId;
         const orderResult = await createOrder({
-          businessUnitId: primaryBusinessUnitId! as any,
+          businessUnitId: selectedCheckoutBU as any,
           customerName: form.customerName.trim(),
           customerPhone: normalizeIndianPhone(form.customerPhone) ?? form.customerPhone.trim(),
           customerEmail: form.customerEmail.trim() || undefined,
-          items: cart.items.map((item) => ({
+          items: checkoutItems.map((item) => ({
             catalogItemId: item.catalogItemId as any,
             itemType: item.itemType,
             name: item.name,
@@ -895,7 +936,7 @@ export default function CheckoutPage() {
           });
           setConfirmLookup({ phone: form.customerPhone.trim(), orderNumber: newOrderNumber });
           persistOrderConfirmation(newOrderNumber, form.customerPhone.trim());
-          clearCart();
+          removeByBusinessUnit(selectedCheckoutBU!);
           clearIdempotencyKey();
           toast.success("Delivery request submitted!", {
             description: "We'll contact you with a delivery quote shortly.",
@@ -922,7 +963,7 @@ export default function CheckoutPage() {
             });
             setConfirmLookup({ phone: form.customerPhone.trim(), orderNumber: newOrderNumber });
             persistOrderConfirmation(newOrderNumber, form.customerPhone.trim());
-            clearCart();
+            removeByBusinessUnit(selectedCheckoutBU!);
             clearIdempotencyKey();
             toast.success("Payment successful!", {
               description: "Your order is being prepared.",
@@ -998,7 +1039,9 @@ export default function CheckoutPage() {
         });
         setConfirmLookup({ phone: pendingOrder.phone, orderNumber: pendingOrder.orderNumber });
         persistOrderConfirmation(pendingOrder.orderNumber, pendingOrder.phone);
-        clearCart();
+        if (selectedCheckoutBU) {
+          removeByBusinessUnit(selectedCheckoutBU);
+        }
         clearIdempotencyKey();
         toast.success("Payment successful!", {
           description: "Your order is being prepared.",
@@ -1019,7 +1062,7 @@ export default function CheckoutPage() {
     } finally {
       setPaymentStatus("idle");
     }
-  }, [pendingOrder, form, createRazorpayOrder, verifyRazorpayPayment, clearCart]);
+  }, [pendingOrder, form, createRazorpayOrder, verifyRazorpayPayment, selectedCheckoutBU, removeByBusinessUnit]);
 
   // ==========================================================================
   // Persisted order confirmation — recovers confirmation page on refresh
@@ -1444,7 +1487,7 @@ export default function CheckoutPage() {
         </motion.div>
 
         {/* Loading State — settings still loading */}
-        {buSettings === undefined && cart.businessUnitIds[0] && (
+        {buSettings === undefined && primaryBusinessUnitId && !isMixedCart && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1554,9 +1597,75 @@ export default function CheckoutPage() {
         <form onSubmit={handleSubmit}>
           <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
             {/* ================================================================ */}
+            {/* MIXED CART — BU SELECTION                                         */}
+            {/* ================================================================ */}
+
+            {isMixedCart && !selectedCheckoutBU && (
+              <div className="lg:col-span-2 space-y-6">
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="rounded-xl border border-border/60 p-6 space-y-4"
+                >
+                  <div>
+                    <h2 className="font-semibold text-lg">Choose Business Unit to Checkout</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your cart contains items from multiple business units. Please checkout each business unit separately.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {cart.businessUnitIds.map((buId) => {
+                      const bu = activeBUs?.find((b) => b._id === buId);
+                      const buItemCount = cart.items
+                        .filter((item) => item.businessUnitId === buId)
+                        .reduce((sum, item) => sum + item.quantity, 0);
+                      const buSubtotal = cart.items
+                        .filter((item) => item.businessUnitId === buId)
+                        .reduce((sum, item) => sum + item.totalPrice, 0);
+                      return (
+                        <button
+                          key={buId}
+                          type="button"
+                          onClick={() => setSelectedCheckoutBU(buId)}
+                          className="flex items-start gap-4 rounded-xl border border-border/60 bg-card p-5 text-left transition-all hover:border-primary hover:bg-primary/5 hover:ring-1 hover:ring-primary cursor-pointer"
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            {bu?.slug?.includes("kitchen") ? (
+                              <Store className="h-5 w-5" />
+                            ) : (
+                              <ShoppingCart className="h-5 w-5" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold">{bu?.name ?? "Business Unit"}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {buItemCount} item{buItemCount !== 1 ? "s" : ""} · {formatCurrency(buSubtotal)}
+                            </p>
+                          </div>
+                          <ArrowLeft className="h-4 w-4 text-muted-foreground rotate-180 shrink-0 mt-1" />
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <Link
+                    to={ROUTES.CART}
+                    className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to Cart
+                  </Link>
+                </motion.div>
+              </div>
+            )}
+
+            {/* ================================================================ */}
             {/* CHECKOUT FORM                                                   */}
             {/* ================================================================ */}
 
+            {(!isMixedCart || selectedCheckoutBU) && (
             <div className="space-y-6">
               {/* Contact Information */}
               <motion.div
@@ -1986,11 +2095,13 @@ export default function CheckoutPage() {
                 </motion.div>
               )}
             </div>
+            )}
 
             {/* ================================================================ */}
             {/* ORDER SUMMARY                                                   */}
             {/* ================================================================ */}
 
+            {(!isMixedCart || selectedCheckoutBU) && (
             <div className="lg:sticky lg:top-24 lg:self-start">
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
@@ -2001,7 +2112,7 @@ export default function CheckoutPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold">Order Summary</h2>
                   <span className="text-xs text-muted-foreground">
-                    {itemCount} item{itemCount !== 1 ? "s" : ""}
+                    {checkoutItems.reduce((sum, item) => sum + item.quantity, 0)} item{checkoutItems.reduce((sum, item) => sum + item.quantity, 0) !== 1 ? "s" : ""}
                   </span>
                 </div>
 
@@ -2028,7 +2139,7 @@ export default function CheckoutPage() {
 
                 {/* Items */}
                 <div className="max-h-48 space-y-3 overflow-y-auto">
-                  {cart.items.map((item) => (
+                  {checkoutItems.map((item) => (
                     <div
                       key={`${item.catalogItemId}-${item.variantName}`}
                       className="flex items-center gap-3"
@@ -2342,6 +2453,7 @@ export default function CheckoutPage() {
                 </p>
               </motion.div>
             </div>
+            )}
           </div>
         </form>
       </div>

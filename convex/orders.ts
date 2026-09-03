@@ -500,6 +500,7 @@ type ResolvableDoc = {
   deletedAt?: number;
   price?: number;
   variants?: ProductVariantLike[];
+  _id?: string;
 };
 
 type OrderLine = {
@@ -511,6 +512,8 @@ type OrderLine = {
   unitPrice: number;
   totalPrice: number;
   image?: string;
+  /** Server-resolved businessUnitId from the catalogItems record — authoritative. */
+  catalogBusinessUnitId: string;
 };
 
 /**
@@ -544,8 +547,8 @@ async function resolveOrderLine(
     throw new Error("Item not found in catalog");
   }
 
-  // Allow items from different business units in the same order
-  // The order is created under the primary business unit, but can contain items from other BUs
+  // Validate item type matches catalog (businessUnitId is validated by the
+  // caller via the catalogBusinessUnitId return value).
   if (doc.itemType && doc.itemType !== item.itemType) {
     throw new Error("Item type mismatch");
   }
@@ -604,6 +607,7 @@ async function resolveOrderLine(
     unitPrice,
     totalPrice,
     image: item.image,
+    catalogBusinessUnitId: doc.businessUnitId ?? "",
   };
 }
 
@@ -794,6 +798,32 @@ export const create = mutation({
     }
 
     // ----------------------------------------------------------------------
+    // 1b. Business Unit boundary — reject mixed-BU orders.
+    //     Derive the authoritative BU set from the catalogItems database
+    //     records (NOT from the client-provided businessUnitId).
+    // ----------------------------------------------------------------------
+    const resolvedBusinessUnitIds = new Set(
+      items.map((item) => item.catalogBusinessUnitId).filter((id) => id.length > 0),
+    );
+
+    if (resolvedBusinessUnitIds.size > 1) {
+      throw new Error(
+        "MIXED_BUSINESS_UNIT_CHECKOUT_REQUIRED: This cart contains items from multiple business units. Please checkout each business unit separately.",
+      );
+    }
+
+    // Validate client-provided businessUnitId matches the resolved catalog BU.
+    // The client BU is treated as a consistency hint; the server-derived BU
+    // from catalogItems is authoritative.
+    let effectiveBusinessUnitId: Id<"businessUnits"> = args.businessUnitId;
+    const resolvedBU = items[0]?.catalogBusinessUnitId;
+    if (resolvedBU && resolvedBU !== args.businessUnitId) {
+      // Client BU doesn't match catalog — use the server-resolved BU.
+      // This prevents BU spoofing via reordered cart items.
+      effectiveBusinessUnitId = resolvedBU as Id<"businessUnits">;
+    }
+
+    // ----------------------------------------------------------------------
     // 2. Coupon discount — validated & recomputed server-side.
     // ----------------------------------------------------------------------
     let couponDiscount = 0;
@@ -801,7 +831,7 @@ export const create = mutation({
     if (args.offerCode) {
       const coupon = await validateCouponInternal(ctx, {
         code: args.offerCode,
-        businessUnitId: args.businessUnitId,
+        businessUnitId: effectiveBusinessUnitId,
         subtotal,
       });
       if (!coupon.valid) {
@@ -914,7 +944,7 @@ export const create = mutation({
     // ----------------------------------------------------------------------
     const buSettings = await ctx.db
       .query("settings")
-      .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
+      .withIndex("by_business_unit", (q) => q.eq("businessUnitId", effectiveBusinessUnitId))
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .first();
 
@@ -938,7 +968,7 @@ export const create = mutation({
     //     incomplete, delivery is NOT accepted.
     // ----------------------------------------------------------------------
     if (args.orderType === "delivery") {
-      const bu = await ctx.db.get(args.businessUnitId);
+      const bu = await ctx.db.get(effectiveBusinessUnitId);
       if (bu && bu.enableDelivery) {
         // Verify origin coordinates are present and valid
         const hasOrigin =
@@ -1007,7 +1037,7 @@ export const create = mutation({
       }
     } else {
       deliveryFee = await computeDeliveryFee(ctx, {
-        businessUnitId: args.businessUnitId,
+        businessUnitId: effectiveBusinessUnitId,
         orderType: args.orderType,
         deliveryType,
         deliveryZoneId: args.deliveryZoneId,
@@ -1048,7 +1078,7 @@ export const create = mutation({
     const deliveryQuoteStatus = isOutsideArea ? "pending" as const : undefined;
 
     const orderId = await ctx.db.insert("orders", {
-      businessUnitId: args.businessUnitId,
+      businessUnitId: effectiveBusinessUnitId,
       orderNumber,
       customerId,
       customerName: args.customerName,
@@ -1080,7 +1110,7 @@ export const create = mutation({
 
     await logActivity(ctx, {
       orderId,
-      businessUnitId: args.businessUnitId,
+      businessUnitId: effectiveBusinessUnitId,
       action: "order_created",
       newValue: orderNumber,
       actor: "system",
@@ -1152,7 +1182,7 @@ export const create = mutation({
         });
       }
 
-      const businessUnit = await ctx.db.get(args.businessUnitId);
+      const businessUnit = await ctx.db.get(effectiveBusinessUnitId);
       await notify("NEW_ORDER", {
         orderId,
         orderNumber,
@@ -1179,7 +1209,7 @@ export const create = mutation({
       // Outside-area: log that quote is pending, skip coupon/inventory for now.
       await logActivity(ctx, {
         orderId,
-        businessUnitId: args.businessUnitId,
+        businessUnitId: effectiveBusinessUnitId,
         action: "payment_pending",
         newValue: "delivery_quote_pending",
         actor: "system",

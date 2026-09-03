@@ -26,6 +26,7 @@ interface GeocodeResult {
 
 interface GoogleGeocodeResponse {
   status: string;
+  error_message?: string;
   results: Array<{
     formatted_address: string;
     geometry: {
@@ -107,6 +108,11 @@ async function callGoogleGeocoding(
   const data = (await response.json()) as GoogleGeocodeResponse;
 
   if (data.status === "REQUEST_DENIED") {
+    console.error("[geocode] Google Geocoding REQUEST_DENIED", {
+      httpStatus: response.status,
+      googleStatus: data.status,
+      errorMessage: data.error_message ?? null,
+    });
     throw new Error("Geocoding service not configured.");
   }
   if (data.status === "OVER_QUERY_LIMIT") {

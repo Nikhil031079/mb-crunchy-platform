@@ -1557,6 +1557,26 @@ export function useCart() {
 
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
 
+  const removeByBusinessUnit = useCallback((businessUnitId: string) => {
+    setState((prev) => {
+      const remaining = prev.items.filter(
+        (item) => item.businessUnitId !== businessUnitId,
+      );
+      if (remaining.length === prev.items.length) return prev; // nothing removed
+      const businessUnitIds = remaining.length > 0
+        ? Array.from(new Set(remaining.map((item) => item.businessUnitId)))
+        : [];
+      const subtotal = calculateSubtotal(remaining);
+      return reconcileCartState({
+        ...prev,
+        items: remaining,
+        businessUnitIds,
+        subtotal,
+        total: computeTotal(subtotal, prev.discount, prev.deliveryFee, prev.tax),
+      });
+    });
+  }, []);
+
   return {
     cart,
     addItem,
@@ -1567,6 +1587,7 @@ export function useCart() {
     applyMealDeal,
     allocateExistingMealDeal,
     removeMealDeal,
+    removeByBusinessUnit,
     itemCount,
   };
 }
