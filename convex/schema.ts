@@ -104,6 +104,8 @@ const productVariants = v.object({
   isDefault: v.boolean(),
   sortOrder: v.number(),
   active: v.boolean(),
+  netWeightGrams: v.optional(v.number()),
+  volumeMl: v.optional(v.number()),
 });
 
 const products = defineTable({

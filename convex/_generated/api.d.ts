@@ -30,6 +30,7 @@ import type * as inAppNotifications from "../inAppNotifications.js";
 import type * as inventory from "../inventory.js";
 import type * as loyalty from "../loyalty.js";
 import type * as maintenance from "../maintenance.js";
+import type * as martPincodeServiceability from "../martPincodeServiceability.js";
 import type * as mealDeals from "../mealDeals.js";
 import type * as migrations_convertVariants from "../migrations/convertVariants.js";
 import type * as notificationService from "../notificationService.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   inventory: typeof inventory;
   loyalty: typeof loyalty;
   maintenance: typeof maintenance;
+  martPincodeServiceability: typeof martPincodeServiceability;
   mealDeals: typeof mealDeals;
   "migrations/convertVariants": typeof migrations_convertVariants;
   notificationService: typeof notificationService;

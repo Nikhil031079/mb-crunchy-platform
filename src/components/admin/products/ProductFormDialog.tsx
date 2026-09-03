@@ -647,6 +647,30 @@ function VariantRow({ variant, index, onUpdate, onRemove, onSetDefault, canRemov
       {moreOpen && (
         <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 sm:grid-cols-5">
           <div className="grid gap-1">
+            <Label className="text-[10px] text-muted-foreground">Net Weight (g)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={variant.netWeightGrams}
+              onChange={(e) => onUpdate(index, "netWeightGrams", e.target.value)}
+              placeholder="e.g. 250"
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-[10px] text-muted-foreground">Volume (ml)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={variant.volumeMl}
+              onChange={(e) => onUpdate(index, "volumeMl", e.target.value)}
+              placeholder="e.g. 500"
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="grid gap-1">
             <Label className="text-[10px] text-muted-foreground">Barcode</Label>
             <Input
               value={variant.barcode}

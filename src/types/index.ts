@@ -102,6 +102,8 @@ export interface ProductVariant {
   isDefault: boolean;
   sortOrder: number;
   active: boolean;
+  netWeightGrams?: number;
+  volumeMl?: number;
 }
 
 // ============================================================================

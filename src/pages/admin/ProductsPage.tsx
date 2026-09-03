@@ -58,6 +58,8 @@ function fromConvex(doc: any, buMap: Map<string, string>, catMap: Map<string, st
       isDefault: v.isDefault ?? false,
       sortOrder: v.sortOrder ?? 0,
       active: v.active ?? true,
+      netWeightGrams: v.netWeightGrams?.toString() ?? "",
+      volumeMl: v.volumeMl?.toString() ?? "",
     })),
     stockTotal: stockFromVariants > 0 ? stockFromVariants : doc.stockQuantity,
     sku: doc.sku,
@@ -98,6 +100,8 @@ function toCreateArgs(values: ProductFormValues) {
           isDefault: v.isDefault,
           sortOrder: i,
           active: v.active,
+          netWeightGrams: v.netWeightGrams ? Number(v.netWeightGrams) : undefined,
+          volumeMl: v.volumeMl ? Number(v.volumeMl) : undefined,
         }))
     : [{
         optionName: "",
@@ -155,6 +159,8 @@ function toUpdateArgs(id: string, values: ProductFormValues) {
           isDefault: v.isDefault,
           sortOrder: i,
           active: v.active,
+          netWeightGrams: v.netWeightGrams ? Number(v.netWeightGrams) : undefined,
+          volumeMl: v.volumeMl ? Number(v.volumeMl) : undefined,
         }))
     : [{
         optionName: "",

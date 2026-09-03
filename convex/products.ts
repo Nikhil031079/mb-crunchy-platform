@@ -212,6 +212,8 @@ export const create = mutation({
         isDefault: v.boolean(),
         sortOrder: v.number(),
         active: v.boolean(),
+        netWeightGrams: v.optional(v.number()),
+        volumeMl: v.optional(v.number()),
       })
     ),
     tags: v.array(v.string()),
@@ -250,6 +252,16 @@ export const create = mutation({
     }
     if (args.heightCm !== undefined && args.heightCm <= 0) {
       throw new Error("Package height must be greater than 0 cm");
+    }
+
+    // Validate variant-level shipping weights
+    for (const variant of args.variants) {
+      if (variant.netWeightGrams !== undefined && variant.netWeightGrams <= 0) {
+        throw new Error(`Variant "${variant.optionValue}" net weight must be greater than 0 grams`);
+      }
+      if (variant.volumeMl !== undefined && variant.volumeMl <= 0) {
+        throw new Error(`Variant "${variant.optionValue}" volume must be greater than 0 ml`);
+      }
     }
 
     // Enforce unique slug within business unit (only non-deleted products block)
@@ -343,6 +355,8 @@ export const update = mutation({
           isDefault: v.boolean(),
           sortOrder: v.number(),
           active: v.boolean(),
+          netWeightGrams: v.optional(v.number()),
+          volumeMl: v.optional(v.number()),
         })
       )
     ),
@@ -384,6 +398,18 @@ export const update = mutation({
     }
     if (fields.heightCm !== undefined && fields.heightCm !== null && fields.heightCm <= 0) {
       throw new Error("Package height must be greater than 0 cm");
+    }
+
+    // Validate variant-level shipping weights
+    if (fields.variants) {
+      for (const variant of fields.variants) {
+        if (variant.netWeightGrams !== undefined && variant.netWeightGrams <= 0) {
+          throw new Error(`Variant "${variant.optionValue}" net weight must be greater than 0 grams`);
+        }
+        if (variant.volumeMl !== undefined && variant.volumeMl <= 0) {
+          throw new Error(`Variant "${variant.optionValue}" volume must be greater than 0 ml`);
+        }
+      }
     }
 
     const product = await ctx.db.get(id);

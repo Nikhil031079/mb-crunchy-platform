@@ -29,6 +29,8 @@ export interface AdminVariant {
   isDefault: boolean;
   sortOrder: number;
   active: boolean;
+  netWeightGrams: string;
+  volumeMl: string;
 }
 
 export function emptyVariant(sortOrder = 0): AdminVariant {
@@ -47,6 +49,8 @@ export function emptyVariant(sortOrder = 0): AdminVariant {
     isDefault: sortOrder === 0,
     sortOrder,
     active: true,
+    netWeightGrams: "",
+    volumeMl: "",
   };
 }
 
