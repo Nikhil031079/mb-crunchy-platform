@@ -66,6 +66,15 @@ function BusinessUnitForm({ businessUnit, isEditing, onSubmit, onCancel }: Busin
             <p className="text-xs text-muted-foreground">Configure how delivery availability is determined for this business unit.</p>
           </div>
 
+          {/* Enable Delivery */}
+          <div className="flex items-center justify-between rounded-md bg-secondary/50 px-3 py-2">
+            <div>
+              <Label htmlFor={`${formId}-enable-delivery`} className="text-sm font-medium">Enable Delivery</Label>
+              <p className="text-xs text-muted-foreground">Allow customers to place delivery orders for this business unit.</p>
+            </div>
+            <Switch id={`${formId}-enable-delivery`} checked={values.enableDelivery ?? false} onCheckedChange={(checked) => update("enableDelivery", checked)} />
+          </div>
+
           {/* Serviceability Mode */}
           <div className="grid gap-2">
             <Label htmlFor={`${formId}-serviceability-mode`}>Serviceability Mode</Label>

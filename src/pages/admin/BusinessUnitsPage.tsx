@@ -53,7 +53,7 @@ function toCreateArgs(values: BusinessUnitFormValues) {
     enableOffers: false,
     enableSearch: false,
     enableCheckout: false,
-    enableDelivery: false,
+    enableDelivery: values.enableDelivery ?? false,
     enablePickup: false,
     serviceabilityMode: values.serviceabilityMode ?? "coordinate_radius",
   };
@@ -71,6 +71,7 @@ function toUpdateArgs(id: string, values: BusinessUnitFormValues) {
     status: values.status,
     enableCombos: values.enableCombos ?? false,
     enablePartyPacks: values.enablePartyPacks ?? false,
+    enableDelivery: values.enableDelivery ?? false,
     serviceabilityMode: values.serviceabilityMode,
   };
 }
