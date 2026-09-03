@@ -35,7 +35,11 @@ function fromConvex(doc: any): BusinessUnit {
     logoUrl: doc.logo ?? undefined,
     enableCombos: doc.enableCombos,
     enablePartyPacks: doc.enablePartyPacks,
+    enableDelivery: doc.enableDelivery,
     serviceabilityMode: doc.serviceabilityMode ?? undefined,
+    originLatitude: doc.originLatitude,
+    originLongitude: doc.originLongitude,
+    deliveryRadiusKm: doc.deliveryRadiusKm,
   };
 }
 
@@ -73,6 +77,9 @@ function toUpdateArgs(id: string, values: BusinessUnitFormValues) {
     enablePartyPacks: values.enablePartyPacks ?? false,
     enableDelivery: values.enableDelivery ?? false,
     serviceabilityMode: values.serviceabilityMode,
+    originLatitude: values.originLatitude,
+    originLongitude: values.originLongitude,
+    deliveryRadiusKm: values.deliveryRadiusKm,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
