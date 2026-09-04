@@ -299,7 +299,7 @@ export default function ShippingRatesPage() {
         </section>
       )}
 
-      <RateFormDialog open={formOpen} record={editingRecord} zones={zoneList} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditingRecord(undefined); }} onSubmit={saveRate} />
+      <RateFormDialog key={editingRecord?.id ?? "new"} open={formOpen} record={editingRecord} zones={zoneList} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditingRecord(undefined); }} onSubmit={saveRate} />
 
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(undefined)}>
         <DialogContent className="sm:max-w-md">

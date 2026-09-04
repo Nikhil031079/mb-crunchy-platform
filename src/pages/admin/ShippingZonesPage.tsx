@@ -245,7 +245,7 @@ export default function ShippingZonesPage() {
         </section>
       )}
 
-      <ZoneFormDialog open={formOpen} record={editingRecord} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditingRecord(undefined); }} onSubmit={saveZone} />
+      <ZoneFormDialog key={editingRecord?.id ?? "new"} open={formOpen} record={editingRecord} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditingRecord(undefined); }} onSubmit={saveZone} />
 
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(undefined)}>
         <DialogContent className="sm:max-w-md">
