@@ -612,14 +612,44 @@ export default function CheckoutPage() {
       : "skip",
   ) as { serviceable: boolean; reasonCode?: string; message?: string } | undefined;
 
+  // Mart shipping quote — fetches server-authoritative shipping charge for pincode_region delivery
+  const martShippingQuote = useQuery(
+    api.shippingRates.quoteForCart,
+    isMartPincodeMode && form.orderType === "delivery" && form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && selectedCheckoutBU && checkoutItems.length > 0
+      ? {
+          businessUnitId: selectedCheckoutBU as Id<"businessUnits">,
+          items: checkoutItems.map((item) => ({
+            catalogItemId: item.catalogItemId as Id<"catalogItems">,
+            variantName: item.variantName,
+            quantity: item.quantity,
+          })),
+          destinationPincode: form.destinationPincode.trim(),
+        }
+      : "skip",
+  ) as {
+    serviceable: boolean;
+    error?: string;
+    shippingCharge?: number;
+    shippingZoneName?: string;
+    shippingRateName?: string;
+    actualWeightGrams?: number;
+    billableWeightGrams?: number;
+  } | undefined;
+
   // Can the customer place a delivery order with Mart items?
   const canPlaceMartDelivery = useMemo(() => {
     if (!isMartPincodeMode) return true; // not Mart pincode mode
     if (form.orderType === "pickup") return true; // pickup bypasses delivery check
     if (!form.destinationPincode || !checkMartPincodeFormat(form.destinationPincode)) return false;
     if (martPincodeCheck === undefined) return false; // still loading
-    return martPincodeCheck.serviceable;
-  }, [isMartPincodeMode, form.orderType, form.destinationPincode, martPincodeCheck]);
+    if (!martPincodeCheck.serviceable) return false;
+    // If in delivery mode, also require a successful shipping quote
+    if (form.orderType === "delivery") {
+      if (martShippingQuote === undefined) return false; // quote still loading
+      if (!martShippingQuote.serviceable) return false;
+    }
+    return true;
+  }, [isMartPincodeMode, form.orderType, form.destinationPincode, martPincodeCheck, martShippingQuote]);
 
   // Combined delivery check — Kitchen + Mart
   const canPlaceDelivery = canPlaceKitchenDelivery && canPlaceMartDelivery;
@@ -722,7 +752,13 @@ export default function CheckoutPage() {
     let freeDelivery = false;
     let estimatedMinutes: number | undefined;
 
-    if (form.orderType === "delivery" && form.deliveryType === "local" && deliveryPolicy) {
+    if (isMartPincodeMode && form.orderType === "delivery") {
+      // Mart pincode-region: use server-authoritative shipping quote
+      if (martShippingQuote?.serviceable && martShippingQuote.shippingCharge !== undefined) {
+        deliveryFee = martShippingQuote.shippingCharge;
+      }
+      // If quote is loading or failed, deliveryFee stays 0 — Pay button will be disabled
+    } else if (form.orderType === "delivery" && form.deliveryType === "local" && deliveryPolicy) {
       if (deliveryPolicy.feeType === "fixed" && deliveryPolicy.fixedFee !== undefined) {
         const threshold = deliveryPolicy.freeDeliveryThreshold;
         if (threshold && afterDiscount >= threshold) {
@@ -739,7 +775,7 @@ export default function CheckoutPage() {
     const total = afterDiscount + deliveryFee + tax;
 
     return { subtotal, discount, afterDiscount, tax, taxRate, deliveryFee, freeDelivery, estimatedMinutes, total };
-  }, [checkoutSubtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount]);
+  }, [checkoutSubtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount, isMartPincodeMode, martShippingQuote]);
 
   // ==========================================================================
   // Defensive normalization — deliveryType is only meaningful for delivery orders.
@@ -2419,12 +2455,28 @@ export default function CheckoutPage() {
                       {form.orderType === "delivery"
                         ? effectiveDeliveryType === "outside_area"
                           ? "To be confirmed"
-                          : pricing.freeDelivery
-                            ? "Free"
-                            : formatCurrency(pricing.deliveryFee)
+                          : isMartPincodeMode
+                            ? martShippingQuote === undefined
+                              ? "Calculating..."
+                              : !martShippingQuote.serviceable
+                                ? "Unavailable"
+                                : pricing.freeDelivery
+                                  ? "Free"
+                                  : formatCurrency(pricing.deliveryFee)
+                            : pricing.freeDelivery
+                              ? "Free"
+                              : formatCurrency(pricing.deliveryFee)
                         : "Free"}
                     </span>
                   </div>
+                  {isMartPincodeMode && form.orderType === "delivery" && martShippingQuote?.serviceable && (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>
+                        {martShippingQuote.shippingRateName}{martShippingQuote.billableWeightGrams !== undefined ? ` (${martShippingQuote.billableWeightGrams}g)` : ""}
+                      </span>
+                      <span>{martShippingQuote.shippingZoneName}</span>
+                    </div>
+                  )}
                   {pricing.tax > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
@@ -2487,7 +2539,14 @@ export default function CheckoutPage() {
                     "w-full text-base font-semibold h-12 transition-all",
                     isSubmitting && "opacity-80"
                   )}
-                  disabled={isSubmitting || !storeIsOpen || !canPlaceDelivery}
+                  disabled={
+                    isSubmitting || !storeIsOpen || !canPlaceDelivery ||
+                    // Mart: disable while quote loads or if quote failed
+                    (isMartPincodeMode && form.orderType === "delivery" && (
+                      martShippingQuote === undefined ||
+                      !martShippingQuote.serviceable
+                    ))
+                  }
                 >
                   {isSubmitting ? (
                     <>
@@ -2502,6 +2561,13 @@ export default function CheckoutPage() {
                     "Store is Closed"
                   ) : !canPlaceDelivery ? (
                     !canPlaceKitchenDelivery ? "Kitchen Delivery Not Available" : "Delivery Not Available"
+                  ) : isMartPincodeMode && form.orderType === "delivery" && martShippingQuote === undefined ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Calculating Shipping...
+                    </>
+                  ) : isMartPincodeMode && form.orderType === "delivery" && martShippingQuote && !martShippingQuote.serviceable ? (
+                    martShippingQuote.error ?? "Shipping Unavailable"
                   ) : effectiveDeliveryType === "outside_area" ? (
                     <>
                       <MessageCircle className="mr-2 h-5 w-5" />

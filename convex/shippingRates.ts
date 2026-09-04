@@ -4,6 +4,8 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
@@ -39,6 +41,202 @@ export const getByBusinessUnit = query({
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("asc")
       .collect();
+  },
+});
+
+// ============================================================================
+// Canonical Mart Shipping Quote
+// ============================================================================
+
+export type ShippingQuote = {
+  serviceable: boolean;
+  error?: string;
+  shippingCharge?: number;
+  shippingZoneId?: Id<"shippingZones">;
+  shippingZoneName?: string;
+  shippingRateId?: Id<"shippingRates">;
+  shippingRateName?: string;
+  actualWeightGrams?: number;
+  billableWeightGrams?: number;
+};
+
+/**
+ * Canonical Mart pincode-region shipping calculation.
+ * Single implementation used by both quoteForCart (query) and orders.create (mutation).
+ * The client must never implement this algorithm.
+ */
+export async function resolveMartShippingQuote(
+  ctx: QueryCtx | MutationCtx,
+  args: {
+    businessUnitId: Id<"businessUnits">;
+    items: Array<{
+      catalogItemId: Id<"catalogItems">;
+      variantName: string;
+      quantity: number;
+    }>;
+    destinationPincode: string;
+  },
+): Promise<ShippingQuote> {
+  // 1. Validate pincode format
+  const pincode = args.destinationPincode.trim();
+  if (!/^\d{6}$/.test(pincode)) {
+    return { serviceable: false, error: "Invalid pincode format." };
+  }
+
+  // 2. Resolve business unit
+  const bu = await ctx.db.get(args.businessUnitId);
+  if (!bu || bu.deletedAt !== undefined) {
+    return { serviceable: false, error: "Business unit not found." };
+  }
+  if (!bu.enableDelivery) {
+    return { serviceable: false, error: "Delivery is not enabled for this business unit." };
+  }
+
+  // 3. Verify serviceabilityMode is pincode_region
+  const mode = bu.serviceabilityMode ?? "coordinate_radius";
+  if (mode !== "pincode_region") {
+    return { serviceable: false, error: "This business unit does not use courier-based delivery." };
+  }
+
+  // 4. Look up pincode record
+  const pincodeRecord = await ctx.db
+    .query("martPincodeServiceability")
+    .withIndex("by_bu_pincode", (q) =>
+      q.eq("businessUnitId", args.businessUnitId).eq("pincode", pincode),
+    )
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .first();
+
+  if (!pincodeRecord || pincodeRecord.status !== "active") {
+    return { serviceable: false, error: "Delivery is not available for this pincode." };
+  }
+
+  // 5. Require shippingZoneId on pincode
+  if (!pincodeRecord.shippingZoneId) {
+    return { serviceable: false, error: "Shipping zone is not configured for this pincode." };
+  }
+
+  // 6. Fetch and validate shipping zone
+  const shippingZone = await ctx.db.get(pincodeRecord.shippingZoneId);
+  if (!shippingZone || shippingZone.deletedAt !== undefined || shippingZone.status !== "active") {
+    return { serviceable: false, error: "Shipping zone is not available for this area." };
+  }
+  if (shippingZone.businessUnitId !== args.businessUnitId) {
+    return { serviceable: false, error: "Shipping zone configuration error." };
+  }
+
+  // 7. Fetch active shippingConfig (minimum billable weight)
+  const config = await ctx.db
+    .query("shippingConfig")
+    .withIndex("by_business_unit", (q) =>
+      q.eq("businessUnitId", args.businessUnitId),
+    )
+    .filter((q) => q.eq(q.field("status"), "active"))
+    .first();
+
+  if (!config) {
+    return { serviceable: false, error: "Shipping is not configured for this business unit." };
+  }
+
+  // 8. Resolve authoritative weight for each cart item
+  let totalActualWeightGrams = 0;
+
+  for (const item of args.items) {
+    const catalogItem = await ctx.db.get(item.catalogItemId);
+    if (!catalogItem || catalogItem.deletedAt !== undefined) {
+      return { serviceable: false, error: `"${catalogItem?.name ?? "Item"}" is no longer available.` };
+    }
+
+    // Only products have shipping weight
+    if (catalogItem.itemType === "product") {
+      const product = await ctx.db
+        .query("products")
+        .withIndex("by_slug_in_business_unit", (q) =>
+          q.eq("businessUnitId", args.businessUnitId).eq("slug", catalogItem.slug),
+        )
+        .first();
+
+      if (product && product.shippable === false) {
+        return { serviceable: false, error: `"${catalogItem.name}" cannot be shipped via courier.` };
+      }
+
+      if (product) {
+        const variant = (product.variants ?? []).find(
+          (vr) => vr.active && vr.optionValue === item.variantName,
+        );
+        const weightGrams = variant?.netWeightGrams ?? product.weightGrams;
+        if (weightGrams === undefined || weightGrams === null) {
+          return { serviceable: false, error: `Shipping weight is not configured for "${catalogItem.name}".` };
+        }
+        if (weightGrams <= 0) {
+          return { serviceable: false, error: `Invalid shipping weight for "${catalogItem.name}".` };
+        }
+        totalActualWeightGrams += weightGrams * item.quantity;
+      }
+    }
+  }
+
+  // 9. Calculate billable weight
+  const billableWeightGrams = Math.max(
+    totalActualWeightGrams,
+    config.minimumBillableWeightGrams,
+  );
+
+  // 10. Find matching active rate
+  const matchingRates = await ctx.db
+    .query("shippingRates")
+    .withIndex("by_zone", (q) =>
+      q.eq("shippingZoneId", shippingZone._id).eq("status", "active"),
+    )
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+
+  const matchedRate = matchingRates.find(
+    (r) => billableWeightGrams >= r.minWeightGrams && billableWeightGrams <= r.maxWeightGrams,
+  );
+
+  if (!matchedRate) {
+    return { serviceable: false, error: `No shipping rate is available for ${billableWeightGrams}g weight.` };
+  }
+
+  // 11. Reject multiple matching slabs (configuration error)
+  const overlappingCount = matchingRates.filter(
+    (r) => billableWeightGrams >= r.minWeightGrams && billableWeightGrams <= r.maxWeightGrams,
+  ).length;
+  if (overlappingCount > 1) {
+    return { serviceable: false, error: "Shipping configuration error: multiple matching rates." };
+  }
+
+  return {
+    serviceable: true,
+    shippingCharge: matchedRate.charge,
+    shippingZoneId: shippingZone._id,
+    shippingZoneName: shippingZone.name,
+    shippingRateId: matchedRate._id,
+    shippingRateName: matchedRate.name,
+    actualWeightGrams: totalActualWeightGrams,
+    billableWeightGrams,
+  };
+}
+
+// ============================================================================
+// quoteForCart — Customer-facing shipping preview (read-only query)
+// ============================================================================
+
+export const quoteForCart = query({
+  args: {
+    businessUnitId: v.id("businessUnits"),
+    items: v.array(
+      v.object({
+        catalogItemId: v.id("catalogItems"),
+        variantName: v.string(),
+        quantity: v.number(),
+      }),
+    ),
+    destinationPincode: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await resolveMartShippingQuote(ctx, args);
   },
 });
 

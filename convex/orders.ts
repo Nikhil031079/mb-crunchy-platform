@@ -19,6 +19,7 @@ import { notify } from "./notificationService";
 import { getAllowedTransitions } from "./orderWorkflow";
 import { isStoreCurrentlyOpen } from "./utils/storeHours";
 import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
+import { resolveMartShippingQuote } from "./shippingRates";
 
 // ============================================================================
 // Constants
@@ -1044,130 +1045,34 @@ export const create = mutation({
             throw new Error(`${bu.name} does not deliver to this location (approx. ${distanceKm} km away, delivery radius is ${radiusKm} km).`);
           }
         } else if (mode === "pincode_region") {
-          // Mart pincode-based delivery check
+          // Mart pincode-based delivery — use canonical shipping calculation
           const pincode = args.destinationPincode?.trim();
           if (!pincode || !/^\d{6}$/.test(pincode)) {
             throw new Error("A valid 6-digit destination pincode is required for Mart delivery.");
           }
 
-          // Check pincode is active/serviceable for this BU
-          const pincodeRecord = await ctx.db
-            .query("martPincodeServiceability")
-            .withIndex("by_bu_pincode", (q) =>
-              q.eq("businessUnitId", effectiveBusinessUnitId).eq("pincode", pincode)
-            )
-            .filter((q) => q.eq(q.field("deletedAt"), undefined))
-            .first();
+          const quote = await resolveMartShippingQuote(ctx, {
+            businessUnitId: effectiveBusinessUnitId,
+            items: args.items.map((item) => ({
+              catalogItemId: item.catalogItemId,
+              variantName: item.variantName,
+              quantity: item.quantity,
+            })),
+            destinationPincode: pincode,
+          });
 
-          if (!pincodeRecord || pincodeRecord.status !== "active") {
-            throw new Error(`${bu.name} does not deliver to pincode ${pincode}.`);
-          }
-
-          // Validate product shippability and compute weight for Mart delivery
-          let totalActualWeightGrams = 0;
-
-          for (const item of args.items) {
-            const catalogItem = await ctx.db.get(item.catalogItemId);
-            if (!catalogItem || catalogItem.deletedAt !== undefined) {
-              throw new Error(`Catalog item "${item.name}" is no longer available.`);
-            }
-            // For products, check shippable field and resolve weight
-            if (catalogItem.itemType === "product") {
-              const product = await ctx.db
-                .query("products")
-                .withIndex("by_slug_in_business_unit", (q) =>
-                  q.eq("businessUnitId", effectiveBusinessUnitId).eq("slug", catalogItem.slug)
-                )
-                .first();
-              if (product && product.shippable === false) {
-                throw new Error(`"${item.name}" cannot be shipped via courier.`);
-              }
-
-              // Resolve authoritative weight from variant or product
-              if (product) {
-                const variant = (product.variants ?? []).find(
-                  (v) => v.active && v.optionValue === item.variantName,
-                );
-                const weightGrams = variant?.netWeightGrams ?? product.weightGrams;
-                if (weightGrams === undefined || weightGrams === null) {
-                  throw new Error(
-                    `Shipping weight is not configured for "${item.name}". Please contact support.`
-                  );
-                }
-                if (weightGrams <= 0) {
-                  throw new Error(
-                    `Invalid shipping weight for "${item.name}".`
-                  );
-                }
-                totalActualWeightGrams += weightGrams * item.quantity;
-              }
-            }
-          }
-
-          // Resolve shipping zone
-          if (!pincodeRecord.shippingZoneId) {
-            throw new Error("Shipping zone is not configured for this pincode.");
-          }
-          const shippingZone = await ctx.db.get(pincodeRecord.shippingZoneId);
-          if (!shippingZone || shippingZone.deletedAt !== undefined || shippingZone.status !== "active") {
-            throw new Error("Shipping zone is not available for this area.");
-          }
-          if (shippingZone.businessUnitId !== effectiveBusinessUnitId) {
-            throw new Error("Shipping zone configuration error.");
-          }
-
-          // Fetch shipping config (minimum billable weight)
-          const config = await ctx.db
-            .query("shippingConfig")
-            .withIndex("by_business_unit", (q) =>
-              q.eq("businessUnitId", effectiveBusinessUnitId)
-            )
-            .filter((q) => q.eq(q.field("status"), "active"))
-            .first();
-
-          if (!config) {
-            throw new Error("Shipping is not configured for this business unit.");
-          }
-
-          // Calculate billable weight
-          const billableWeightGrams = Math.max(
-            totalActualWeightGrams,
-            config.minimumBillableWeightGrams,
-          );
-
-          // Find matching active rate
-          const matchingRates = await ctx.db
-            .query("shippingRates")
-            .withIndex("by_zone", (q) =>
-              q.eq("shippingZoneId", shippingZone._id).eq("status", "active")
-            )
-            .filter((q) => q.eq(q.field("deletedAt"), undefined))
-            .collect();
-
-          const matchedRate = matchingRates.find(
-            (r) => billableWeightGrams >= r.minWeightGrams && billableWeightGrams <= r.maxWeightGrams,
-          );
-
-          if (!matchedRate) {
-            throw new Error(
-              `No shipping rate is configured for ${billableWeightGrams}g weight. Please contact support.`
-            );
-          }
-
-          if (matchingRates.filter(
-            (r) => billableWeightGrams >= r.minWeightGrams && billableWeightGrams <= r.maxWeightGrams,
-          ).length > 1) {
-            throw new Error("Shipping configuration error: multiple matching rates.");
+          if (!quote.serviceable) {
+            throw new Error(quote.error ?? "Delivery is not available for this pincode.");
           }
 
           // Store shipping data for snapshot (used below in deliveryFee computation)
           shippingSnapshot = {
-            shippingZoneId: shippingZone._id,
-            shippingZoneName: shippingZone.name,
-            shippingActualWeightGrams: totalActualWeightGrams,
-            shippingRateId: matchedRate._id,
-            shippingRateName: matchedRate.name,
-            shippingCharge: matchedRate.charge,
+            shippingZoneId: quote.shippingZoneId!,
+            shippingZoneName: quote.shippingZoneName!,
+            shippingActualWeightGrams: quote.actualWeightGrams!,
+            shippingRateId: quote.shippingRateId!,
+            shippingRateName: quote.shippingRateName!,
+            shippingCharge: quote.shippingCharge!,
           };
         }
         // mode === "manual" → no server-side serviceability check
