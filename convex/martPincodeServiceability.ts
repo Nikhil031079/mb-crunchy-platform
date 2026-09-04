@@ -138,6 +138,7 @@ export const create = mutation({
     state: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("inactive")),
     deliveryDays: v.optional(v.number()),
+    shippingZoneId: v.optional(v.id("shippingZones")),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -168,6 +169,17 @@ export const create = mutation({
       throw new Error("Business unit not found.");
     }
 
+    // Validate shipping zone if provided
+    if (args.shippingZoneId) {
+      const zone = await ctx.db.get(args.shippingZoneId);
+      if (!zone || zone.deletedAt !== undefined) {
+        throw new Error("Shipping zone not found.");
+      }
+      if (zone.businessUnitId !== args.businessUnitId) {
+        throw new Error("Shipping zone does not belong to this business unit.");
+      }
+    }
+
     const now = Date.now();
     return await ctx.db.insert("martPincodeServiceability", {
       businessUnitId: args.businessUnitId,
@@ -176,6 +188,7 @@ export const create = mutation({
       state: args.state?.trim() || undefined,
       status: args.status,
       deliveryDays: args.deliveryDays,
+      shippingZoneId: args.shippingZoneId,
       createdAt: now,
       updatedAt: now,
     });
@@ -190,6 +203,7 @@ export const update = mutation({
     state: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("inactive")),
     deliveryDays: v.optional(v.number()),
+    shippingZoneId: v.optional(v.id("shippingZones")),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -199,11 +213,23 @@ export const update = mutation({
       throw new Error("Pincode serviceability record not found.");
     }
 
+    // Validate shipping zone if provided
+    if (args.shippingZoneId) {
+      const zone = await ctx.db.get(args.shippingZoneId);
+      if (!zone || zone.deletedAt !== undefined) {
+        throw new Error("Shipping zone not found.");
+      }
+      if (zone.businessUnitId !== existing.businessUnitId) {
+        throw new Error("Shipping zone does not belong to this business unit.");
+      }
+    }
+
     await ctx.db.patch(args.id, {
       city: args.city?.trim() || undefined,
       state: args.state?.trim() || undefined,
       status: args.status,
       deliveryDays: args.deliveryDays,
+      shippingZoneId: args.shippingZoneId,
       updatedAt: Date.now(),
     });
   },

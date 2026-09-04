@@ -468,6 +468,12 @@ const orders = defineTable({
   offerCode: v.optional(v.string()),
   loyaltyPointsToRedeem: v.optional(v.number()),
   idempotencyKey: v.optional(v.string()),
+  // Shipping snapshot (26D-2) — frozen at order creation, immutable.
+  shippingZoneId: v.optional(v.id("shippingZones")),
+  shippingZoneName: v.optional(v.string()),
+  shippingActualWeightGrams: v.optional(v.number()),
+  shippingRateId: v.optional(v.id("shippingRates")),
+  shippingRateName: v.optional(v.string()),
   terminalAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -972,12 +978,60 @@ const martPincodeServiceability = defineTable({
   state: v.optional(v.string()),
   status: v.union(v.literal("active"), v.literal("inactive")),
   deliveryDays: v.optional(v.number()),
+  shippingZoneId: v.optional(v.id("shippingZones")),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
 })
   .index("by_bu_pincode", ["businessUnitId", "pincode"])
   .index("by_business_unit", ["businessUnitId", "status"]);
+
+// ============================================================================
+// SHIPPING ZONES (Courier delivery zone routing for MB Mart)
+// ============================================================================
+
+const shippingZones = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  name: v.string(),
+  code: v.optional(v.string()),
+  status: v.union(v.literal("active"), v.literal("inactive")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_business_unit", ["businessUnitId", "status"]);
+
+// ============================================================================
+// SHIPPING RATES (Static weight-slab pricing per zone)
+// ============================================================================
+
+const shippingRates = defineTable({
+  shippingZoneId: v.id("shippingZones"),
+  businessUnitId: v.id("businessUnits"),
+  name: v.string(),
+  minWeightGrams: v.number(),
+  maxWeightGrams: v.number(),
+  charge: v.number(),
+  status: v.union(v.literal("active"), v.literal("inactive")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_zone", ["shippingZoneId", "status"])
+  .index("by_business_unit", ["businessUnitId", "status"]);
+
+// ============================================================================
+// SHIPPING CONFIG (Per-BU shipping configuration)
+// ============================================================================
+
+const shippingConfig = defineTable({
+  businessUnitId: v.id("businessUnits"),
+  minimumBillableWeightGrams: v.number(),
+  status: v.union(v.literal("active"), v.literal("inactive")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_business_unit", ["businessUnitId"]);
 
 // ============================================================================
 // Export Schema (auth tables + business tables merged)
@@ -1018,6 +1072,9 @@ export default defineSchema({
   reviews,
   inAppNotifications,
   martPincodeServiceability,
+  shippingZones,
+  shippingRates,
+  shippingConfig,
 }, {
   schemaValidation: false,
 });

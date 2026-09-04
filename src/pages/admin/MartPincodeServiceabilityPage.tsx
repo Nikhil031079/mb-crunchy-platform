@@ -24,6 +24,8 @@ interface PincodeRecord {
   state?: string;
   status: "active" | "inactive";
   deliveryDays?: number;
+  shippingZoneId?: string;
+  shippingZoneName?: string;
 }
 
 interface PincodeFormValues {
@@ -32,6 +34,7 @@ interface PincodeFormValues {
   state: string;
   status: "active" | "inactive";
   deliveryDays: string;
+  shippingZoneId: string;
 }
 
 const EMPTY_FORM: PincodeFormValues = {
@@ -40,6 +43,7 @@ const EMPTY_FORM: PincodeFormValues = {
   state: "",
   status: "active",
   deliveryDays: "",
+  shippingZoneId: "none",
 };
 
 const toFormValues = (record?: PincodeRecord): PincodeFormValues =>
@@ -50,10 +54,11 @@ const toFormValues = (record?: PincodeRecord): PincodeFormValues =>
         state: record.state ?? "",
         status: record.status,
         deliveryDays: record.deliveryDays != null ? String(record.deliveryDays) : "",
+        shippingZoneId: record.shippingZoneId ?? "none",
       }
     : EMPTY_FORM;
 
-const fromConvex = (doc: Doc<"martPincodeServiceability">): PincodeRecord => ({
+const fromConvex = (doc: Doc<"martPincodeServiceability">, zoneName?: string): PincodeRecord => ({
   id: doc._id,
   businessUnitId: doc.businessUnitId,
   pincode: doc.pincode,
@@ -61,6 +66,8 @@ const fromConvex = (doc: Doc<"martPincodeServiceability">): PincodeRecord => ({
   state: doc.state,
   status: doc.status,
   deliveryDays: doc.deliveryDays,
+  shippingZoneId: doc.shippingZoneId,
+  shippingZoneName: zoneName,
 });
 
 // ============================================================================
@@ -70,11 +77,12 @@ const fromConvex = (doc: Doc<"martPincodeServiceability">): PincodeRecord => ({
 interface PincodeFormDialogProps {
   open: boolean;
   record?: PincodeRecord;
+  zones: { _id: string; name: string }[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: PincodeFormValues) => void;
 }
 
-function PincodeFormDialog({ open, record, onOpenChange, onSubmit }: PincodeFormDialogProps) {
+function PincodeFormDialog({ open, record, zones, onOpenChange, onSubmit }: PincodeFormDialogProps) {
   const [values, setValues] = useState<PincodeFormValues>(() => toFormValues(record));
   const dialogKey = `${record?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(record);
@@ -129,6 +137,17 @@ function PincodeFormDialog({ open, record, onOpenChange, onSubmit }: PincodeForm
               <Input id="pin-delivery-days" type="number" min="1" value={values.deliveryDays} onChange={(e) => update("deliveryDays", e.target.value)} placeholder="e.g. 3" />
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="pin-zone">Shipping Zone</Label>
+              <Select value={values.shippingZoneId} onValueChange={(v) => update("shippingZoneId", v)}>
+                <SelectTrigger id="pin-zone"><SelectValue placeholder="Optional" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {zones.map((z) => <SelectItem key={z._id} value={z._id}>{z.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Required for courier-based delivery.</p>
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="pin-status">Status</Label>
               <Select value={values.status} onValueChange={(value) => update("status", value as "active" | "inactive")}>
                 <SelectTrigger id="pin-status"><SelectValue /></SelectTrigger>
@@ -161,6 +180,10 @@ export default function MartPincodeServiceabilityPage() {
     api.martPincodeServiceability.getByBusinessUnit,
     selectedBuId ? { businessUnitId: selectedBuId as Id<"businessUnits"> } : "skip",
   );
+  const zones = useQuery(
+    api.shippingZones.getAll,
+    selectedBuId ? { businessUnitId: selectedBuId as Id<"businessUnits"> } : "skip",
+  );
   const createPincode = useMutation(api.martPincodeServiceability.create);
   const updatePincode = useMutation(api.martPincodeServiceability.update);
   const softDeletePincode = useMutation(api.martPincodeServiceability.softDelete);
@@ -180,7 +203,9 @@ export default function MartPincodeServiceabilityPage() {
   }, [businessUnits, selectedBuId]);
 
   const selectedBuName = businessUnits.find((bu) => bu._id === selectedBuId)?.name ?? "";
-  const pincodeRecords = (pincodes ?? []).map(fromConvex);
+  const zoneList = (zones ?? []).filter((z) => !z.deletedAt);
+  const zoneMap = new Map(zoneList.map((z) => [z._id, z.name]));
+  const pincodeRecords = (pincodes ?? []).map((doc) => fromConvex(doc, doc.shippingZoneId ? zoneMap.get(doc.shippingZoneId) : undefined));
   const isLoading = pincodes === undefined && Boolean(selectedBuId);
 
   const openCreate = () => {
@@ -204,6 +229,9 @@ export default function MartPincodeServiceabilityPage() {
         state: values.state || undefined,
         status: values.status,
         deliveryDays: values.deliveryDays ? Number(values.deliveryDays) : undefined,
+        shippingZoneId: values.shippingZoneId && values.shippingZoneId !== "none"
+          ? (values.shippingZoneId as Id<"shippingZones">)
+          : undefined,
       };
       if (editingRecord) {
         await updatePincode({
@@ -213,6 +241,7 @@ export default function MartPincodeServiceabilityPage() {
           state: payload.state,
           status: payload.status,
           deliveryDays: payload.deliveryDays,
+          shippingZoneId: payload.shippingZoneId,
         });
       } else {
         await createPincode({
@@ -306,6 +335,7 @@ export default function MartPincodeServiceabilityPage() {
                 <TableHead>Pincode</TableHead>
                 <TableHead>City / District</TableHead>
                 <TableHead>State</TableHead>
+                <TableHead>Shipping Zone</TableHead>
                 <TableHead>Delivery Days</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -317,6 +347,11 @@ export default function MartPincodeServiceabilityPage() {
                   <TableCell className="font-medium font-mono">{record.pincode}</TableCell>
                   <TableCell>{record.city || "\u2014"}</TableCell>
                   <TableCell>{record.state || "\u2014"}</TableCell>
+                  <TableCell>
+                    {record.shippingZoneName
+                      ? <Badge variant="outline">{record.shippingZoneName}</Badge>
+                      : <span className="text-muted-foreground">None</span>}
+                  </TableCell>
                   <TableCell>{record.deliveryDays ? `${record.deliveryDays} days` : "\u2014"}</TableCell>
                   <TableCell>
                     <Badge variant={record.status === "active" ? "default" : "secondary"}>
@@ -343,6 +378,7 @@ export default function MartPincodeServiceabilityPage() {
       <PincodeFormDialog
         open={formOpen}
         record={editingRecord}
+        zones={zoneList}
         onOpenChange={(open) => {
           setFormOpen(open);
           if (!open) setEditingRecord(undefined);

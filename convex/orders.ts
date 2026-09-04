@@ -973,6 +973,16 @@ export const create = mutation({
       }
     }
 
+    // Store shipping snapshot for Mart pincode-region orders (set in pincode_region branch)
+    let shippingSnapshot: {
+      shippingZoneId: Id<"shippingZones">;
+      shippingZoneName: string;
+      shippingActualWeightGrams: number;
+      shippingRateId: Id<"shippingRates">;
+      shippingRateName: string;
+      shippingCharge: number;
+    } | null = null;
+
     // ----------------------------------------------------------------------
     // 4a. Delivery serviceability — mode-aware dispatch.
     //     coordinate_radius (or undefined/legacy) → Kitchen Haversine check
@@ -1053,13 +1063,15 @@ export const create = mutation({
             throw new Error(`${bu.name} does not deliver to pincode ${pincode}.`);
           }
 
-          // Validate product shippability for Mart delivery
+          // Validate product shippability and compute weight for Mart delivery
+          let totalActualWeightGrams = 0;
+
           for (const item of args.items) {
             const catalogItem = await ctx.db.get(item.catalogItemId);
             if (!catalogItem || catalogItem.deletedAt !== undefined) {
               throw new Error(`Catalog item "${item.name}" is no longer available.`);
             }
-            // For products, check shippable field (undefined = true for backward compat)
+            // For products, check shippable field and resolve weight
             if (catalogItem.itemType === "product") {
               const product = await ctx.db
                 .query("products")
@@ -1070,8 +1082,93 @@ export const create = mutation({
               if (product && product.shippable === false) {
                 throw new Error(`"${item.name}" cannot be shipped via courier.`);
               }
+
+              // Resolve authoritative weight from variant or product
+              if (product) {
+                const variant = (product.variants ?? []).find(
+                  (v) => v.active && v.optionValue === item.variantName,
+                );
+                const weightGrams = variant?.netWeightGrams ?? product.weightGrams;
+                if (weightGrams === undefined || weightGrams === null) {
+                  throw new Error(
+                    `Shipping weight is not configured for "${item.name}". Please contact support.`
+                  );
+                }
+                if (weightGrams <= 0) {
+                  throw new Error(
+                    `Invalid shipping weight for "${item.name}".`
+                  );
+                }
+                totalActualWeightGrams += weightGrams * item.quantity;
+              }
             }
           }
+
+          // Resolve shipping zone
+          if (!pincodeRecord.shippingZoneId) {
+            throw new Error("Shipping zone is not configured for this pincode.");
+          }
+          const shippingZone = await ctx.db.get(pincodeRecord.shippingZoneId);
+          if (!shippingZone || shippingZone.deletedAt !== undefined || shippingZone.status !== "active") {
+            throw new Error("Shipping zone is not available for this area.");
+          }
+          if (shippingZone.businessUnitId !== effectiveBusinessUnitId) {
+            throw new Error("Shipping zone configuration error.");
+          }
+
+          // Fetch shipping config (minimum billable weight)
+          const config = await ctx.db
+            .query("shippingConfig")
+            .withIndex("by_business_unit", (q) =>
+              q.eq("businessUnitId", effectiveBusinessUnitId)
+            )
+            .filter((q) => q.eq(q.field("status"), "active"))
+            .first();
+
+          if (!config) {
+            throw new Error("Shipping is not configured for this business unit.");
+          }
+
+          // Calculate billable weight
+          const billableWeightGrams = Math.max(
+            totalActualWeightGrams,
+            config.minimumBillableWeightGrams,
+          );
+
+          // Find matching active rate
+          const matchingRates = await ctx.db
+            .query("shippingRates")
+            .withIndex("by_zone", (q) =>
+              q.eq("shippingZoneId", shippingZone._id).eq("status", "active")
+            )
+            .filter((q) => q.eq(q.field("deletedAt"), undefined))
+            .collect();
+
+          const matchedRate = matchingRates.find(
+            (r) => billableWeightGrams >= r.minWeightGrams && billableWeightGrams <= r.maxWeightGrams,
+          );
+
+          if (!matchedRate) {
+            throw new Error(
+              `No shipping rate is configured for ${billableWeightGrams}g weight. Please contact support.`
+            );
+          }
+
+          if (matchingRates.filter(
+            (r) => billableWeightGrams >= r.minWeightGrams && billableWeightGrams <= r.maxWeightGrams,
+          ).length > 1) {
+            throw new Error("Shipping configuration error: multiple matching rates.");
+          }
+
+          // Store shipping data for snapshot (used below in deliveryFee computation)
+          shippingSnapshot = {
+            shippingZoneId: shippingZone._id,
+            shippingZoneName: shippingZone.name,
+            shippingActualWeightGrams: totalActualWeightGrams,
+            shippingRateId: matchedRate._id,
+            shippingRateName: matchedRate.name,
+            shippingCharge: matchedRate.charge,
+          };
         }
         // mode === "manual" → no server-side serviceability check
       }
@@ -1084,8 +1181,14 @@ export const create = mutation({
 
     // Outside-area orders: delivery fee is 0 until admin quotes.
     // Local/pickup: use existing server-computed fee.
+    // Mart pincode-region: use server-computed shipping charge.
     let deliveryFee: number;
-    if (deliveryQuoteRequired) {
+
+    if (shippingSnapshot && args.orderType === "delivery") {
+      // Mart pincode-region order: server is the sole authority on shipping charge.
+      // Client cannot compute weight/zone/rate, so no equality check is performed.
+      deliveryFee = shippingSnapshot.shippingCharge;
+    } else if (deliveryQuoteRequired) {
       deliveryFee = 0;
       // Validate client also sent 0
       if (Math.abs(args.deliveryFee) > PRICE_TOLERANCE) {
@@ -1163,6 +1266,11 @@ export const create = mutation({
       offerCode: args.offerCode,
       loyaltyPointsToRedeem: args.loyaltyPointsToRedeem,
       idempotencyKey: args.idempotencyKey,
+      shippingZoneId: shippingSnapshot?.shippingZoneId,
+      shippingZoneName: shippingSnapshot?.shippingZoneName,
+      shippingActualWeightGrams: shippingSnapshot?.shippingActualWeightGrams,
+      shippingRateId: shippingSnapshot?.shippingRateId,
+      shippingRateName: shippingSnapshot?.shippingRateName,
       createdAt: now,
       updatedAt: now,
     });
