@@ -458,7 +458,7 @@ export const update = mutation({
       }
     }
 
-    await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
+    await ctx.db.replace(id, { ...product, ...fields, updatedAt: Date.now() });
 
     // Sync to catalog
     const updatedProduct = await ctx.db.get(id);
