@@ -75,7 +75,7 @@ export default function ShippingConfigPage() {
 
   return (
     <div>
-      <PageHeader title="Shipping Configuration" description="Global shipping settings per business unit." />
+      <PageHeader title="Shipping Settings" description="Global shipping settings per business unit." />
 
       {error && (
         <Alert variant="destructive" className="mb-4">

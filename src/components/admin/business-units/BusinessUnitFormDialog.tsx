@@ -125,7 +125,7 @@ function BusinessUnitForm({ businessUnit, isEditing, onSubmit, onCancel }: Busin
           {values.serviceabilityMode === "pincode_region" && (
             <div className="rounded-md bg-secondary/50 p-3">
               <p className="text-xs text-muted-foreground">
-                Pincode serviceability will be configured in Phase 26C. Products must have shipping weight configured for courier delivery.
+                Configure serviceable pincodes in Serviceable Areas after creating this business unit. Products must have shipping weight configured for courier delivery.
               </p>
             </div>
           )}

@@ -46,7 +46,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 
-import type { BusinessUnit, DeliveryZone, BusinessUnitSettings, CatalogItem } from "@/types";
+import type { BusinessUnit, DeliveryPolicy, BusinessUnitSettings, CatalogItem } from "@/types";
 import type { CardProduct } from "@/components/customer/ProductCard";
 
 // ============================================================================
@@ -154,12 +154,9 @@ export default function CartPage() {
       : "skip",
   ) as BusinessUnitSettings | null | undefined;
 
-  const deliveryZones = useQuery(
-    api.deliveryZones.getActive,
-    primaryBusinessUnitId
-      ? { businessUnitId: primaryBusinessUnitId as any }
-      : "skip",
-  ) as DeliveryZone[] | undefined;
+  const deliveryPolicy = useQuery(
+    api.deliveryPolicies.getActivePolicy,
+  ) as DeliveryPolicy | null | undefined;
 
   // Active business units — used to link cross-sell cards back to their stores
   const activeBUs = useQuery(api.businessUnits.getActive) as
@@ -185,12 +182,12 @@ export default function CartPage() {
     } as any,
   ) as CatalogItem[] | undefined;
 
-  // Free delivery threshold — check zone first, fall back to BU settings
+  // Free delivery threshold — check delivery policy first, fall back to BU settings
   const freeDeliveryThreshold = useMemo(() => {
-    const zoneThreshold = deliveryZones?.[0]?.freeDeliveryThreshold;
+    const policyThreshold = deliveryPolicy?.freeDeliveryThreshold;
     const buThreshold = buSettings?.freeDeliveryThreshold;
-    return zoneThreshold ?? buThreshold ?? null;
-  }, [deliveryZones, buSettings]);
+    return policyThreshold ?? buThreshold ?? null;
+  }, [deliveryPolicy, buSettings]);
 
   const freeDeliveryProgress = useMemo(() => {
     if (!freeDeliveryThreshold) return null;

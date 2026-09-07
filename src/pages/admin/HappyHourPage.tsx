@@ -167,8 +167,8 @@ export default function HappyHourPage() {
   return (
     <div>
       <PageHeader
-        title="Happy Hour"
-        description="Manage time-windowed Happy Hour announcements shown as a strip on the homepage."
+        title="Announcements"
+        description="Manage homepage announcement content."
       >
         <Button size="sm" onClick={openCreateDialog}>
           <Plus className="mr-1.5 size-4" />
@@ -210,7 +210,7 @@ export default function HappyHourPage() {
           ) : visibleBanners.length === 0 ? (
             <EmptyState
               icon={Clock3}
-              title="No happy hour announcements"
+              title="No announcements"
               description={EMPTY_MESSAGES.BANNERS}
               action={{ label: "Create announcement", onClick: openCreateDialog }}
             />

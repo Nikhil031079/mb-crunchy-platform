@@ -182,7 +182,7 @@ export default function ShippingZonesPage() {
 
   return (
     <div>
-      <PageHeader title="Shipping Zones" description="Configure shipping zones for courier-based delivery per business unit.">
+      <PageHeader title="Shipping Pricing" description="Configure shipping zones and rates for courier-based delivery per business unit.">
         <Button size="sm" onClick={() => { setEditingRecord(undefined); setFormOpen(true); }} disabled={!selectedBuId}>
           <Plus className="mr-1.5 size-4" />Add zone
         </Button>

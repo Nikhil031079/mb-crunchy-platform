@@ -14,7 +14,7 @@ interface OfferToolbarProps {
 }
 
 export function OfferToolbar({ filters, businessUnits, onFiltersChange, onClear }: OfferToolbarProps) {
-  const hasFilters = filters.query.length > 0 || filters.status !== "all" || filters.businessUnitId !== "all";
+  const hasFilters = filters.query.length > 0 || filters.status !== "all" || filters.businessUnitId !== "all" || filters.flashSale !== "all";
 
   return (
     <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
@@ -42,6 +42,16 @@ export function OfferToolbar({ filters, businessUnits, onFiltersChange, onClear 
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="archived">Archived</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filters.flashSale} onValueChange={(value) => onFiltersChange({ ...filters, flashSale: value as OfferFilters["flashSale"] })}>
+          <SelectTrigger aria-label="Filter by type" className="w-full sm:w-40">
+            <SelectValue placeholder="All types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value="flash-sale">Flash Sales</SelectItem>
+            <SelectItem value="regular">Regular Offers</SelectItem>
           </SelectContent>
         </Select>
         {hasFilters && <Button type="button" variant="ghost" size="icon" onClick={onClear} aria-label="Clear search and filters"><X className="size-4" /></Button>}

@@ -278,7 +278,7 @@ export default function MartPincodeServiceabilityPage() {
   return (
     <div>
       <PageHeader
-        title="Mart Pincode Serviceability"
+        title="Serviceable Areas"
         description="Configure serviceable pincodes for courier-based delivery per business unit."
       >
         <Button size="sm" onClick={openCreate} disabled={!selectedBuId}>

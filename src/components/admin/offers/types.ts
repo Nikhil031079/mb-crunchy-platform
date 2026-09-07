@@ -59,4 +59,5 @@ export interface OfferFilters {
   query: string;
   status: OfferStatus | "all";
   businessUnitId: string | "all";
+  flashSale: "all" | "flash-sale" | "regular";
 }

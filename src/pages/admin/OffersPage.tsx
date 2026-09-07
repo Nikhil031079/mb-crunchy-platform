@@ -132,6 +132,7 @@ export default function OffersPage() {
     query: "",
     status: "all",
     businessUnitId: "all",
+    flashSale: "all",
   });
   const [sortKey, setSortKey] = useState<OfferSortKey>("displayOrder");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -164,6 +165,9 @@ export default function OffersPage() {
         (filters.status === "all" || offer.status === filters.status) &&
         (filters.businessUnitId === "all" ||
           offer.businessUnitId === filters.businessUnitId) &&
+        (filters.flashSale === "all" ||
+          (filters.flashSale === "flash-sale" && offer.settings?.isFlashSale === true) ||
+          (filters.flashSale === "regular" && offer.settings?.isFlashSale !== true)) &&
         (!query ||
           offer.title.toLowerCase().includes(query) ||
           (offer.code && offer.code.toLowerCase().includes(query)))
