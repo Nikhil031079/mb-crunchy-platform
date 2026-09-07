@@ -3,11 +3,7 @@
 // ============================================================================
 
 // Navigation
-export { Header } from "./Header";
-export { DesktopNav, DesktopNavSkeleton } from "./DesktopNav";
-export { MobileNav } from "./MobileNav";
 export { MobileBottomBar } from "./MobileBottomBar";
-export { BusinessUnitSwitcher, BusinessUnitSwitcherSkeleton } from "./BusinessUnitSwitcher";
 
 // Sections
 export { HeroSection, HeroSectionSkeleton } from "./HeroSection";

@@ -327,7 +327,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
               <h3 className="font-semibold text-sm">What happens next?</h3>
               <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
                 <li>We&apos;ll check delivery availability for your location.</li>
-                <li>We&apos;ll confirm the courier/delivery charge with you.</li>
+                <li>We&apos;ll confirm the delivery charge with you.</li>
                 <li>You can accept or decline the quote.</li>
                 <li>If you accept, we&apos;ll provide the payment option.</li>
                 <li>Your order will be prepared after payment confirmation.</li>
@@ -1682,9 +1682,9 @@ export default function CheckoutPage() {
                   className="rounded-xl border border-border/60 p-6 space-y-4"
                 >
                   <div>
-                    <h2 className="font-semibold text-lg">Choose Business Unit to Checkout</h2>
+                    <h2 className="font-semibold text-lg">Choose Store to Checkout</h2>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Your cart contains items from multiple business units. Please checkout each business unit separately.
+                      Your cart contains items from different stores. Please checkout each store separately.
                     </p>
                   </div>
 
@@ -1712,7 +1712,7 @@ export default function CheckoutPage() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold">{bu?.name ?? "Business Unit"}</p>
+                            <p className="font-semibold">{bu?.name ?? "Store"}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">
                               {buItemCount} item{buItemCount !== 1 ? "s" : ""} · {formatCurrency(buSubtotal)}
                             </p>
@@ -1886,7 +1886,7 @@ export default function CheckoutPage() {
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
                             <Truck className="h-4 w-4 text-primary" />
-                            <Label className="text-sm font-medium">Courier Delivery</Label>
+                            <Label className="text-sm font-medium">Home Delivery</Label>
                           </div>
                           <div className="grid gap-2 sm:max-w-xs">
                             <Label htmlFor="destinationPincode">Destination Pincode *</Label>
@@ -1923,7 +1923,7 @@ export default function CheckoutPage() {
                             </div>
                           )}
                           <p className="text-xs text-muted-foreground">
-                            Shipping charges will be calculated at checkout based on courier rates.
+                            Shipping charges will be calculated at checkout based on your location.
                           </p>
                         </div>
                       ) : (
@@ -2017,7 +2017,7 @@ export default function CheckoutPage() {
                             <div className="flex-1">
                               <p className="text-sm font-medium">Outside Local Area</p>
                               <p className="text-xs text-muted-foreground">
-                                Delivery charge confirmed separately \u00B7 Courier/delivery partner may be used
+                                Delivery charge confirmed separately \u00B7 We&apos;ll arrange delivery
                               </p>
                             </div>
                             <span className="text-sm text-muted-foreground">Quote</span>
@@ -2073,7 +2073,7 @@ export default function CheckoutPage() {
                             <div>
                               <p className="text-sm font-medium">Outside our local delivery area</p>
                               <p className="text-xs text-muted-foreground mt-1">
-                                We currently provide local delivery in our service area. If you&apos;re outside our local area, we may still be able to arrange delivery through a courier or delivery partner. Delivery charges will be confirmed based on your location.
+                                We currently provide local delivery in our service area. If you&apos;re outside our local area, we may still be able to arrange delivery through a delivery partner. Delivery charges will be confirmed based on your location.
                               </p>
                             </div>
                           </div>
@@ -2471,10 +2471,8 @@ export default function CheckoutPage() {
                   </div>
                   {isMartPincodeMode && form.orderType === "delivery" && martShippingQuote?.serviceable && (
                     <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>
-                        {martShippingQuote.shippingRateName}{martShippingQuote.billableWeightGrams !== undefined ? ` (${martShippingQuote.billableWeightGrams}g)` : ""}
-                      </span>
-                      <span>{martShippingQuote.shippingZoneName}</span>
+                      <span>Shipping</span>
+                      <span>{martShippingQuote.shippingZoneName || "Standard"}</span>
                     </div>
                   )}
                   {pricing.tax > 0 && (

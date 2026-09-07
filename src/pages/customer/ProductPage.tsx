@@ -520,8 +520,8 @@ export default function ProductPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <ErrorState
-          title="Business Unit Not Found"
-          message={`The business unit "${businessUnitSlug}" doesn't exist or has been archived.`}
+          title="Store Not Found"
+          message={`The store "${businessUnitSlug}" doesn't exist or has been archived.`}
         />
       </div>
     );
