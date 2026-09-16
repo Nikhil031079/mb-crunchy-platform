@@ -295,6 +295,7 @@ export default function OffersPage() {
                 query: "",
                 status: "all",
                 businessUnitId: "all",
+                flashSale: "all",
               })
             }
           />

@@ -117,7 +117,7 @@ export default function FlashSalesPage() {
   const isLoading = allDocs === undefined || allBUs === undefined;
   const [error, setError] = useState<string | null>(null);
 
-  const [filters, setFilters] = useState<OfferFilters>({ query: "", status: "all", businessUnitId: "all" });
+  const [filters, setFilters] = useState<OfferFilters>({ query: "", status: "all", businessUnitId: "all", flashSale: "all" });
   const [sortKey, setSortKey] = useState<OfferSortKey>("displayOrder");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [page, setPage] = useState(1);
@@ -249,7 +249,7 @@ export default function FlashSalesPage() {
             filters={filters}
             businessUnits={businessUnitOptions}
             onFiltersChange={resetPageAndSetFilters}
-            onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all" })}
+            onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all", flashSale: "all" })}
           />
           {isLoading ? (
             <OfferTable

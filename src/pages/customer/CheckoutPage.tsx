@@ -66,6 +66,42 @@ import type {
 import type { Id } from "@convex/_generated/dataModel";
 
 // ============================================================================
+// Mart delivery error messages — customer-facing, no internal terminology
+// ============================================================================
+
+function getMartDeliveryErrorMessage(reason?: string): string {
+  switch (reason) {
+    case "INVALID_PINCODE":
+      return "Enter a valid 6-digit pincode.";
+    case "BUSINESS_UNIT_NOT_FOUND":
+    case "MART_DELIVERY_DISABLED":
+    case "MART_SERVICEABILITY_NOT_CONFIGURED":
+      return "Delivery is not available for this store.";
+    case "PINCODE_NOT_SERVICEABLE":
+      return "Delivery is not available for this pincode.";
+    case "MISSING_SHIPPING_ZONE":
+    case "SHIPPING_ZONE_UNAVAILABLE":
+    case "SHIPPING_ZONE_MISMATCH":
+      return "Delivery is temporarily unavailable for this area.";
+    case "SHIPPING_NOT_CONFIGURED":
+      return "Shipping is not configured for this store.";
+    case "ITEM_UNAVAILABLE":
+      return "One or more items are no longer available.";
+    case "ITEM_NOT_SHIPPABLE":
+      return "One or more items cannot be delivered to this location.";
+    case "MISSING_WEIGHT":
+    case "INVALID_WEIGHT":
+      return "Shipping information is incomplete for one or more items.";
+    case "NO_MATCHING_RATE":
+      return "No shipping rate is available for this order.";
+    case "OVERLAPPING_RATES":
+      return "Shipping configuration error. Please contact support.";
+    default:
+      return "Delivery is not available for this pincode.";
+  }
+}
+
+// ============================================================================
 // CheckoutPage — Contact form, delivery/pickup, order summary, submit
 // ============================================================================
 
@@ -604,17 +640,12 @@ export default function CheckoutPage() {
   const selectedBU = activeBUs?.find((bu) => bu._id === selectedCheckoutBU);
   const isMartPincodeMode = selectedBU?.serviceabilityMode === "pincode_region";
 
-  // Server-side Mart pincode serviceability check
-  const martPincodeCheck = useQuery(
-    api.martPincodeServiceability.checkServiceability,
-    isMartPincodeMode && form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && selectedCheckoutBU
-      ? { businessUnitId: selectedCheckoutBU as Id<"businessUnits">, pincode: form.destinationPincode.trim() }
-      : "skip",
-  ) as { serviceable: boolean; reasonCode?: string; message?: string } | undefined;
-
-  // Mart shipping quote — fetches server-authoritative shipping charge for pincode_region delivery
-  const martShippingQuote = useQuery(
-    api.shippingRates.quoteForCart,
+  // Server-side Mart delivery resolution — single canonical query combining
+  // pincode serviceability + shipping quote into one atomic result.
+  // This eliminates the contradiction where checkServiceability returned true
+  // but quoteForCart returned false.
+  const martDelivery = useQuery(
+    api.shippingRates.resolveMartDelivery,
     isMartPincodeMode && form.orderType === "delivery" && form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && selectedCheckoutBU && checkoutItems.length > 0
       ? {
           businessUnitId: selectedCheckoutBU as Id<"businessUnits">,
@@ -628,7 +659,8 @@ export default function CheckoutPage() {
       : "skip",
   ) as {
     serviceable: boolean;
-    error?: string;
+    available: boolean;
+    reason?: string;
     shippingCharge?: number;
     shippingZoneName?: string;
     shippingRateName?: string;
@@ -641,15 +673,10 @@ export default function CheckoutPage() {
     if (!isMartPincodeMode) return true; // not Mart pincode mode
     if (form.orderType === "pickup") return true; // pickup bypasses delivery check
     if (!form.destinationPincode || !checkMartPincodeFormat(form.destinationPincode)) return false;
-    if (martPincodeCheck === undefined) return false; // still loading
-    if (!martPincodeCheck.serviceable) return false;
-    // If in delivery mode, also require a successful shipping quote
-    if (form.orderType === "delivery") {
-      if (martShippingQuote === undefined) return false; // quote still loading
-      if (!martShippingQuote.serviceable) return false;
-    }
+    if (martDelivery === undefined) return false; // still loading
+    if (!martDelivery.available) return false;
     return true;
-  }, [isMartPincodeMode, form.orderType, form.destinationPincode, martPincodeCheck, martShippingQuote]);
+  }, [isMartPincodeMode, form.orderType, form.destinationPincode, martDelivery]);
 
   // Combined delivery check — Kitchen + Mart
   const canPlaceDelivery = canPlaceKitchenDelivery && canPlaceMartDelivery;
@@ -753,11 +780,11 @@ export default function CheckoutPage() {
     let estimatedMinutes: number | undefined;
 
     if (isMartPincodeMode && form.orderType === "delivery") {
-      // Mart pincode-region: use server-authoritative shipping quote
-      if (martShippingQuote?.serviceable && martShippingQuote.shippingCharge !== undefined) {
-        deliveryFee = martShippingQuote.shippingCharge;
+      // Mart pincode-region: use server-authoritative delivery resolution
+      if (martDelivery?.available && martDelivery.shippingCharge !== undefined) {
+        deliveryFee = martDelivery.shippingCharge;
       }
-      // If quote is loading or failed, deliveryFee stays 0 — Pay button will be disabled
+      // If delivery resolution is loading or failed, deliveryFee stays 0 — Pay button will be disabled
     } else if (form.orderType === "delivery" && form.deliveryType === "local" && deliveryPolicy) {
       if (deliveryPolicy.feeType === "fixed" && deliveryPolicy.fixedFee !== undefined) {
         const threshold = deliveryPolicy.freeDeliveryThreshold;
@@ -775,7 +802,7 @@ export default function CheckoutPage() {
     const total = afterDiscount + deliveryFee + tax;
 
     return { subtotal, discount, afterDiscount, tax, taxRate, deliveryFee, freeDelivery, estimatedMinutes, total };
-  }, [checkoutSubtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount, isMartPincodeMode, martShippingQuote]);
+  }, [checkoutSubtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount, isMartPincodeMode, martDelivery]);
 
   // ==========================================================================
   // Defensive normalization — deliveryType is only meaningful for delivery orders.
@@ -1902,14 +1929,14 @@ export default function CheckoutPage() {
                               <p className="text-xs text-destructive">{errors.destinationPincode}</p>
                             )}
                           </div>
-                          {form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && martPincodeCheck !== undefined && (
+                          {form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && martDelivery !== undefined && (
                             <div className={cn(
                               "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
-                              martPincodeCheck.serviceable
+                              martDelivery.available
                                 ? "bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200"
                                 : "bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-200"
                             )}>
-                              {martPincodeCheck.serviceable ? (
+                              {martDelivery.available ? (
                                 <>
                                   <CheckCircle2 className="h-4 w-4" />
                                   <span>Delivery available to {form.destinationPincode}</span>
@@ -1917,7 +1944,7 @@ export default function CheckoutPage() {
                               ) : (
                                 <>
                                   <AlertTriangle className="h-4 w-4" />
-                                  <span>{martPincodeCheck.message || "Delivery not available for this pincode"}</span>
+                                  <span>{getMartDeliveryErrorMessage(martDelivery.reason)}</span>
                                 </>
                               )}
                             </div>
@@ -2456,9 +2483,9 @@ export default function CheckoutPage() {
                         ? effectiveDeliveryType === "outside_area"
                           ? "To be confirmed"
                           : isMartPincodeMode
-                            ? martShippingQuote === undefined
+                            ? martDelivery === undefined
                               ? "Calculating..."
-                              : !martShippingQuote.serviceable
+                              : !martDelivery.available
                                 ? "Unavailable"
                                 : pricing.freeDelivery
                                   ? "Free"
@@ -2469,10 +2496,10 @@ export default function CheckoutPage() {
                         : "Free"}
                     </span>
                   </div>
-                  {isMartPincodeMode && form.orderType === "delivery" && martShippingQuote?.serviceable && (
+                  {isMartPincodeMode && form.orderType === "delivery" && martDelivery?.available && (
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Shipping</span>
-                      <span>{martShippingQuote.shippingZoneName || "Standard"}</span>
+                      <span>{martDelivery.shippingZoneName || "Standard"}</span>
                     </div>
                   )}
                   {pricing.tax > 0 && (
@@ -2539,10 +2566,10 @@ export default function CheckoutPage() {
                   )}
                   disabled={
                     isSubmitting || !storeIsOpen || !canPlaceDelivery ||
-                    // Mart: disable while quote loads or if quote failed
+                    // Mart: disable while delivery resolution loads or if unavailable
                     (isMartPincodeMode && form.orderType === "delivery" && (
-                      martShippingQuote === undefined ||
-                      !martShippingQuote.serviceable
+                      martDelivery === undefined ||
+                      !martDelivery.available
                     ))
                   }
                 >
@@ -2559,13 +2586,13 @@ export default function CheckoutPage() {
                     "Store is Closed"
                   ) : !canPlaceDelivery ? (
                     !canPlaceKitchenDelivery ? "Kitchen Delivery Not Available" : "Delivery Not Available"
-                  ) : isMartPincodeMode && form.orderType === "delivery" && martShippingQuote === undefined ? (
+                  ) : isMartPincodeMode && form.orderType === "delivery" && martDelivery === undefined ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Calculating Shipping...
                     </>
-                  ) : isMartPincodeMode && form.orderType === "delivery" && martShippingQuote && !martShippingQuote.serviceable ? (
-                    martShippingQuote.error ?? "Shipping Unavailable"
+                  ) : isMartPincodeMode && form.orderType === "delivery" && martDelivery && !martDelivery.available ? (
+                    getMartDeliveryErrorMessage(martDelivery.reason)
                   ) : effectiveDeliveryType === "outside_area" ? (
                     <>
                       <MessageCircle className="mr-2 h-5 w-5" />
@@ -2595,8 +2622,8 @@ export default function CheckoutPage() {
                       ? "Enter a destination pincode to check delivery availability."
                       : !checkMartPincodeFormat(form.destinationPincode)
                         ? "Enter a valid 6-digit pincode."
-                        : martPincodeCheck && !martPincodeCheck.serviceable
-                          ? martPincodeCheck.message || "Delivery is not available for this pincode."
+                        : martDelivery && !martDelivery.available
+                          ? getMartDeliveryErrorMessage(martDelivery.reason)
                           : "Checking delivery availability..."}
                   </p>
                 )}
