@@ -532,7 +532,7 @@ export default function ProductPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <ErrorState
           title="Product Not Found"
-          message={`The product "${productSlug}" doesn't exist in ${businessUnit?.name ?? "this business unit"}.`}
+          message={`The product "${productSlug}" doesn't exist in ${businessUnit?.name ?? "this store"}.`}
           onRetry={() => navigate(`/${buSlug}${catSlug ? `/${catSlug}` : ""}`)}
         />
       </div>
@@ -1124,11 +1124,6 @@ export default function ProductPage() {
                 <DetailFact label="Category" value={category.name} />
               )}
               {prod.unit && <DetailFact label="Unit" value={prod.unit} />}
-              {prod.sku && <DetailFact label="SKU" value={prod.sku} />}
-              {selectedVariant?.barcode && (
-                <DetailFact label="Barcode" value={selectedVariant.barcode} />
-              )}
-              {selectedVariant?.sku && <DetailFact label="Variant SKU" value={selectedVariant.sku} />}
               {prod.taxPercentage !== undefined && (
                 <DetailFact label="Tax" value={`${prod.taxPercentage}%`} />
               )}

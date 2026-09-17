@@ -514,7 +514,7 @@ const handleAddToCart = useCallback(
       <div className="min-h-screen bg-background flex items-center justify-center">
         <ErrorState
           title="Category Not Found"
-          message={`The category "${categorySlug}" doesn't exist in ${businessUnit?.name ?? "this business unit"}.`}
+          message={`The category "${categorySlug}" doesn't exist in ${businessUnit?.name ?? "this store"}.`}
           onRetry={() => navigate(`/${buSlug}`)}
         />
       </div>

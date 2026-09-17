@@ -145,7 +145,7 @@ function CollectionItemCard({
               {itemName ?? "Unknown Item"}
             </p>
             <p className="text-xs text-muted-foreground capitalize">
-              {item.itemType}
+              {item.itemType === "partyPack" ? "Party Pack" : item.itemType === "combo" ? "Combo" : "Item"}
             </p>
           </div>
 

@@ -140,7 +140,7 @@ export default function FavouritesPage() {
       const catalogItem = catalogItemMap.get(item.itemId);
       if (!catalogItem) {
         toast.info("Open the product page to add to cart", {
-          description: `View this ${item.itemType} to add it to your cart.`,
+          description: `View this ${item.itemType === "partyPack" ? "Party Pack" : item.itemType === "combo" ? "Combo" : "item"} to add it to your cart.`,
         });
         return;
       }

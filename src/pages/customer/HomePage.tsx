@@ -314,7 +314,7 @@ export default function HomePage() {
                     className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-medium backdrop-blur-sm transition-all hover:bg-white/20"
                   >
                     {bu.logo ? (
-                      <img src={bu.logo} alt="" className="h-5 w-5 rounded object-cover" />
+                      <img src={bu.logo} alt={bu.name} className="h-5 w-5 rounded object-cover" />
                     ) : (
                       <div
                         className="h-5 w-5 rounded"
