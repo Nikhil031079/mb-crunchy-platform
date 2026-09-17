@@ -77,9 +77,9 @@ export const getAllFeaturedAcrossBusinessUnits = query({
   handler: async (ctx) => {
     const combos = await ctx.db
       .query("combos")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
       .filter((q) =>
         q.and(
-          q.eq(q.field("status"), "active"),
           q.eq(q.field("deletedAt"), undefined),
           q.eq(q.field("featured"), true)
         )

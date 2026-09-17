@@ -299,12 +299,8 @@ export const getRecommendedAcrossBusinessUnits = query({
     // Query across ALL active business units by not filtering on businessUnitId
     const items = await ctx.db
       .query("catalogItems")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("status"), "active"),
-          q.eq(q.field("deletedAt"), undefined)
-        )
-      )
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("asc")
       .collect();
 
@@ -511,9 +507,9 @@ export const getAllFeaturedAcrossBusinessUnits = query({
   handler: async (ctx) => {
     const items = await ctx.db
       .query("catalogItems")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
       .filter((q) =>
         q.and(
-          q.eq(q.field("status"), "active"),
           q.eq(q.field("deletedAt"), undefined),
           q.eq(q.field("featured"), true)
         )
@@ -532,12 +528,8 @@ export const getAllActiveAcrossBusinessUnits = query({
   handler: async (ctx) => {
     const items = await ctx.db
       .query("catalogItems")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("status"), "active"),
-          q.eq(q.field("deletedAt"), undefined)
-        )
-      )
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("asc")
       .collect();
     return items;
@@ -555,12 +547,8 @@ export const getBestSellersAcrossBusinessUnits = query({
     const limit = args.limit ?? 10;
     const items = await ctx.db
       .query("catalogItems")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("status"), "active"),
-          q.eq(q.field("deletedAt"), undefined)
-        )
-      )
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("asc")
       .take(limit);
     return items;
@@ -604,9 +592,9 @@ export const getByCategoryIdsAcrossBusinessUnits = query({
 
     const items = await ctx.db
       .query("catalogItems")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
       .filter((q) =>
         q.and(
-          q.eq(q.field("status"), "active"),
           q.eq(q.field("deletedAt"), undefined),
           q.eq(q.field("itemType"), "product")
         )

@@ -64,12 +64,8 @@ export const getAllActiveAcrossBusinessUnits = query({
   handler: async (ctx) => {
     const offers = await ctx.db
       .query("offers")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("status"), "active"),
-          q.eq(q.field("deletedAt"), undefined)
-        )
-      )
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("asc")
       .collect();
     return offers;

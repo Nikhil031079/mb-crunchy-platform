@@ -216,12 +216,8 @@ export const getAllActiveForCustomerAcrossBusinessUnits = query({
   handler: async (ctx) => {
     const deals = await ctx.db
       .query("mealDeals")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("status"), "active"),
-          q.eq(q.field("deletedAt"), undefined)
-        )
-      )
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("asc")
       .collect();
 
