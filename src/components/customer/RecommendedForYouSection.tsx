@@ -56,57 +56,42 @@ export function RecommendedForYouSection({
     if (preferredBusinessUnitId) buSet.add(preferredBusinessUnitId);
     for (const bu of businessUnits) {
       buSet.add(bu._id);
-      if (buSet.size >= 2) break;
     }
     return Array.from(buSet);
   }, [businessUnits, preferredBusinessUnitId]);
 
-  const cat0 = useQuery(
-    api.catalogItems.getByCategoryIds,
-    targetBuIds[0] && categoryIds.length > 0
+  // Single aggregated query — returns category-matched items across ALL target BUs
+  const catItemsRaw = useQuery(
+    api.catalogItems.getByCategoryIdsAcrossBusinessUnits,
+    targetBuIds.length > 0 && categoryIds.length > 0
       ? {
-          businessUnitId: targetBuIds[0] as Id<"businessUnits">,
+          businessUnitIds: targetBuIds as Id<"businessUnits">[],
           categoryIds: categoryIds as Id<"categories">[],
           excludeIds: signalIds as Id<"catalogItems">[],
-          limit: 8,
-        }
-      : "skip",
-  ) as CatalogItem[] | undefined;
-  const cat1 = useQuery(
-    api.catalogItems.getByCategoryIds,
-    targetBuIds[1] && categoryIds.length > 0
-      ? {
-          businessUnitId: targetBuIds[1] as Id<"businessUnits">,
-          categoryIds: categoryIds as Id<"categories">[],
-          excludeIds: signalIds as Id<"catalogItems">[],
-          limit: 8,
+          limit: 16,
         }
       : "skip",
   ) as CatalogItem[] | undefined;
 
-  const bestSellers0 = useQuery(
-    api.catalogItems.getBestSellers,
-    targetBuIds[0]
-      ? { businessUnitId: targetBuIds[0] as Id<"businessUnits">, limit: 8 }
-      : "skip",
-  ) as CatalogItem[] | undefined;
-  const bestSellers1 = useQuery(
-    api.catalogItems.getBestSellers,
-    targetBuIds[1]
-      ? { businessUnitId: targetBuIds[1] as Id<"businessUnits">, limit: 8 }
+  // Single aggregated query — returns best sellers across ALL target BUs
+  const bestSellersRaw = useQuery(
+    api.catalogItems.getBestSellersAcrossBusinessUnits,
+    targetBuIds.length > 0
+      ? { limit: 16 }
       : "skip",
   ) as CatalogItem[] | undefined;
 
   const rankedItems = useMemo(() => {
     const excludeSet = new Set<string>(signalIds);
+    const targetSet = new Set(targetBuIds);
     return rankCatalogItems(
       [
-        { items: [...(cat0 ?? []), ...(cat1 ?? [])], weight: 6 },
-        { items: [...(bestSellers0 ?? []), ...(bestSellers1 ?? [])], weight: 4 },
+        { items: (catItemsRaw ?? []).filter((i) => targetSet.has(i.businessUnitId)), weight: 6 },
+        { items: (bestSellersRaw ?? []).filter((i) => targetSet.has(i.businessUnitId)), weight: 4 },
       ],
       10,
     ).filter((item) => !excludeSet.has(item._id));
-  }, [cat0, cat1, bestSellers0, bestSellers1, signalIds]);
+  }, [catItemsRaw, bestSellersRaw, targetBuIds, signalIds]);
 
   const buSlugsById = useMemo(() => {
     const map = new Map<string, string>();

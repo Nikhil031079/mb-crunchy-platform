@@ -28,39 +28,17 @@ export function TodaySpecialsSection({
 }: TodaySpecialsSectionProps) {
   const handleAddToCart = useAddToCart();
 
-  const b0 = businessUnits[0]?._id;
-  const b1 = businessUnits[1]?._id;
-  const b2 = businessUnits[2]?._id;
-  const b3 = businessUnits[3]?._id;
-
-  const r0 = useQuery(
-    api.catalogItems.getFeatured,
-    b0 ? { businessUnitId: b0 } : "skip",
-  ) as CatalogItem[] | undefined;
-  const r1 = useQuery(
-    api.catalogItems.getFeatured,
-    b1 ? { businessUnitId: b1 } : "skip",
-  ) as CatalogItem[] | undefined;
-  const r2 = useQuery(
-    api.catalogItems.getFeatured,
-    b2 ? { businessUnitId: b2 } : "skip",
-  ) as CatalogItem[] | undefined;
-  const r3 = useQuery(
-    api.catalogItems.getFeatured,
-    b3 ? { businessUnitId: b3 } : "skip",
+  // Single aggregated query — returns all featured catalog items across ALL BUs
+  const allFeaturedRaw = useQuery(
+    api.catalogItems.getAllFeaturedAcrossBusinessUnits,
   ) as CatalogItem[] | undefined;
 
-  const expectedCount = Math.min(businessUnits.length, 4);
-  const isLoading =
-    expectedCount > 0 &&
-    [r0, r1, r2, r3]
-      .slice(0, expectedCount)
-      .some((result) => result === undefined);
+  const isLoading = allFeaturedRaw === undefined;
 
   const items = useMemo(() => {
-    const all = [...(r0 ?? []), ...(r1 ?? []), ...(r2 ?? []), ...(r3 ?? [])];
+    if (!allFeaturedRaw) return [];
     const seen = new Set<string>();
-    return all
+    return allFeaturedRaw
       .filter((item) => item.itemType === "product" && item.status === "active")
       .filter((item) => {
         if (seen.has(item._id)) return false;
@@ -68,7 +46,7 @@ export function TodaySpecialsSection({
         return true;
       })
       .slice(0, 10);
-  }, [r0, r1, r2, r3]);
+  }, [allFeaturedRaw]);
 
   const buSlugsById = useMemo(() => {
     const map = new Map<string, string>();

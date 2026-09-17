@@ -87,6 +87,28 @@ export const getAll = query({
   },
 });
 
+/**
+ * Returns all active categories across ALL active business units.
+ * Each category retains its businessUnitId for store attribution.
+ * Used by the homepage CategoriesSection to avoid fixed-N BU query slots.
+ */
+export const getAllActiveAcrossBusinessUnits = query({
+  handler: async (ctx) => {
+    // Fetch all active, non-deleted categories in one query
+    const categories = await ctx.db
+      .query("categories")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+    return categories;
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================

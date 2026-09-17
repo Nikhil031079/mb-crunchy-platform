@@ -96,25 +96,15 @@ function CategoriesSection({
   businessUnits: BusinessUnit[];
   isLoading: boolean;
 }) {
-  // Fetch categories for each BU
-  const cats0 = useQuery(
-    api.categories.getByBusinessUnit,
-    businessUnits[0]?._id
-      ? { businessUnitId: businessUnits[0]._id }
-      : "skip",
-  ) as Category[] | undefined;
-
-  const cats1 = useQuery(
-    api.categories.getByBusinessUnit,
-    businessUnits[1]?._id
-      ? { businessUnitId: businessUnits[1]._id }
-      : "skip",
+  // Single aggregated query — returns all active categories across ALL BUs
+  const allCategoriesRaw = useQuery(
+    api.categories.getAllActiveAcrossBusinessUnits,
   ) as Category[] | undefined;
 
   const allCategories = useMemo(() => {
-    const cats = [...(cats0 ?? []), ...(cats1 ?? [])];
-    return cats.filter((c) => c.status === "active");
-  }, [cats0, cats1]);
+    if (!allCategoriesRaw) return [];
+    return allCategoriesRaw.filter((c) => c.status === "active");
+  }, [allCategoriesRaw]);
 
   if (isLoading || allCategories.length === 0) return null;
 

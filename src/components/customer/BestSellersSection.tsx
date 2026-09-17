@@ -36,42 +36,23 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
     return map;
   }, [businessUnits]);
 
-  const b0 = businessUnits[0]?._id;
-  const b1 = businessUnits[1]?._id;
-  const b2 = businessUnits[2]?._id;
-  const b3 = businessUnits[3]?._id;
-
-  const r0 = useQuery(
-    api.catalogItems.getBestSellers,
-    b0 ? { businessUnitId: b0, limit: 8 } : "skip",
-  ) as CatalogItem[] | undefined;
-  const r1 = useQuery(
-    api.catalogItems.getBestSellers,
-    b1 ? { businessUnitId: b1, limit: 8 } : "skip",
-  ) as CatalogItem[] | undefined;
-  const r2 = useQuery(
-    api.catalogItems.getBestSellers,
-    b2 ? { businessUnitId: b2, limit: 8 } : "skip",
-  ) as CatalogItem[] | undefined;
-  const r3 = useQuery(
-    api.catalogItems.getBestSellers,
-    b3 ? { businessUnitId: b3, limit: 8 } : "skip",
+  // Single aggregated query — returns best sellers across ALL BUs
+  const bestSellersRaw = useQuery(
+    api.catalogItems.getBestSellersAcrossBusinessUnits,
+    { limit: 16 },
   ) as CatalogItem[] | undefined;
 
-  const expectedCount = Math.min(businessUnits.length, 4);
-  const isLoading =
-    expectedCount > 0 &&
-    [r0, r1, r2, r3].slice(0, expectedCount).some((result) => result === undefined);
+  const isLoading = bestSellersRaw === undefined;
 
   const bestSellers = useMemo(() => {
-    const items = [...(r0 ?? []), ...(r1 ?? []), ...(r2 ?? []), ...(r3 ?? [])];
+    if (!bestSellersRaw) return [];
     const seen = new Set<string>();
-    return items.filter((item) => {
+    return bestSellersRaw.filter((item) => {
       if (seen.has(item._id)) return false;
       seen.add(item._id);
       return true;
     }).slice(0, 10);
-  }, [r0, r1, r2, r3]);
+  }, [bestSellersRaw]);
 
   const firstBuSlug = businessUnits[0]?.slug;
 

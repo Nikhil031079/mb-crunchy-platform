@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
-import { useMealDeals, needsMealDealSelection } from "@/hooks/use-meal-deals";
+import { needsMealDealSelection } from "@/hooks/use-meal-deals";
 
 import { SectionHeader } from "./SectionHeader";
 import { PartyPackCard, PartyPackCardSkeleton } from "./PartyPackCard";
@@ -61,43 +61,24 @@ export function PartyPacksSection({
     [businessUnits]
   );
 
-  const b0 = packsEnabled[0]?._id;
-  const b1 = packsEnabled[1]?._id;
-  const b2 = packsEnabled[2]?._id;
-  const b3 = packsEnabled[3]?._id;
-
-  const r0 = useQuery(
-    api.partyPacks.getFeatured,
-    b0 ? { businessUnitId: b0 } : "skip",
-  ) as PartyPack[] | undefined;
-  const r1 = useQuery(
-    api.partyPacks.getFeatured,
-    b1 ? { businessUnitId: b1 } : "skip",
-  ) as PartyPack[] | undefined;
-  const r2 = useQuery(
-    api.partyPacks.getFeatured,
-    b2 ? { businessUnitId: b2 } : "skip",
-  ) as PartyPack[] | undefined;
-  const r3 = useQuery(
-    api.partyPacks.getFeatured,
-    b3 ? { businessUnitId: b3 } : "skip",
+  // Single aggregated query — returns all featured party packs across ALL BUs
+  const allPacksRaw = useQuery(
+    api.partyPacks.getAllFeaturedAcrossBusinessUnits,
   ) as PartyPack[] | undefined;
 
-  // Fetch active meal deals for each BU
-  const md0 = useMealDeals(b0);
-  const md1 = useMealDeals(b1);
-  const md2 = useMealDeals(b2);
-  const md3 = useMealDeals(b3);
+  // Single aggregated query — returns all active meal deals across ALL BUs
+  const allMealDealsRaw = useQuery(
+    api.mealDeals.getAllActiveForCustomerAcrossBusinessUnits,
+  ) as EnrichedMealDeal[] | undefined;
 
-  const expectedCount = Math.min(packsEnabled.length, MAX_BUSINESS_UNITS);
-  const isLoading =
-    expectedCount > 0 &&
-    [r0, r1, r2, r3].slice(0, expectedCount).some((result) => result === undefined);
+  const isLoading = allPacksRaw === undefined || allMealDealsRaw === undefined;
 
   const packs = useMemo(() => {
-    const all = [...(r0 ?? []), ...(r1 ?? []), ...(r2 ?? []), ...(r3 ?? [])];
+    if (!allPacksRaw) return [];
+    const enabledIds = new Set(packsEnabled.map((bu) => bu._id));
     const seen = new Set<string>();
-    return all
+    return allPacksRaw
+      .filter((pack) => enabledIds.has(pack.businessUnitId))
       .filter((pack) => pack.status === "active")
       .filter((pack) => {
         if (seen.has(pack._id)) return false;
@@ -105,21 +86,31 @@ export function PartyPacksSection({
         return true;
       })
       .slice(0, 4);
-  }, [r0, r1, r2, r3]);
+  }, [allPacksRaw, packsEnabled]);
 
   const firstBuSlug = packsEnabled[0]?.slug;
 
+  // Group meal deals by BU for lookup
+  const mealDealsByBu = useMemo(() => {
+    if (!allMealDealsRaw) return new Map<string, EnrichedMealDeal[]>();
+    const map = new Map<string, EnrichedMealDeal[]>();
+    for (const deal of allMealDealsRaw) {
+      const existing = map.get(deal.businessUnitId) ?? [];
+      existing.push(deal);
+      map.set(deal.businessUnitId, existing);
+    }
+    return map;
+  }, [allMealDealsRaw]);
+
   // Map each pack's catalogItemId → best applicable meal deal
   const packMealDealMap = useMemo(() => {
-    const allDeals = [...(md0 ?? []), ...(md1 ?? []), ...(md2 ?? []), ...(md3 ?? [])];
-    if (allDeals.length === 0 || packs.length === 0) return new Map<string, EnrichedMealDeal>();
+    if (mealDealsByBu.size === 0 || packs.length === 0) return new Map<string, EnrichedMealDeal>();
 
     const map = new Map<string, EnrichedMealDeal>();
     for (const pack of packs) {
       const packCatalogItemId = bySource.get(pack._id)?._id;
-      const packDeals = allDeals.filter(
+      const packDeals = (mealDealsByBu.get(pack.businessUnitId) ?? []).filter(
         (d) =>
-          d.businessUnitId === pack.businessUnitId &&
           d.applyToPartyPacks &&
           isParentAllowed(packCatalogItemId ?? "", d.parentCatalogItemIds),
       );
@@ -128,7 +119,7 @@ export function PartyPacksSection({
       map.set(pack._id, best);
     }
     return map;
-  }, [md0, md1, md2, md3, packs, bySource]);
+  }, [mealDealsByBu, packs, bySource]);
 
   const handleAddToCart = useCallback(
     async (pack: PartyPack): Promise<boolean> => {

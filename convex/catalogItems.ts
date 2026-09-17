@@ -502,6 +502,128 @@ export const getTrendingRanked = query({
   },
 });
 
+/**
+ * Returns all featured catalog items across ALL active business units.
+ * Each item retains its businessUnitId for store attribution.
+ * Used by TodaySpecialsSection to avoid fixed-N BU query slots.
+ */
+export const getAllFeaturedAcrossBusinessUnits = query({
+  handler: async (ctx) => {
+    const items = await ctx.db
+      .query("catalogItems")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined),
+          q.eq(q.field("featured"), true)
+        )
+      )
+      .order("asc")
+      .collect();
+    return items;
+  },
+});
+
+/**
+ * Returns all active catalog items across ALL active business units.
+ * Used by useCatalogItemMap to avoid fixed-N BU query slots.
+ */
+export const getAllActiveAcrossBusinessUnits = query({
+  handler: async (ctx) => {
+    const items = await ctx.db
+      .query("catalogItems")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+    return items;
+  },
+});
+
+/**
+ * Returns best sellers across ALL active business units.
+ * Each item retains its businessUnitId for store attribution.
+ * Used by RecommendedForYouSection to avoid fixed-N BU query slots.
+ */
+export const getBestSellersAcrossBusinessUnits = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    const items = await ctx.db
+      .query("catalogItems")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .take(limit);
+    return items;
+  },
+});
+
+/**
+ * Returns catalog items matching category IDs across specified business units.
+ * Each item retains its businessUnitId for store attribution.
+ * Used by RecommendedForYouSection to avoid fixed-N BU query slots.
+ */
+export const getByCategoryIdsAcrossBusinessUnits = query({
+  args: {
+    businessUnitIds: v.array(v.id("businessUnits")),
+    categoryIds: v.array(v.id("categories")),
+    excludeIds: v.optional(v.array(v.id("catalogItems"))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 10;
+    if (args.categoryIds.length === 0) return [];
+    const excludeSet = new Set(args.excludeIds ?? []);
+
+    const buSet = new Set(args.businessUnitIds);
+
+    const sourceIds = new Set<string>();
+    for (const categoryId of args.categoryIds) {
+      const products = await ctx.db
+        .query("products")
+        .withIndex("by_category", (q) => q.eq("categoryId", categoryId))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("status"), "active"),
+            q.eq(q.field("deletedAt"), undefined)
+          )
+        )
+        .collect();
+      for (const product of products) sourceIds.add(product._id);
+    }
+    if (sourceIds.size === 0) return [];
+
+    const items = await ctx.db
+      .query("catalogItems")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined),
+          q.eq(q.field("itemType"), "product")
+        )
+      )
+      .collect();
+
+    return items
+      .filter(
+        (item) =>
+          buSet.has(item.businessUnitId) &&
+          sourceIds.has(item.sourceId) &&
+          !excludeSet.has(item._id)
+      )
+      .slice(0, limit);
+  },
+});
+
 // ============================================================================
 // Internal sync mutation (called by product/combo/partyPack mutations only)
 // ============================================================================

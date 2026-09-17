@@ -37,37 +37,19 @@ export function FeaturedOffersSection({
     [businessUnits]
   );
 
-  const b0 = offerEnabled[0]?._id;
-  const b1 = offerEnabled[1]?._id;
-  const b2 = offerEnabled[2]?._id;
-  const b3 = offerEnabled[3]?._id;
-
-  const r0 = useQuery(
-    api.offers.getActive,
-    b0 ? { businessUnitId: b0 } : "skip",
-  ) as Offer[] | undefined;
-  const r1 = useQuery(
-    api.offers.getActive,
-    b1 ? { businessUnitId: b1 } : "skip",
-  ) as Offer[] | undefined;
-  const r2 = useQuery(
-    api.offers.getActive,
-    b2 ? { businessUnitId: b2 } : "skip",
-  ) as Offer[] | undefined;
-  const r3 = useQuery(
-    api.offers.getActive,
-    b3 ? { businessUnitId: b3 } : "skip",
+  // Single aggregated query — returns all active offers across ALL BUs
+  const allOffersRaw = useQuery(
+    api.offers.getAllActiveAcrossBusinessUnits,
   ) as Offer[] | undefined;
 
-  const expectedCount = Math.min(offerEnabled.length, MAX_BUSINESS_UNITS);
-  const isLoading =
-    expectedCount > 0 &&
-    [r0, r1, r2, r3].slice(0, expectedCount).some((result) => result === undefined);
+  const isLoading = allOffersRaw === undefined;
 
   const offers = useMemo(() => {
-    const all = [...(r0 ?? []), ...(r1 ?? []), ...(r2 ?? []), ...(r3 ?? [])];
+    if (!allOffersRaw) return [];
+    const enabledIds = new Set(offerEnabled.map((bu) => bu._id));
     const seen = new Set<string>();
-    return all
+    return allOffersRaw
+      .filter((offer) => enabledIds.has(offer.businessUnitId))
       .filter((offer) => offer.status === "active" && isOfferActive(offer))
       .filter((offer) => getOfferMarketingSettings(offer).homeVisible)
       .filter((offer) => {
@@ -82,7 +64,7 @@ export function FeaturedOffersSection({
         return a.displayOrder - b.displayOrder;
       })
       .slice(0, 6);
-  }, [r0, r1, r2, r3]);
+  }, [allOffersRaw, offerEnabled]);
 
   const firstBuSlug = offerEnabled[0]?.slug;
 

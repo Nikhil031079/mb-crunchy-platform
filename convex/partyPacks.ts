@@ -68,6 +68,28 @@ export const getFeatured = query({
   },
 });
 
+/**
+ * Returns all featured party packs across ALL active business units.
+ * Each party pack retains its businessUnitId for store attribution.
+ * Used by PartyPacksSection to avoid fixed-N BU query slots.
+ */
+export const getAllFeaturedAcrossBusinessUnits = query({
+  handler: async (ctx) => {
+    const packs = await ctx.db
+      .query("partyPacks")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined),
+          q.eq(q.field("featured"), true)
+        )
+      )
+      .order("asc")
+      .collect();
+    return packs;
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================

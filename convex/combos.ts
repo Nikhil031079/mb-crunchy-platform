@@ -68,6 +68,28 @@ export const getFeatured = query({
   },
 });
 
+/**
+ * Returns all featured combos across ALL active business units.
+ * Each combo retains its businessUnitId for store attribution.
+ * Used by ComboOffersSection to avoid fixed-N BU query slots.
+ */
+export const getAllFeaturedAcrossBusinessUnits = query({
+  handler: async (ctx) => {
+    const combos = await ctx.db
+      .query("combos")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined),
+          q.eq(q.field("featured"), true)
+        )
+      )
+      .order("asc")
+      .collect();
+    return combos;
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================

@@ -203,6 +203,171 @@ export const getByIds = query({
   },
 });
 
+/**
+ * Returns all active meal deals across ALL active business units.
+ * Each deal retains its businessUnitId for store attribution.
+ * Used by ComboOffersSection/PartyPacksSection to avoid fixed-N BU query slots.
+ *
+ * Enrichment is identical to getActiveForCustomer: qualifying items are
+ * resolved with names, prices, variants, and alternatives. Missing or
+ * inactive catalog items cause the entire deal to be dropped.
+ */
+export const getAllActiveForCustomerAcrossBusinessUnits = query({
+  handler: async (ctx) => {
+    const deals = await ctx.db
+      .query("mealDeals")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+
+    const enriched = await Promise.all(
+      deals.map(async (deal) => {
+        const qualifyingItems = await Promise.all(
+          deal.qualifyingItems.map(async (qi) => {
+            const catalogItem = await ctx.db.get(qi.catalogItemId);
+            if (!catalogItem || catalogItem.status !== "active" || catalogItem.deletedAt) {
+              return null;
+            }
+
+            // Resolve variant data from the source product for variant selection.
+            let variants: Array<{ optionName: string; optionValue: string; price: number; active: boolean }> | undefined;
+            let defaultVariantName: string | undefined;
+            if (catalogItem.itemType === "product" && catalogItem.sourceId) {
+              const sourceDoc = await ctx.db.get(catalogItem.sourceId as any);
+              if (sourceDoc && "variants" in sourceDoc) {
+                const productVariants = (sourceDoc as any).variants;
+                if (Array.isArray(productVariants) && productVariants.length > 0) {
+                  variants = productVariants
+                    .filter((v: any) => v.active)
+                    .map((v: any) => ({
+                      optionName: v.optionName as string,
+                      optionValue: v.optionValue as string,
+                      price: v.price as number,
+                      active: v.active as boolean,
+                    }));
+                  const defaultV = productVariants.find((v: any) => v.isDefault) ?? productVariants[0];
+                  defaultVariantName = defaultV?.optionValue;
+                }
+              }
+            }
+
+            // Resolve alternative products with their own variant data.
+            let alternatives: Array<{
+              catalogItemId: string;
+              name: string;
+              price: number;
+              compareAtPrice?: number;
+              defaultVariantName?: string;
+              variants?: Array<{ optionName: string; optionValue: string; price: number; active: boolean }>;
+            }> | undefined;
+
+            if (qi.alternatives && qi.alternatives.length > 0) {
+              const altResults = await Promise.all(
+                qi.alternatives.map(async (altId) => {
+                  const altCatalogItem = await ctx.db.get(altId);
+                  if (!altCatalogItem || altCatalogItem.status !== "active" || altCatalogItem.deletedAt) {
+                    return null;
+                  }
+
+                  let altVariants: Array<{ optionName: string; optionValue: string; price: number; active: boolean }> | undefined;
+                  let altDefaultVariantName: string | undefined;
+                  if (altCatalogItem.itemType === "product" && altCatalogItem.sourceId) {
+                    const altSourceDoc = await ctx.db.get(altCatalogItem.sourceId as any);
+                    if (altSourceDoc && "variants" in altSourceDoc) {
+                      const altProductVariants = (altSourceDoc as any).variants;
+                      if (Array.isArray(altProductVariants) && altProductVariants.length > 0) {
+                        altVariants = altProductVariants
+                          .filter((v: any) => v.active)
+                          .map((v: any) => ({
+                            optionName: v.optionName as string,
+                            optionValue: v.optionValue as string,
+                            price: v.price as number,
+                            active: v.active as boolean,
+                          }));
+                        const altDefaultV = altProductVariants.find((v: any) => v.isDefault) ?? altProductVariants[0];
+                        altDefaultVariantName = altDefaultV?.optionValue;
+                      }
+                    }
+                  }
+
+                  return {
+                    catalogItemId: altId,
+                    name: altCatalogItem.name,
+                    price: altCatalogItem.price,
+                    compareAtPrice: altCatalogItem.compareAtPrice,
+                    ...(altDefaultVariantName ? { defaultVariantName: altDefaultVariantName } : {}),
+                    ...(altVariants && altVariants.length > 0 ? { variants: altVariants } : {}),
+                  };
+                })
+              );
+
+              const validAlts = altResults.filter(Boolean);
+              if (validAlts.length > 0) {
+                alternatives = validAlts as NonNullable<typeof alternatives>;
+              }
+            }
+
+            return {
+              catalogItemId: qi.catalogItemId,
+              quantity: qi.quantity,
+              name: catalogItem.name,
+              price: catalogItem.price,
+              basePrice: catalogItem.price,
+              compareAtPrice: catalogItem.compareAtPrice,
+              ...(defaultVariantName ? { defaultVariantName } : {}),
+              ...(variants && variants.length > 0 ? { variants } : {}),
+              ...(alternatives ? { alternatives } : {}),
+            };
+          })
+        );
+
+        const validItems = qualifyingItems.filter(Boolean);
+        if (validItems.length !== deal.qualifyingItems.length) {
+          return null;
+        }
+
+        const individualTotal = validItems.reduce(
+          (sum, item) => sum + (item!.price * item!.quantity),
+          0
+        );
+
+        // Resolve parent catalog items (for combo/party-pack association).
+        const parentItems = await Promise.all(
+          (deal.parentCatalogItemIds ?? []).map(async (id) => {
+            const item = await ctx.db.get(id);
+            if (!item || item.deletedAt || item.status !== "active") return null;
+            return item;
+          })
+        );
+        const validParents = parentItems.filter(Boolean);
+
+        return {
+          _id: deal._id,
+          businessUnitId: deal.businessUnitId,
+          name: deal.name,
+          dealPrice: deal.dealPrice,
+          individualTotal,
+          savings: individualTotal - deal.dealPrice,
+          qualifyingItems: validItems,
+          applyToCombos: deal.applyToCombos,
+          applyToPartyPacks: deal.applyToPartyPacks,
+          ...(deal.parentCatalogItemIds
+            ? { parentCatalogItemIds: deal.parentCatalogItemIds }
+            : {}),
+          cartSmartDetection: deal.cartSmartDetection,
+        };
+      })
+    );
+
+    return enriched.filter(Boolean);
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================

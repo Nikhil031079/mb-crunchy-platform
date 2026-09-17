@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
-import { useMealDeals, needsMealDealSelection } from "@/hooks/use-meal-deals";
+import { needsMealDealSelection } from "@/hooks/use-meal-deals";
 
 import { SectionHeader } from "./SectionHeader";
 import { ComboCard, ComboCardSkeleton } from "./ComboCard";
@@ -49,43 +49,25 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
 
   const combosEnabled = businessUnits.filter((bu) => bu.enableCombos);
 
-  const b0 = combosEnabled[0]?._id;
-  const b1 = combosEnabled[1]?._id;
-  const b2 = combosEnabled[2]?._id;
-  const b3 = combosEnabled[3]?._id;
-
-  const r0 = useQuery(
-    api.combos.getFeatured,
-    b0 ? { businessUnitId: b0 } : "skip",
-  ) as Combo[] | undefined;
-  const r1 = useQuery(
-    api.combos.getFeatured,
-    b1 ? { businessUnitId: b1 } : "skip",
-  ) as Combo[] | undefined;
-  const r2 = useQuery(
-    api.combos.getFeatured,
-    b2 ? { businessUnitId: b2 } : "skip",
-  ) as Combo[] | undefined;
-  const r3 = useQuery(
-    api.combos.getFeatured,
-    b3 ? { businessUnitId: b3 } : "skip",
+  // Single aggregated query — returns all featured combos across ALL BUs
+  const allCombosRaw = useQuery(
+    api.combos.getAllFeaturedAcrossBusinessUnits,
   ) as Combo[] | undefined;
 
-  // Fetch active meal deals for each BU (same fixed-slot pattern)
-  const md0 = useMealDeals(b0);
-  const md1 = useMealDeals(b1);
-  const md2 = useMealDeals(b2);
-  const md3 = useMealDeals(b3);
+  // Single aggregated query — returns all active meal deals across ALL BUs
+  const allMealDealsRaw = useQuery(
+    api.mealDeals.getAllActiveForCustomerAcrossBusinessUnits,
+  ) as EnrichedMealDeal[] | undefined;
 
-  const expectedCount = Math.min(combosEnabled.length, 4);
-  const isLoading =
-    expectedCount > 0 &&
-    [r0, r1, r2, r3].slice(0, expectedCount).some((result) => result === undefined);
+  const isLoading = allCombosRaw === undefined || allMealDealsRaw === undefined;
 
   const combos = useMemo(() => {
-    const items = [...(r0 ?? []), ...(r1 ?? []), ...(r2 ?? []), ...(r3 ?? [])];
+    if (!allCombosRaw) return [];
+    // Filter to combosEnabled BUs only
+    const enabledIds = new Set(combosEnabled.map((bu) => bu._id));
     const seen = new Set<string>();
-    return items
+    return allCombosRaw
+      .filter((combo) => enabledIds.has(combo.businessUnitId))
       .filter((combo) => combo.status === "active")
       .filter((combo) => {
         if (seen.has(combo._id)) return false;
@@ -93,21 +75,31 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
         return true;
       })
       .slice(0, 6);
-  }, [r0, r1, r2, r3]);
+  }, [allCombosRaw, combosEnabled]);
+
+  // Group meal deals by BU for lookup
+  const mealDealsByBu = useMemo(() => {
+    if (!allMealDealsRaw) return new Map<string, EnrichedMealDeal[]>();
+    const map = new Map<string, EnrichedMealDeal[]>();
+    for (const deal of allMealDealsRaw) {
+      const existing = map.get(deal.businessUnitId) ?? [];
+      existing.push(deal);
+      map.set(deal.businessUnitId, existing);
+    }
+    return map;
+  }, [allMealDealsRaw]);
 
   const firstBuSlug = combosEnabled[0]?.slug;
 
   // Map each combo's catalogItemId → best applicable meal deal
   const comboMealDealMap = useMemo(() => {
-    const allDeals = [...(md0 ?? []), ...(md1 ?? []), ...(md2 ?? []), ...(md3 ?? [])];
-    if (allDeals.length === 0 || combos.length === 0) return new Map<string, EnrichedMealDeal>();
+    if (mealDealsByBu.size === 0 || combos.length === 0) return new Map<string, EnrichedMealDeal>();
 
     const map = new Map<string, EnrichedMealDeal>();
     for (const combo of combos) {
       const comboCatalogItemId = bySource.get(combo._id)?._id;
-      const comboDeals = allDeals.filter(
+      const comboDeals = (mealDealsByBu.get(combo.businessUnitId) ?? []).filter(
         (d) =>
-          d.businessUnitId === combo.businessUnitId &&
           d.applyToCombos &&
           isParentAllowed(comboCatalogItemId ?? "", d.parentCatalogItemIds),
       );
@@ -116,7 +108,7 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
       map.set(combo._id, best);
     }
     return map;
-  }, [md0, md1, md2, md3, combos, bySource]);
+  }, [mealDealsByBu, combos, bySource]);
 
   const handleAddToCart = useCallback(
     async (combo: Combo): Promise<boolean> => {

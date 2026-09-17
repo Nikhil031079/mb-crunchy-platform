@@ -55,6 +55,27 @@ export const getByCode = query({
   },
 });
 
+/**
+ * Returns all active offers across ALL active business units.
+ * Each offer retains its businessUnitId for store attribution.
+ * Used by FeaturedOffersSection to avoid fixed-N BU query slots.
+ */
+export const getAllActiveAcrossBusinessUnits = query({
+  handler: async (ctx) => {
+    const offers = await ctx.db
+      .query("offers")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .order("asc")
+      .collect();
+    return offers;
+  },
+});
+
 // ============================================================================
 // Mutations
 // ============================================================================
