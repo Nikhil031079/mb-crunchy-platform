@@ -26,7 +26,7 @@ import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 
-import { SITE_NAME, ROUTES } from "@/constants";
+import { SITE_NAME, ROUTES, FALLBACK_WHATSAPP_NUMBER, DEFAULT_PICKUP_ESTIMATE } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency, checkKitchenServiceability, checkMartPincodeFormat } from "@/utils";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
@@ -482,7 +482,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
     );
   }
 
-  const whatsappPhone = (globalSettings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
+  const whatsappPhone = (globalSettings?.paymentConfig?.whatsappNumber ?? FALLBACK_WHATSAPP_NUMBER).replace(/[^0-9]/g, "");
   const orderSubtotal = order.subtotal - order.discount;
   const whatsappMsg = encodeURIComponent(
     `Hi MB Crunchy,\n\nI have requested outside-area delivery.\n\nOrder: ${order.orderNumber}\nOrder value: ${formatCurrency(orderSubtotal)}\n\nPlease check delivery availability and confirm the delivery charge.`
@@ -788,6 +788,7 @@ export default function CheckoutPage() {
 
   // Global settings for payment config
   const globalSettings = useQuery(api.settings.getGlobalSettings);
+  const whatsappPhone = (globalSettings?.paymentConfig?.whatsappNumber ?? FALLBACK_WHATSAPP_NUMBER).replace(/[^0-9]/g, "");
 
   // ==========================================================================
   // Store Open Status
@@ -1994,7 +1995,7 @@ export default function CheckoutPage() {
                             </div>
                           </div>
                           <a
-                            href="https://wa.me/7842032879?text=Hi%20MB%20Crunchy%2C%20I%27d%20like%20to%20arrange%20delivery%20for%20my%20order."
+                            href={`https://wa.me/${whatsappPhone}?text=Hi%20MB%20Crunchy%2C%20I%27d%20like%20to%20arrange%20delivery%20for%20my%20order.`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
@@ -2120,7 +2121,7 @@ export default function CheckoutPage() {
                     </p>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Clock className="h-4 w-4" />
-                      <span>Ready for pickup in: 15-20 minutes</span>
+                      <span>Ready for pickup in: {DEFAULT_PICKUP_ESTIMATE}</span>
                     </div>
                     {buSettings && (
                       <StoreStatusDot
@@ -2410,7 +2411,7 @@ export default function CheckoutPage() {
                   {form.orderType === "pickup" && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
                       <Clock className="h-3 w-3" />
-                      <span>Ready for pickup in: 15-20 min</span>
+                      <span>Ready for pickup in: {DEFAULT_PICKUP_ESTIMATE}</span>
                     </div>
                   )}
                 </div>
@@ -2430,7 +2431,7 @@ export default function CheckoutPage() {
                   <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2">
                     <Clock className="h-4 w-4 text-primary shrink-0" />
                     <p className="text-xs font-medium">
-                      Ready for pickup in: 15-20 minutes
+                      Ready for pickup in: {DEFAULT_PICKUP_ESTIMATE}
                     </p>
                   </div>
                 )}

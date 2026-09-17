@@ -118,6 +118,7 @@ function GlobalSettingsSection() {
     primaryColor: "#000000",
     supportEmail: "",
     supportPhone: "",
+    whatsappNumber: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -132,6 +133,7 @@ function GlobalSettingsSection() {
         primaryColor: globalSettings.primaryColor ?? "#000000",
         supportEmail: globalSettings.supportEmail ?? "",
         supportPhone: extractDigitsForInput(globalSettings.supportPhone ?? ""),
+        whatsappNumber: extractDigitsForInput(globalSettings.paymentConfig?.whatsappNumber ?? ""),
       });
       setLoaded(true);
     }
@@ -154,7 +156,8 @@ function GlobalSettingsSection() {
         supportEmail: form.supportEmail.trim() || undefined,
         supportPhone: normalizeIndianPhone(form.supportPhone) || undefined,
         paymentConfig: {
-          mode: "razorpay",
+          mode: "razorpay" as const,
+          whatsappNumber: normalizeIndianPhone(form.whatsappNumber) || undefined,
         },
       });
       toast.success("Global settings saved");
@@ -270,6 +273,18 @@ function GlobalSettingsSection() {
               <code className="font-mono text-xs">RAZORPAY_KEY_SECRET</code>,{" "}
               <code className="font-mono text-xs">RAZORPAY_WEBHOOK_SECRET</code>).
               Ensure these are set in your Convex deployment.
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="whatsappNumber">WhatsApp Number <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <PhoneInput
+                id="whatsappNumber"
+                value={form.whatsappNumber}
+                onChange={(val) => setForm((f) => ({ ...f, whatsappNumber: val }))}
+                placeholder="7842032879"
+              />
+              <p className="text-xs text-muted-foreground">
+                Used for delivery assistance links. Customers outside the delivery area can message this number.
+              </p>
             </div>
           </div>
         </div>

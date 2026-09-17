@@ -7,6 +7,26 @@ export const SITE_NAME = "MB CRUNCHY";
 export const SITE_DESCRIPTION = "Your premium destination for quality products and services";
 
 // ============================================================================
+// Business Configuration Fallbacks
+// ============================================================================
+
+/**
+ * Fallback WhatsApp number used when admin has not configured one via
+ * SettingsPage → paymentConfig.whatsappNumber. This ensures the
+ * click-to-chat link continues to work if the setting is undefined.
+ *
+ * The admin-configured value ALWAYS takes precedence.
+ */
+export const FALLBACK_WHATSAPP_NUMBER = "7842032879";
+
+/**
+ * Default pickup preparation estimate shown to customers.
+ * This is a fixed application constant — pickup time depends on
+ * kitchen operations and is not configurable per-order.
+ */
+export const DEFAULT_PICKUP_ESTIMATE = "15-20 minutes";
+
+// ============================================================================
 // Routing
 // ============================================================================
 

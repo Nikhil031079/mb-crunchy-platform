@@ -770,7 +770,9 @@ export default function CartPage() {
                 )}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  <span>Estimated delivery: 30-45 minutes</span>
+                  <span>
+                    Estimated delivery: {deliveryPolicy?.estimatedMinutes ? `~${deliveryPolicy.estimatedMinutes} min` : "30-45 minutes"}
+                  </span>
                 </div>
                 {cart.tax > 0 && (
                   <div className="flex justify-between">

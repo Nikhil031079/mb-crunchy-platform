@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
-import { ROUTES, SITE_NAME } from "@/constants";
+import { ROUTES, SITE_NAME, FALLBACK_WHATSAPP_NUMBER } from "@/constants";
 import { formatCurrency, formatDateTime } from "@/utils";
 import { cn } from "@/lib/utils";
 import { openRazorpayCheckout } from "@/hooks/use-razorpay";
@@ -178,7 +178,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   // Outside-area: Delivery quote pending — admin hasn't quoted yet
   // --------------------------------------------------------------------------
   if (quotePending) {
-    const waPhone = (settings?.paymentConfig?.whatsappNumber ?? "").replace(/[^0-9]/g, "");
+    const waPhone = (settings?.paymentConfig?.whatsappNumber ?? FALLBACK_WHATSAPP_NUMBER).replace(/[^0-9]/g, "");
     const msg = encodeURIComponent(
       `Hi MB Crunchy,\nI have requested outside-area delivery.\n\nOrder: ${order.orderNumber}\nOrder value: ${formatCurrency(order.subtotal - order.discount)}\n\nPlease check delivery availability and confirm the delivery charge.`
     );
