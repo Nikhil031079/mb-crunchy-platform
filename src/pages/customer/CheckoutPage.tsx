@@ -102,6 +102,191 @@ function getMartDeliveryErrorMessage(reason?: string): string {
 }
 
 // ============================================================================
+// OrderConfirmationCard — shared confirmation UI for all order flows
+// ============================================================================
+
+interface OrderConfirmationCardProps {
+  orderNumber: string;
+  title: string;
+  subtitle: string;
+  order?: {
+    subtotal: number;
+    discount: number;
+    deliveryFee?: number;
+    tax: number;
+    total: number;
+    orderType: string;
+    deliveryType?: string;
+    paymentStatus: string;
+    status: string;
+  } | null;
+}
+
+function OrderConfirmationCard({
+  orderNumber,
+  title,
+  subtitle,
+  order,
+}: OrderConfirmationCardProps) {
+  const orderSubtotal = order ? order.subtotal - order.discount : 0;
+  const orderDeliveryFee = order?.deliveryFee ?? 0;
+  const paymentLabel = order
+    ? order.paymentStatus === "paid"
+      ? "Paid"
+      : order.paymentStatus === "failed"
+        ? "Failed"
+        : "Pending"
+    : "Pending";
+  const paymentColor = order
+    ? order.paymentStatus === "paid"
+      ? "text-emerald-600"
+      : order.paymentStatus === "failed"
+        ? "text-red-600"
+        : "text-amber-600"
+    : "text-amber-600";
+  const orderStatusLabel = order
+    ? order.status === "pending"
+      ? "Order Placed"
+      : order.status === "confirmed"
+        ? "Confirmed"
+        : order.status === "preparing"
+          ? "Preparing"
+          : order.status === "ready"
+            ? "Ready"
+            : order.status === "out_for_delivery"
+              ? "Out for Delivery"
+              : order.status === "delivered"
+                ? "Delivered"
+                : order.status === "cancelled"
+                  ? "Cancelled"
+                  : "Processing"
+    : "Processing";
+  const orderStatusColor =
+    order?.status === "confirmed" || order?.status === "preparing" || order?.status === "ready" || order?.status === "out_for_delivery" || order?.status === "delivered"
+      ? "text-emerald-600"
+      : order?.status === "cancelled"
+        ? "text-red-600"
+        : "text-amber-600";
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="text-center space-y-6"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
+            className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40"
+          >
+            <CheckCircle2 className="h-12 w-12 text-white" />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+          >
+            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="rounded-xl border border-border/60 bg-card p-6 space-y-3"
+          >
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Order Number</span>
+              <span className="font-mono font-semibold">{orderNumber || "Processing..."}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Order Subtotal</span>
+              <span className="font-medium">
+                {order ? formatCurrency(orderSubtotal) : "Loading..."}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Delivery</span>
+              <span className="font-medium">
+                {order
+                  ? order.orderType === "pickup"
+                    ? "Pickup"
+                    : orderDeliveryFee === 0
+                      ? order.deliveryType === "outside_area" ? "Quote Required" : "Free"
+                      : formatCurrency(orderDeliveryFee)
+                  : "Loading..."}
+              </span>
+            </div>
+            {order && order.tax > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Tax</span>
+                <span className="font-medium">{formatCurrency(order.tax)}</span>
+              </div>
+            )}
+            {order && (
+              <div className="flex justify-between text-sm font-semibold">
+                <span>Total</span>
+                <span>{formatCurrency(order.total)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Payment</span>
+              <span className={`flex items-center gap-1.5 font-medium ${paymentColor}`}>
+                {paymentLabel === "Paid" ? (
+                  <BadgeCheck className="h-3.5 w-3.5" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                )}
+                {paymentLabel}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Order</span>
+              <span className={`flex items-center gap-1.5 font-medium ${orderStatusColor}`}>
+                {orderStatusColor === "text-emerald-600" ? (
+                  <BadgeCheck className="h-3.5 w-3.5" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                )}
+                {orderStatusLabel}
+              </span>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="flex flex-col gap-3 items-center"
+          >
+            <div className="flex gap-3 justify-center">
+              <Link to={ROUTES.TRACK_ORDER}>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Package className="h-3.5 w-3.5" />
+                  Track Order
+                </Button>
+              </Link>
+              <Link to="/">
+                <Button size="sm" className="gap-2">
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back to Home
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // CheckoutPage — Contact form, delivery/pickup, order summary, submit
 // ============================================================================
 
@@ -951,7 +1136,7 @@ export default function CheckoutPage() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [form]);
+  }, [form, isMartPincodeMode, deliveryPolicy, pricing]);
 
   // ==========================================================================
   // Submit Order
@@ -1110,7 +1295,7 @@ export default function CheckoutPage() {
         setPaymentStatus("idle");
       }
     },
-    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, customer]
+    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, checkoutItems, selectedCheckoutBU, effectiveDeliveryType]
   );
 
   // ==========================================================================
@@ -1183,47 +1368,6 @@ export default function CheckoutPage() {
     // Uses the authoritative order record from Convex so totals are always
     // correct even after clearCart(), on browser refresh, or after admin
     // payment verification.
-    const order = confirmedOrder?.order;
-    const orderSubtotal = order ? order.subtotal - order.discount : 0;
-    const orderDeliveryFee = order?.deliveryFee ?? 0;
-    const paymentLabel = order
-      ? order.paymentStatus === "paid"
-        ? "Paid"
-        : order.paymentStatus === "failed"
-          ? "Failed"
-          : "Pending"
-      : "Pending";
-    const paymentColor = order
-      ? order.paymentStatus === "paid"
-        ? "text-emerald-600"
-        : order.paymentStatus === "failed"
-          ? "text-red-600"
-          : "text-amber-600"
-      : "text-amber-600";
-    const orderStatusLabel = order
-      ? order.status === "pending"
-        ? "Order Placed"
-        : order.status === "confirmed"
-          ? "Confirmed"
-          : order.status === "preparing"
-            ? "Preparing"
-            : order.status === "ready"
-              ? "Ready"
-              : order.status === "out_for_delivery"
-                ? "Out for Delivery"
-                : order.status === "delivered"
-                  ? "Delivered"
-                  : order.status === "cancelled"
-                    ? "Cancelled"
-                    : "Processing"
-      : "Processing";
-    const orderStatusColor = order
-      ? order.status === "confirmed" || order.status === "preparing" || order.status === "ready" || order.status === "out_for_delivery" || order.status === "delivered"
-        ? "text-emerald-600"
-        : order.status === "cancelled"
-          ? "text-red-600"
-          : "text-amber-600"
-      : "text-amber-600";
 
     // Loading state while Convex query resolves
     if (confirmedOrder === undefined) {
@@ -1238,126 +1382,12 @@ export default function CheckoutPage() {
     }
 
     return (
-      <div className="min-h-screen bg-background">
-        <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="text-center space-y-6"
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
-              className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40"
-            >
-              <CheckCircle2 className="h-12 w-12 text-white" />
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-            >
-              <h1 className="text-2xl font-bold tracking-tight">
-                Payment Submitted for Verification
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Your payment has been recorded. We&apos;ll start preparing your order shortly.
-              </p>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35 }}
-              className="rounded-xl border border-border/60 bg-card p-6 space-y-3"
-            >
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Order Number</span>
-                <span className="font-mono font-semibold">
-                  {orderSuccess.orderNumber ?? "Processing..."}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Order Subtotal</span>
-                <span className="font-medium">
-                  {order ? formatCurrency(orderSubtotal) : "Loading..."}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Delivery</span>
-                <span className="font-medium">
-                  {order
-                    ? order.orderType === "pickup"
-                      ? "Pickup"
-                      : orderDeliveryFee === 0
-                        ? order.deliveryType === "outside_area" ? "Quote Required" : "Free"
-                        : formatCurrency(orderDeliveryFee)
-                    : "Loading..."}
-                </span>
-              </div>
-              {order && order.tax > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax</span>
-                  <span className="font-medium">{formatCurrency(order.tax)}</span>
-                </div>
-              )}
-              {order && (
-                <div className="flex justify-between text-sm font-semibold">
-                  <span>Total</span>
-                  <span>{formatCurrency(order.total)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Payment</span>
-                <span className={`flex items-center gap-1.5 font-medium ${paymentColor}`}>
-                  {paymentLabel === "Paid" ? (
-                    <BadgeCheck className="h-3.5 w-3.5" />
-                  ) : (
-                    <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-                  )}
-                  {paymentLabel}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Order</span>
-                <span className={`flex items-center gap-1.5 font-medium ${orderStatusColor}`}>
-                  {orderStatusColor === "text-emerald-600" ? (
-                    <BadgeCheck className="h-3.5 w-3.5" />
-                  ) : (
-                    <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-                  )}
-                  {orderStatusLabel}
-                </span>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="flex flex-col gap-3 items-center"
-            >
-              <div className="flex gap-3 justify-center">
-                <Link to={ROUTES.TRACK_ORDER}>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Package className="h-3.5 w-3.5" />
-                    Track Order
-                  </Button>
-                </Link>
-                <Link to="/">
-                  <Button size="sm" className="gap-2">
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    Back to Home
-                  </Button>
-                </Link>
-              </div>
-            </motion.div>
-          </motion.div>
-        </div>
-      </div>
+      <OrderConfirmationCard
+        orderNumber={orderSuccess.orderNumber ?? "Processing..."}
+        title="Payment Submitted for Verification"
+        subtitle="Your payment has been recorded. We'll start preparing your order shortly."
+        order={confirmedOrder?.order}
+      />
     );
   }
 
@@ -1371,158 +1401,17 @@ export default function CheckoutPage() {
     // (orderSuccess state is lost but persistedOrder + confirmedOrder work).
     if (confirmedOrder?.order) {
       const order = confirmedOrder.order;
-      const orderSubtotal = order.subtotal - order.discount;
-      const orderDeliveryFee = order.deliveryFee ?? 0;
-      const paymentLabel =
-        order.paymentStatus === "paid"
-          ? "Paid"
-          : order.paymentStatus === "failed"
-            ? "Failed"
-            : "Pending";
-      const paymentColor =
-        order.paymentStatus === "paid"
-          ? "text-emerald-600"
-          : order.paymentStatus === "failed"
-            ? "text-red-600"
-            : "text-amber-600";
-      const orderStatusLabel =
-        order.status === "pending"
-          ? "Order Placed"
-          : order.status === "confirmed"
-            ? "Confirmed"
-            : order.status === "preparing"
-              ? "Preparing"
-              : order.status === "ready"
-                ? "Ready"
-                : order.status === "out_for_delivery"
-                  ? "Out for Delivery"
-                  : order.status === "delivered"
-                    ? "Delivered"
-                    : order.status === "cancelled"
-                      ? "Cancelled"
-                      : "Processing";
-      const orderStatusColor =
-        order.status === "confirmed" || order.status === "preparing" || order.status === "ready" || order.status === "out_for_delivery" || order.status === "delivered"
-          ? "text-emerald-600"
-          : order.status === "cancelled"
-            ? "text-red-600"
-            : "text-amber-600";
-
       return (
-        <div className="min-h-screen bg-background">
-          <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              className="text-center space-y-6"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
-                className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40"
-              >
-                <CheckCircle2 className="h-12 w-12 text-white" />
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25 }}
-              >
-                <h1 className="text-2xl font-bold tracking-tight">
-                  {order.paymentStatus === "paid" ? "Order Confirmed" : "Payment Recorded"}
-                </h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {order.paymentStatus === "paid"
-                    ? "Your payment has been verified. We're preparing your order."
-                    : "Your payment has been recorded. We'll start preparing your order shortly."}
-                </p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.35 }}
-                className="rounded-xl border border-border/60 bg-card p-6 space-y-3"
-              >
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Order Number</span>
-                  <span className="font-mono font-semibold">{order.orderNumber}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Order Subtotal</span>
-                  <span className="font-medium">{formatCurrency(orderSubtotal)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Delivery</span>
-                  <span className="font-medium">
-                    {order.orderType === "pickup"
-                      ? "Pickup"
-                      : orderDeliveryFee === 0
-                        ? order.deliveryType === "outside_area" ? "Quote Required" : "Free"
-                        : formatCurrency(orderDeliveryFee)}
-                  </span>
-                </div>
-                {order.tax > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tax</span>
-                    <span className="font-medium">{formatCurrency(order.tax)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm font-semibold">
-                  <span>Total</span>
-                  <span>{formatCurrency(order.total)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Payment</span>
-                  <span className={`flex items-center gap-1.5 font-medium ${paymentColor}`}>
-                    {paymentLabel === "Paid" ? (
-                      <BadgeCheck className="h-3.5 w-3.5" />
-                    ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-                    )}
-                    {paymentLabel}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Order</span>
-                  <span className={`flex items-center gap-1.5 font-medium ${orderStatusColor}`}>
-                    {orderStatusColor === "text-emerald-600" ? (
-                      <BadgeCheck className="h-3.5 w-3.5" />
-                    ) : (
-                      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-                    )}
-                    {orderStatusLabel}
-                  </span>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="flex flex-col gap-3 items-center"
-              >
-                <div className="flex gap-3 justify-center">
-                  <Link to={ROUTES.TRACK_ORDER}>
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <Package className="h-3.5 w-3.5" />
-                      Track Order
-                    </Button>
-                  </Link>
-                  <Link to="/">
-                    <Button size="sm" className="gap-2">
-                      <ArrowLeft className="h-3.5 w-3.5" />
-                      Back to Home
-                    </Button>
-                  </Link>
-                </div>
-              </motion.div>
-            </motion.div>
-          </div>
-        </div>
+        <OrderConfirmationCard
+          orderNumber={order.orderNumber}
+          title={order.paymentStatus === "paid" ? "Order Confirmed" : "Payment Recorded"}
+          subtitle={
+            order.paymentStatus === "paid"
+              ? "Your payment has been verified. We're preparing your order."
+              : "Your payment has been recorded. We'll start preparing your order shortly."
+          }
+          order={order}
+        />
       );
     }
 

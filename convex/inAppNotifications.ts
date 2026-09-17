@@ -7,6 +7,25 @@ import { query, mutation, internalMutation } from "./_generated/server";
 import { requireAdminSession } from "./utils/adminAuth";
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Validate that a notification link is an internal route.
+ * Only allows paths starting with "/" and rejects protocol-relative URLs,
+ * javascript: URIs, and absolute URLs.
+ */
+function isValidInternalLink(link: string): boolean {
+  if (!link.startsWith("/")) return false;
+  if (link.startsWith("//")) return false;
+  if (/^https?:/i.test(link)) return false;
+  if (/^javascript:/i.test(link)) return false;
+  if (/^data:/i.test(link)) return false;
+  if (/^vbscript:/i.test(link)) return false;
+  return true;
+}
+
+// ============================================================================
 // Queries
 // ============================================================================
 
@@ -85,6 +104,9 @@ export const create = internalMutation({
     metadata: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
+    if (args.link && !isValidInternalLink(args.link)) {
+      throw new Error("Invalid notification link: only internal routes are allowed");
+    }
     return await ctx.db.insert("inAppNotifications", {
       userId: args.userId,
       title: args.title,

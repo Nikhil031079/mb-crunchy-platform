@@ -147,12 +147,8 @@ export function NotificationBell({ userId, sessionToken, className }: Notificati
                         key={n._id}
                         onClick={() => {
                           if (!n.read) handleMarkRead(n._id);
-                          if (n.link) {
-                            if (n.link.startsWith("/")) {
-                              navigate(n.link);
-                            } else {
-                              window.location.href = n.link;
-                            }
+                          if (n.link && n.link.startsWith("/") && !n.link.startsWith("//")) {
+                            navigate(n.link);
                           }
                         }}
                         className={cn(

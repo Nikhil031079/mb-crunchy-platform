@@ -118,22 +118,34 @@ class RootErrorBoundary extends React.Component<
     };
   }
   componentDidCatch(err: Error) {
-    console.error("[WebContainer preview] Root crash:", err);
+    console.error("[RootErrorBoundary] Uncaught error:", err);
   }
   render() {
     if (this.state.hasError) {
+      if (import.meta.env.DEV) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
+            <div className="max-w-lg text-center">
+              <p className="text-sm font-semibold">Development error</p>
+              <p className="mt-2 text-xs text-muted-foreground break-words">
+                {this.state.message}
+              </p>
+              {this.state.stack && (
+                <pre className="mt-3 text-left text-[10px] leading-4 text-muted-foreground/80 max-h-40 overflow-auto rounded border border-border/60 p-2">
+                  {this.state.stack}
+                </pre>
+              )}
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
           <div className="max-w-lg text-center">
-            <p className="text-sm font-semibold">Preview runtime error</p>
-            <p className="mt-2 text-xs text-muted-foreground break-words">
-              {this.state.message}
+            <p className="text-sm font-semibold">Something went wrong</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Please try again. If the problem persists, contact support.
             </p>
-            {this.state.stack && (
-              <pre className="mt-3 text-left text-[10px] leading-4 text-muted-foreground/80 max-h-40 overflow-auto rounded border border-border/60 p-2">
-                {this.state.stack}
-              </pre>
-            )}
           </div>
         </div>
       );
@@ -158,7 +170,7 @@ function RouteSyncer() {
   useEffect(() => {
     window.parent.postMessage(
       { type: "iframe-route-change", path: location.pathname },
-      "*",
+      window.location.origin,
     );
   }, [location.pathname]);
 
@@ -172,6 +184,7 @@ function RouteSyncer() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === "navigate") {
         if (event.data.direction === "back") window.history.back();
         if (event.data.direction === "forward") window.history.forward();
