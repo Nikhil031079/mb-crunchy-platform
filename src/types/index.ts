@@ -26,6 +26,7 @@ export interface BusinessUnit extends Timestamps {
   banner?: string;
   coverImage?: string;
   icon?: string;
+  iconName?: string;
   description?: string;
   themeColor: string;
   secondaryColor?: string;

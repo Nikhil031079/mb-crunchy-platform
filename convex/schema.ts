@@ -24,6 +24,7 @@ const businessUnits = defineTable({
   banner: v.optional(v.string()),
   coverImage: v.optional(v.string()),
   icon: v.optional(v.string()),
+  iconName: v.optional(v.string()),
   description: v.optional(v.string()),
   themeColor: v.string(),
   secondaryColor: v.optional(v.string()),

@@ -528,9 +528,9 @@ const handleAddToCart = useCallback(
   const bu = businessUnit!;
 
   const BU_ICON =
-    bu.slug === "mb-kitchen" || bu.slug === "kitchen"
+    bu.iconName === "Utensils"
       ? Utensils
-      : bu.slug === "mb-mart" || bu.slug === "mart"
+      : bu.iconName === "ShoppingBag"
         ? ShoppingBag
         : Store;
 

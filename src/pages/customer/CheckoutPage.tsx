@@ -806,9 +806,13 @@ export default function CheckoutPage() {
   const kitchenServiceability = useMemo(() => {
     if (!activeBUs || checkoutItems.length === 0) return null;
     for (const bu of activeBUs) {
-      if (!bu.slug.includes("kitchen")) continue;
-      const hasKitchenItems = checkoutItems.some((item) => item.businessUnitId === bu._id);
-      if (!hasKitchenItems) continue;
+      // Configuration-driven: check serviceabilityMode, not slug/name.
+      // coordinate_radius stores (Kitchen model) need Haversine distance validation.
+      // Undefined serviceabilityMode defaults to coordinate_radius for legacy records.
+      const mode = bu.serviceabilityMode ?? "coordinate_radius";
+      if (mode !== "coordinate_radius") continue;
+      const hasBuItems = checkoutItems.some((item) => item.businessUnitId === bu._id);
+      if (!hasBuItems) continue;
       const svc = checkKitchenServiceability(customerLocation.location, bu);
       if (!svc.serviceable) return { buName: bu.name, ...svc };
     }
@@ -1622,10 +1626,10 @@ export default function CheckoutPage() {
                           className="flex items-start gap-4 rounded-xl border border-border/60 bg-card p-5 text-left transition-all hover:border-primary hover:bg-primary/5 hover:ring-1 hover:ring-primary cursor-pointer"
                         >
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            {bu?.slug?.includes("kitchen") ? (
-                              <Store className="h-5 w-5" />
-                            ) : (
+                            {bu?.serviceabilityMode === "pincode_region" ? (
                               <ShoppingCart className="h-5 w-5" />
+                            ) : (
+                              <Store className="h-5 w-5" />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -1888,10 +1892,10 @@ export default function CheckoutPage() {
                                       ? "PIN near boundary — use GPS or full address for precise availability."
                                       : kitchenServiceability?.reason === "NO_KITCHEN_ORIGIN" ||
                                           kitchenServiceability?.reason === "NO_RADIUS_CONFIGURED"
-                                        ? "Kitchen delivery is currently unavailable."
+                                        ? `${kitchenServiceability?.buName ?? "Store"} delivery is currently unavailable.`
                                         : kitchenServiceability?.distanceKm !== null &&
                                             kitchenServiceability?.radiusKm !== null
-                                          ? `Not available for your location \u00B7 Kitchen radius: ${kitchenServiceability.radiusKm} km`
+                                          ? `Not available for your location \u00B7 ${kitchenServiceability?.buName ?? "Store"} radius: ${kitchenServiceability.radiusKm} km`
                                           : "Not available for your current location"}
                                 </p>
                               ) : (
@@ -2475,7 +2479,7 @@ export default function CheckoutPage() {
                   ) : !storeIsOpen ? (
                     "Store is Closed"
                   ) : !canPlaceDelivery ? (
-                    !canPlaceKitchenDelivery ? "Kitchen Delivery Not Available" : "Delivery Not Available"
+                    !canPlaceKitchenDelivery ? `${kitchenServiceability?.buName ?? "Store"} Delivery Not Available` : "Delivery Not Available"
                   ) : isMartPincodeMode && form.orderType === "delivery" && martDelivery === undefined ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -2502,7 +2506,7 @@ export default function CheckoutPage() {
                       ? "Please set your delivery location to continue."
                       : kitchenServiceability?.reason === "NEAR_BOUNDARY_APPROXIMATE"
                         ? "Your PIN is near the delivery boundary. Please use GPS or enter your full address."
-                        : "MB Kitchen does not deliver to this location. Change location, choose pickup, or remove Kitchen items."}
+                        : `${kitchenServiceability?.buName ?? "Store"} does not deliver to this location. Change location, choose pickup, or remove ${kitchenServiceability?.buName ?? "Store"} items.`}
                   </p>
                 )}
 

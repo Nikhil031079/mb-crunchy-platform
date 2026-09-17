@@ -1010,7 +1010,7 @@ export const create = mutation({
           const hasRadius = bu.deliveryRadiusKm !== undefined && typeof bu.deliveryRadiusKm === "number" && bu.deliveryRadiusKm > 0;
 
           if (!hasOrigin || !hasRadius) {
-            throw new Error("MB Kitchen delivery is currently unavailable. Admin has not configured delivery origin or radius.");
+            throw new Error(`${bu.name} delivery is currently unavailable. Admin has not configured delivery origin or radius.`);
           }
 
           const originLat = bu.originLatitude as number;
@@ -1021,7 +1021,7 @@ export const create = mutation({
           const customerLng = args.customerLongitude;
 
           if (customerLat === undefined || customerLng === undefined) {
-            throw new Error("Please provide a delivery location with coordinates for Kitchen delivery.");
+            throw new Error(`Please provide a delivery location with coordinates for ${bu.name} delivery.`);
           }
 
           if (typeof customerLat !== "number" || !Number.isFinite(customerLat) || customerLat < -90 || customerLat > 90) {
@@ -1048,7 +1048,7 @@ export const create = mutation({
           // Mart pincode-based delivery — use canonical shipping calculation
           const pincode = args.destinationPincode?.trim();
           if (!pincode || !/^\d{6}$/.test(pincode)) {
-            throw new Error("A valid 6-digit destination pincode is required for Mart delivery.");
+            throw new Error(`A valid 6-digit destination pincode is required for ${bu.name} delivery.`);
           }
 
           const quote = await resolveMartShippingQuote(ctx, {

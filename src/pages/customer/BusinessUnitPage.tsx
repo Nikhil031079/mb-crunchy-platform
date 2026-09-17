@@ -670,9 +670,9 @@ export default function BusinessUnitPage() {
   const enableOffers = offers && offers.length > 0;
   const hasFeatured = featuredItems && featuredItems.length > 0;
 
-  const BU_ICON = bu.slug === "mb-kitchen" || bu.slug === "kitchen"
+  const BU_ICON = bu.iconName === "Utensils"
     ? Utensils
-    : bu.slug === "mb-mart" || bu.slug === "mart"
+    : bu.iconName === "ShoppingBag"
     ? ShoppingBag
     : Store;
 
