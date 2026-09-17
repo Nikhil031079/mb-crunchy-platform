@@ -44,6 +44,8 @@ export interface BusinessUnit extends Timestamps {
   originLatitude?: number;
   originLongitude?: number;
   deliveryRadiusKm?: number;
+  catalogMode?: "food" | "grocery";
+  catalogLabel?: string;
   deletedAt?: number;
 }
 

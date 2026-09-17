@@ -125,13 +125,13 @@ function CategoriesSection({
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {allCategories.slice(0, 6).map((cat, index) => {
-            const buSlug = businessUnits.find((b) => b._id === cat.businessUnitId)?.slug ?? "";
-            const enriched = enrichCategory(cat, getCategoryCatalog(buSlug)) as EnrichedCategory;
+            const bu = businessUnits.find((b) => b._id === cat.businessUnitId);
+            const enriched = enrichCategory(cat, getCategoryCatalog(bu?.catalogMode)) as EnrichedCategory;
             return (
               <CategoryCard
                 key={cat._id}
                 category={enriched}
-                businessUnitSlug={buSlug}
+                businessUnitSlug={bu?.slug ?? ""}
                 index={index}
                 icon={enriched.catalog?.icon}
                 gradient={enriched.catalog?.gradient}
@@ -193,19 +193,24 @@ export default function HomePage() {
 
   // Default promotional slides shown when no admin-created banners exist
   const defaultPromoSlides = useMemo(() => {
-    const kitchenSlug = activeBusinessUnits[0]?.slug ?? "mb-kitchen";
-    const martSlug = activeBusinessUnits[1]?.slug ?? "mb-mart";
-    return [
+    if (activeBusinessUnits.length === 0) return [];
+    const bu0 = activeBusinessUnits[0];
+    const bu1 = activeBusinessUnits[1];
+    const slides = [
       {
         _id: "promo-fresh",
         badge: "Fresh & Fast",
         title: "Fresh Food Delivered Fast",
         subtitle: "Hot meals and fresh groceries at your doorstep in minutes.",
         gradient: "from-emerald-600 via-emerald-500 to-teal-600",
-        actions: [
-          { label: "Explore Kitchen", href: `/${kitchenSlug}`, variant: "default" as const },
-          { label: "Shop Mart", href: `/${martSlug}`, variant: "outline" as const },
-        ],
+        actions: bu1
+          ? [
+              { label: `Explore ${bu0.name}`, href: `/${bu0.slug}`, variant: "default" as const },
+              { label: `Shop ${bu1.name}`, href: `/${bu1.slug}`, variant: "outline" as const },
+            ]
+          : [
+              { label: `Explore ${bu0.name}`, href: `/${bu0.slug}`, variant: "default" as const },
+            ],
       },
       {
         _id: "promo-organic",
@@ -213,18 +218,18 @@ export default function HomePage() {
         title: "Organic Grocery Collection",
         subtitle: "Farm-fresh organic staples for your healthy everyday kitchen.",
         gradient: "from-green-600 via-green-500 to-lime-600",
-        actions: [
-          { label: "Shop Mart", href: `/${martSlug}`, variant: "default" as const },
-        ],
+        actions: bu1
+          ? [{ label: `Shop ${bu1.name}`, href: `/${bu1.slug}`, variant: "default" as const }]
+          : [{ label: `Explore ${bu0.name}`, href: `/${bu0.slug}`, variant: "default" as const }],
       },
       {
         _id: "promo-mojitos",
         badge: "Cool & Refreshing",
-        title: "Mojitos Starting at ₹50",
+        title: "Refreshing Summer Favourites",
         subtitle: "Refreshing summer favourites at unbeatable prices.",
         gradient: "from-purple-600 via-fuchsia-500 to-pink-600",
         actions: [
-          { label: "Explore Kitchen", href: `/${kitchenSlug}`, variant: "default" as const },
+          { label: `Explore ${bu0.name}`, href: `/${bu0.slug}`, variant: "default" as const },
         ],
       },
       {
@@ -233,12 +238,17 @@ export default function HomePage() {
         title: "Combo Meals & Party Packs",
         subtitle: "Curated combos and party packs perfect for every occasion.",
         gradient: "from-amber-500 via-orange-500 to-red-600",
-        actions: [
-          { label: "Explore Kitchen", href: `/${kitchenSlug}`, variant: "default" as const },
-          { label: "Shop Mart", href: `/${martSlug}`, variant: "outline" as const },
-        ],
+        actions: bu1
+          ? [
+              { label: `Explore ${bu0.name}`, href: `/${bu0.slug}`, variant: "default" as const },
+              { label: `Shop ${bu1.name}`, href: `/${bu1.slug}`, variant: "outline" as const },
+            ]
+          : [
+              { label: `Explore ${bu0.name}`, href: `/${bu0.slug}`, variant: "default" as const },
+            ],
       },
     ];
+    return slides;
   }, [activeBusinessUnits]);
 
   return (

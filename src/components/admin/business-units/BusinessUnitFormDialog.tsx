@@ -54,9 +54,33 @@ function BusinessUnitForm({ businessUnit, isEditing, onSubmit, onCancel }: Busin
         <div className="grid gap-2"><Label htmlFor={`${formId}-name`}>Name</Label><Input id={`${formId}-name`} value={values.name} onChange={(event) => handleNameChange(event.target.value)} placeholder="e.g. MB Kitchen" required autoFocus /></div>
         <div className="grid gap-2"><Label htmlFor={`${formId}-slug`}>Slug</Label><Input id={`${formId}-slug`} value={values.slug} onChange={(event) => { setSlugEdited(true); update("slug", event.target.value); }} placeholder="e.g. mb-kitchen" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens." /><p className="text-xs text-muted-foreground">Used in the business unit URL.</p></div>
         <div className="grid gap-2"><Label htmlFor={`${formId}-logo`}>Logo URL <span className="font-normal text-muted-foreground">(optional)</span></Label><div className="flex items-center gap-3"><Input id={`${formId}-logo`} value={values.logoUrl} onChange={(event) => update("logoUrl", event.target.value)} placeholder="https://..." /><div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border" style={{ backgroundColor: values.logoUrl ? undefined : values.themeColor }}>{values.logoUrl ? <img src={values.logoUrl} alt="Logo preview" className="size-full object-cover" /> : <span className="text-xs font-bold text-white">{values.name.slice(0, 2).toUpperCase() || "MB"}</span>}</div></div></div>
+        <div className="grid gap-2"><Label htmlFor={`${formId}-icon-name`}>Icon Name <span className="font-normal text-muted-foreground">(optional)</span></Label><Select value={values.iconName ?? ""} onValueChange={(val) => update("iconName", val || undefined)}><SelectTrigger id={`${formId}-icon-name`}><SelectValue placeholder="Default (Store)" /></SelectTrigger><SelectContent><SelectItem value="Utensils">Utensils (food service)</SelectItem><SelectItem value="ShoppingBag">ShoppingBag (retail)</SelectItem><SelectItem value="ShoppingBasket">ShoppingBasket (grocery)</SelectItem><SelectItem value="Store">Store (general)</SelectItem></SelectContent></Select><p className="text-[10px] text-muted-foreground">Icon displayed on the store page header and footer.</p></div>
         <div className="grid gap-4 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor={`${formId}-status`}>Status</Label><Select value={values.status} onValueChange={(value) => update("status", value as BusinessUnitStatus)}><SelectTrigger id={`${formId}-status`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent></Select></div><div className="grid gap-2"><Label htmlFor={`${formId}-order`}>Display order</Label><Input id={`${formId}-order`} type="number" min="1" value={values.displayOrder} onChange={(event) => update("displayOrder", Math.max(1, Number(event.target.value)))} required /></div></div>
         <div className="grid gap-2"><Label htmlFor={`${formId}-color`}>Theme color</Label><div className="flex gap-2"><Input id={`${formId}-color`} value={values.themeColor} onChange={(event) => update("themeColor", event.target.value)} pattern="#[0-9a-fA-F]{6}" title="Use a six digit hex color, e.g. #E85D04." required /><Input type="color" value={values.themeColor} onChange={(event) => update("themeColor", event.target.value)} aria-label="Choose theme color" className="w-12 p-1" /></div></div>
         <div className="grid gap-2"><Label htmlFor={`${formId}-combos`}>Enable Combos</Label><Switch id={`${formId}-combos`} checked={values.enableCombos ?? false} onCheckedChange={(checked) => update("enableCombos", checked)} /></div><div className="grid gap-2"><Label htmlFor={`${formId}-partypacks`}>Enable Party Packs</Label><Switch id={`${formId}-partypacks`} checked={values.enablePartyPacks ?? false} onCheckedChange={(checked) => update("enablePartyPacks", checked)} /></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor={`${formId}-catalog-mode`}>Catalog Type</Label>
+            <Select
+              value={values.catalogMode ?? ""}
+              onValueChange={(val) => update("catalogMode", (val || undefined) as "food" | "grocery" | undefined)}
+            >
+              <SelectTrigger id={`${formId}-catalog-mode`}>
+                <SelectValue placeholder="Auto-detect" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="food">Food (meals, beverages)</SelectItem>
+                <SelectItem value="grocery">Grocery (pantry, essentials)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">Determines which category catalog to use for this store.</p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`${formId}-catalog-label`}>Products Tab Label <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id={`${formId}-catalog-label`} value={values.catalogLabel ?? ""} onChange={(event) => update("catalogLabel", event.target.value || undefined)} placeholder="e.g. Solo Meals" />
+            <p className="text-[10px] text-muted-foreground">Override label for the products tab on the store page.</p>
+          </div>
+        </div>
         <div className="flex items-center justify-between rounded-lg border p-3"><div><Label htmlFor={`${formId}-visible`}>Show on homepage</Label><p className="mt-1 text-xs text-muted-foreground">Allow customers to discover this unit from the homepage.</p></div><Switch id={`${formId}-visible`} checked={values.homepageVisible} onCheckedChange={(checked) => update("homepageVisible", checked)} /></div>
 
         {/* ── Delivery Settings ── */}

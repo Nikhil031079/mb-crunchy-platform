@@ -18,6 +18,9 @@ export interface BusinessUnit {
   originLatitude?: number;
   originLongitude?: number;
   deliveryRadiusKm?: number;
+  iconName?: string;
+  catalogMode?: "food" | "grocery";
+  catalogLabel?: string;
 }
 
 export interface BusinessUnitFormValues {
@@ -35,6 +38,9 @@ export interface BusinessUnitFormValues {
   originLatitude?: number;
   originLongitude?: number;
   deliveryRadiusKm?: number;
+  iconName?: string;
+  catalogMode?: "food" | "grocery";
+  catalogLabel?: string;
 }
 
 export type BusinessUnitSortKey = "name" | "slug" | "status" | "displayOrder";

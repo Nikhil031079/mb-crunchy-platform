@@ -158,8 +158,8 @@ export default function CategoryPage() {
 
   const buSlug = businessUnit?.slug ?? businessUnitSlug ?? "";
   const catalog = useMemo(
-    () => getCategoryCatalog(businessUnit?.slug),
-    [businessUnit?.slug]
+    () => getCategoryCatalog(businessUnit?.catalogMode),
+    [businessUnit?.catalogMode]
   );
 
   // Active categories, enriched with catalog metadata

@@ -7,6 +7,7 @@ import {
   MapPin,
   Heart,
   Clock,
+  Store,
   Utensils,
   ShoppingBasket,
   Instagram,
@@ -66,21 +67,6 @@ export function CustomerFooter({
     .map((bu) => settingsMap?.get(bu._id))
     .find((s) => s !== undefined);
 
-  const kitchenBu =
-    activeBusinessUnits.find(
-      (bu) =>
-        bu.slug.toLowerCase().includes("kitchen") ||
-        bu.name.toLowerCase().includes("kitchen"),
-    ) ?? activeBusinessUnits[0];
-
-  const martBu =
-    activeBusinessUnits.find(
-      (bu) =>
-        bu.slug.toLowerCase().includes("mart") ||
-        bu.name.toLowerCase().includes("mart") ||
-        bu.slug.toLowerCase().includes("grocery"),
-    ) ?? activeBusinessUnits[1];
-
   const socialLinks = firstSettings?.socialLinks;
   const supportPhone = globalSettings?.supportPhone ?? firstSettings?.phone;
   const supportEmail = globalSettings?.supportEmail ?? firstSettings?.email;
@@ -133,69 +119,35 @@ export function CustomerFooter({
             )}
           </div>
 
-          {/* Kitchen */}
-          <div className="space-y-4 lg:col-span-2">
-            <h4 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-              <Utensils className="h-4 w-4 text-accent" />
-              Kitchen
-            </h4>
-            {kitchenBu ? (
-              <ul className="space-y-2.5">
-                <li>
-                  <Link
-                    to={`/${kitchenBu.slug}`}
-                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {kitchenBu.name}
-                  </Link>
-                </li>
-                {kitchenBu.description && (
-                  <li className="text-xs text-muted-foreground/80">
-                    {kitchenBu.description}
+          {/* Dynamic BU columns */}
+          {activeBusinessUnits.map((bu) => {
+            const Icon = bu.iconName === "Utensils" ? Utensils
+              : bu.iconName === "ShoppingBasket" ? ShoppingBasket
+              : Store;
+            return (
+              <div key={bu._id} className="space-y-4 lg:col-span-2">
+                <h4 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+                  <Icon className="h-4 w-4 text-accent" />
+                  {bu.name}
+                </h4>
+                <ul className="space-y-2.5">
+                  <li>
+                    <Link
+                      to={`/${bu.slug}`}
+                      className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      {bu.name}
+                    </Link>
                   </li>
-                )}
-              </ul>
-            ) : (
-              <ul className="space-y-2.5">
-                <li className="text-sm text-muted-foreground">MB Kitchen</li>
-                <li className="text-xs text-muted-foreground/80">
-                  Freshly prepared meals & beverages
-                </li>
-              </ul>
-            )}
-          </div>
-
-          {/* Mart */}
-          <div className="space-y-4 lg:col-span-2">
-            <h4 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-              <ShoppingBasket className="h-4 w-4 text-accent" />
-              Mart
-            </h4>
-            {martBu ? (
-              <ul className="space-y-2.5">
-                <li>
-                  <Link
-                    to={`/${martBu.slug}`}
-                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {martBu.name}
-                  </Link>
-                </li>
-                {martBu.description && (
-                  <li className="text-xs text-muted-foreground/80">
-                    {martBu.description}
-                  </li>
-                )}
-              </ul>
-            ) : (
-              <ul className="space-y-2.5">
-                <li className="text-sm text-muted-foreground">MB Mart</li>
-                <li className="text-xs text-muted-foreground/80">
-                  Organic groceries & everyday essentials
-                </li>
-              </ul>
-            )}
-          </div>
+                  {bu.description && (
+                    <li className="text-xs text-muted-foreground/80">
+                      {bu.description}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            );
+          })}
 
           {/* Contact */}
           <div className="space-y-4 lg:col-span-2">

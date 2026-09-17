@@ -90,7 +90,7 @@ export const PIN_APPROXIMATION_BUFFER_KM = 2;
 export type ServiceabilityReason =
   | "OUTSIDE_RADIUS"
   | "NO_CUSTOMER_COORDINATES"
-  | "NO_KITCHEN_ORIGIN"
+  | "NO_BU_ORIGIN"
   | "BU_DELIVERY_DISABLED"
   | "NO_RADIUS_CONFIGURED"
   | "NEAR_BOUNDARY_APPROXIMATE";
@@ -133,7 +133,7 @@ export function checkKitchenServiceability(
     bu.originLongitude === undefined ||
     !isValidCoordinate(bu.originLatitude, bu.originLongitude)
   ) {
-    return { serviceable: false, distanceKm: null, radiusKm: null, reason: "NO_KITCHEN_ORIGIN" };
+    return { serviceable: false, distanceKm: null, radiusKm: null, reason: "NO_BU_ORIGIN" };
   }
 
   // 3. Radius not configured

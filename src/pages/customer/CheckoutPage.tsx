@@ -1890,7 +1890,7 @@ export default function CheckoutPage() {
                                     ? "Not available until a delivery location is set."
                                     : kitchenServiceability?.reason === "NEAR_BOUNDARY_APPROXIMATE"
                                       ? "PIN near boundary — use GPS or full address for precise availability."
-                                      : kitchenServiceability?.reason === "NO_KITCHEN_ORIGIN" ||
+                                      : kitchenServiceability?.reason === "NO_BU_ORIGIN" ||
                                           kitchenServiceability?.reason === "NO_RADIUS_CONFIGURED"
                                         ? `${kitchenServiceability?.buName ?? "Store"} delivery is currently unavailable.`
                                         : kitchenServiceability?.distanceKm !== null &&

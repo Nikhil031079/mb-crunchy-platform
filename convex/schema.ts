@@ -25,6 +25,16 @@ const businessUnits = defineTable({
   coverImage: v.optional(v.string()),
   icon: v.optional(v.string()),
   iconName: v.optional(v.string()),
+  // Catalog mode determines which category catalog to use for this BU.
+  // "food" = prepared meals / restaurant style
+  // "grocery" = packaged goods / supermarket style
+  // Undefined defaults to "food" for legacy records.
+  catalogMode: v.optional(v.union(
+    v.literal("food"),
+    v.literal("grocery"),
+  )),
+  // Override label for the "products" tab on the BU page. e.g. "Solo Meals".
+  catalogLabel: v.optional(v.string()),
   description: v.optional(v.string()),
   themeColor: v.string(),
   secondaryColor: v.optional(v.string()),

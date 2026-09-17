@@ -390,14 +390,9 @@ export const MART_CATEGORY_CATALOG: CategoryCatalog[] = [
 // Helpers
 // ============================================================================
 
-export function getCategoryCatalog(buSlug?: string | null): CategoryCatalog[] {
-  const slug = buSlug?.toLowerCase() ?? "";
-  if (slug.includes("kitchen") || slug.includes("food") || slug.includes("restaurant")) {
-    return KITCHEN_CATEGORY_CATALOG;
-  }
-  if (slug.includes("mart") || slug.includes("grocery") || slug.includes("store")) {
-    return MART_CATEGORY_CATALOG;
-  }
+export function getCategoryCatalog(catalogMode?: "food" | "grocery" | null): CategoryCatalog[] {
+  if (catalogMode === "food") return KITCHEN_CATEGORY_CATALOG;
+  if (catalogMode === "grocery") return MART_CATEGORY_CATALOG;
   return [...KITCHEN_CATEGORY_CATALOG, ...MART_CATEGORY_CATALOG];
 }
 

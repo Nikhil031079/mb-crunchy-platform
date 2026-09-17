@@ -275,8 +275,8 @@ export default function BusinessUnitPage() {
 
   // Enrich categories with catalog metadata (icons, gradients, featured)
   const catalog = useMemo(
-    () => getCategoryCatalog(businessUnit?.slug),
-    [businessUnit?.slug]
+    () => getCategoryCatalog(businessUnit?.catalogMode),
+    [businessUnit?.catalogMode]
   );
 
   const enrichedCategories = useMemo<EnrichedCategory[]>(
@@ -911,7 +911,7 @@ export default function BusinessUnitPage() {
           {(
             [
               { mode: "all" as CatalogMode, label: "All" },
-              { mode: "products" as CatalogMode, label: bu.slug === "mb-kitchen" || bu.slug === "kitchen" ? "Solo Meals" : "Products" },
+              { mode: "products" as CatalogMode, label: bu.catalogLabel || "Products" },
               { mode: "combos" as CatalogMode, label: "Combos" },
               { mode: "partyPacks" as CatalogMode, label: "Party Packs" },
             ] as const
