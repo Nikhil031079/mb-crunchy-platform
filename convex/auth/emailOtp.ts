@@ -16,6 +16,10 @@ export const emailOtp = Email({
     return generateRandomString(random, alphabet, 6);
   },
   async sendVerificationRequest({ identifier: email, token }) {
+    const vlyApiKey = process.env.VLY_API_KEY;
+    if (!vlyApiKey) {
+      throw new Error("VLY_API_KEY is not configured");
+    }
     try {
       await axios.post(
         "https://email.vly.ai/send_otp",
@@ -26,7 +30,7 @@ export const emailOtp = Email({
         },
         {
           headers: {
-            "x-api-key": "vlytothemoon2025",
+            "x-api-key": vlyApiKey,
           },
         },
       );

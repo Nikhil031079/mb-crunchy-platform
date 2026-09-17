@@ -7,7 +7,7 @@ import { query, mutation, internalQuery, internalMutation } from "./_generated/s
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminSession, requireAdminRole } from "./utils/adminAuth";
 import { canReadCustomerData, sanitizeOrderForCustomer } from "./utils/customerAccess";
 import { logActivity } from "./orderActivities";
 import type { ActivityAction } from "./orderActivities";
@@ -309,13 +309,18 @@ export const getByRazorpayPaymentIdInternal = internalQuery({
 export const getByBusinessUnit = query({
   args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
-    return await ctx.db
-      .query("orders")
-      .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
-      .filter((q) => q.eq(q.field("deletedAt"), undefined))
-      .order("desc")
-      .collect();
+    const { admin } = await requireAdminSession(ctx, args.sessionToken);
+
+    let q = ctx.db.query("orders").withIndex("by_business_unit", (q: any) => q.eq("businessUnitId", args.businessUnitId));
+
+    if (admin.role === "kitchen") {
+      const allowedBUs = admin.businessUnitIds ?? [];
+      if (!allowedBUs.includes(args.businessUnitId)) {
+        return [];
+      }
+    }
+
+    return await q.filter((q: any) => q.eq(q.field("deletedAt"), undefined)).order("desc").collect();
   },
 });
 
@@ -781,6 +786,22 @@ export const create = mutation({
           existing: true,
         };
       }
+    }
+
+    // ----------------------------------------------------------------------
+    // 0b. Rate limiting — prevent spam order creation per phone number.
+    // A guest or authenticated customer may create at most 3 orders
+    // per phone within a 10-minute window.
+    // ----------------------------------------------------------------------
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    const recentOrdersForPhone = await ctx.db
+      .query("orders")
+      .withIndex("by_phone", (q: any) => q.eq("customerPhone", customerPhone))
+      .filter((q: any) => q.gte(q.field("createdAt"), tenMinutesAgo))
+      .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+    if (recentOrdersForPhone.length >= 3) {
+      throw new Error("Too many orders created recently. Please wait before placing more orders.");
     }
 
     // ----------------------------------------------------------------------

@@ -973,6 +973,8 @@ const admins = defineTable({
   recoveryKeySalt: v.optional(v.string()),
   businessUnitIds: v.optional(v.array(v.id("businessUnits"))),
   lastLoginAt: v.optional(v.number()),
+  failedLoginAttempts: v.optional(v.number()),
+  firstFailedLoginAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

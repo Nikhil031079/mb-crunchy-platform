@@ -29,3 +29,45 @@ export async function requireAdminSession(ctx: any, sessionToken: string) {
 
   return { admin, payload };
 }
+
+// ============================================================================
+// requireAdminRole — requires admin session AND specific role(s)
+// ============================================================================
+
+export async function requireAdminRole(ctx: any, sessionToken: string, allowedRoles: string[]) {
+  const { admin, payload } = await requireAdminSession(ctx, sessionToken);
+  if (!allowedRoles.includes(admin.role)) {
+    throw new Error("Insufficient permissions");
+  }
+  return { admin, payload };
+}
+
+// ============================================================================
+// filterByBusinessUnitIds — filters a query result by admin's authorized BUs
+// Returns all results for superadmin/admin, or only admin.businessUnitIds for kitchen
+// ============================================================================
+
+export function filterByBusinessUnitIds(
+  ctx: any,
+  query: any,
+  admin: any,
+  businessUnitIdArg: any,
+) {
+  if (admin.role === "superadmin" || admin.role === "admin") {
+    return query.withIndex("by_business_unit", (q: any) => q.eq("businessUnitId", businessUnitIdArg));
+  }
+  const allowedBUs = admin.businessUnitIds ?? [];
+  if (allowedBUs.length === 0) {
+    return query.filter((q: any) => q.eq(q.field("_id"), "none"));
+  }
+  return query.filter((q: any) => q.neq(q.field("businessUnitId"), undefined)).filter((q: any) => {
+    let match = false;
+    for (const buId of allowedBUs) {
+      if (q.field("businessUnitId") === buId) {
+        match = true;
+        break;
+      }
+    }
+    return match;
+  });
+}

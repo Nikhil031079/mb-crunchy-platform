@@ -1,14 +1,27 @@
 const PBKDF2_ITERATIONS = 100_000;
-// Production deployments MUST set SESSION_SECRET via `npx convex env set`.
-// The fallback only preserves local-dev behaviour before the env var is set.
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ?? "mb-crunchy-admin-session-key-v1";
 
-if (!process.env.SESSION_SECRET) {
-  console.warn(
-    "[mb-crunchy] SESSION_SECRET is not set — using the development fallback secret. " +
-      "Set a strong random value in production with: npx convex env set SESSION_SECRET <random-string>",
-  );
+function validateSessionSecret(secret: string | undefined): string {
+  if (!secret) {
+    throw new Error("SESSION_SECRET is not configured");
+  }
+  if (secret.length < 32) {
+    throw new Error("SESSION_SECRET must be at least 32 characters");
+  }
+  if (
+    secret === "mb-crunchy-admin-session-key-v1" ||
+    secret === "development" ||
+    secret === "test" ||
+    secret === "change-me"
+  ) {
+    throw new Error("SESSION_SECRET must not be a known default or development value");
+  }
+  return secret;
+}
+
+const SESSION_SECRET = validateSessionSecret(process.env.SESSION_SECRET);
+
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET must be set in production");
 }
 
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;

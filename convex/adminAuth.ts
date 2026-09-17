@@ -151,32 +151,45 @@ export const setup = mutation({
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-// Brute-force protection (in-memory)
-const loginAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
-
-function checkBruteForce(username: string): boolean {
-  const record = loginAttempts.get(username);
-  if (!record) return false;
-  if (record.count >= MAX_LOGIN_ATTEMPTS && (Date.now() - record.firstAttemptAt) < LOCKOUT_DURATION_MS) {
-    return true;
-  }
-  if (record.count >= MAX_LOGIN_ATTEMPTS && (Date.now() - record.firstAttemptAt) >= LOCKOUT_DURATION_MS) {
-    loginAttempts.delete(username);
+async function checkBruteForce(ctx: any, username: string): Promise<boolean> {
+  const admin = await ctx.db
+    .query("admins")
+    .withIndex("by_username", (q: any) => q.eq("username", username))
+    .first();
+  if (!admin) return false;
+  const attempts = admin.failedLoginAttempts ?? 0;
+  const firstFailedAt = admin.firstFailedLoginAt;
+  if (attempts >= MAX_LOGIN_ATTEMPTS && firstFailedAt) {
+    if (Date.now() - firstFailedAt < LOCKOUT_DURATION_MS) {
+      return true;
+    }
+    await ctx.db.patch(admin._id, { failedLoginAttempts: 0, firstFailedLoginAt: undefined });
   }
   return false;
 }
 
-function recordFailedAttempt(username: string) {
-  const record = loginAttempts.get(username);
-  if (!record || (Date.now() - record.firstAttemptAt) >= LOCKOUT_DURATION_MS) {
-    loginAttempts.set(username, { count: 1, firstAttemptAt: Date.now() });
+async function recordFailedAttempt(ctx: any, username: string): Promise<void> {
+  const admin = await ctx.db
+    .query("admins")
+    .withIndex("by_username", (q: any) => q.eq("username", username))
+    .first();
+  if (!admin) return;
+  const now = Date.now();
+  const attempts = admin.failedLoginAttempts ?? 0;
+  if (attempts === 0 || (now - (admin.firstFailedLoginAt ?? 0)) >= LOCKOUT_DURATION_MS) {
+    await ctx.db.patch(admin._id, { failedLoginAttempts: 1, firstFailedLoginAt: now });
   } else {
-    record.count++;
+    await ctx.db.patch(admin._id, { failedLoginAttempts: attempts + 1 });
   }
 }
 
-function clearAttempts(username: string) {
-  loginAttempts.delete(username);
+async function clearAttempts(ctx: any, username: string): Promise<void> {
+  const admin = await ctx.db
+    .query("admins")
+    .withIndex("by_username", (q: any) => q.eq("username", username))
+    .first();
+  if (!admin) return;
+  await ctx.db.patch(admin._id, { failedLoginAttempts: 0, firstFailedLoginAt: undefined });
 }
 
 export const login = mutation({
@@ -199,7 +212,7 @@ export const login = mutation({
     }
 
     // Brute-force protection
-    if (checkBruteForce(args.username)) {
+    if (await checkBruteForce(ctx, args.username)) {
       return { success: false as const, error: "Account temporarily locked due to too many failed attempts. Try again in 15 minutes." };
     }
 
@@ -210,11 +223,11 @@ export const login = mutation({
     );
 
     if (!valid) {
-      recordFailedAttempt(args.username);
+      await recordFailedAttempt(ctx, args.username);
       return { success: false as const, error: "Invalid username or password." };
     }
 
-    clearAttempts(args.username);
+    await clearAttempts(ctx, args.username);
     const now = Date.now();
     await ctx.db.patch(admin._id, { lastLoginAt: now, updatedAt: now });
 
