@@ -731,7 +731,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SearchSort)}
                   aria-label="Sort results"
-                  className="h-8 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
+                  className="h-11 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
                 >
                   {SORT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -748,7 +748,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                     value={selectedCategoryOption}
                     onChange={(e) => setSelectedCategory(e.target.value)}
                     aria-label="Filter by category"
-                    className="h-8 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
+                    className="h-11 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
                   >
                     <option value="all">All Categories</option>
                     {categoryOptions.map((option) => (
@@ -762,7 +762,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
 
               <button
                 onClick={() => setFeaturedOnly((value) => !value)}
-                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
                   featuredOnly
                     ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-border/60 bg-card text-muted-foreground hover:text-foreground"
@@ -774,7 +774,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
 
               <button
                 onClick={() => setInStockOnly((value) => !value)}
-                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
                   inStockOnly
                     ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-border/60 bg-card text-muted-foreground hover:text-foreground"
@@ -787,7 +787,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
               {filtersActive && (
                 <button
                   onClick={clearFilters}
-                  className="h-8 shrink-0 rounded-full px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  className="h-11 shrink-0 rounded-full px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                 >
                   Clear
                 </button>

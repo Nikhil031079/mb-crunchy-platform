@@ -131,7 +131,7 @@ function CollectionItemCard({
               variant="ghost"
               size="icon"
               onClick={handleRemove}
-              className="absolute right-2 top-2 h-7 w-7 rounded-full bg-background/60 backdrop-blur-sm hover:bg-destructive/10 hover:text-destructive"
+              className="absolute right-2 top-2 h-11 w-11 rounded-full bg-background/60 backdrop-blur-sm hover:bg-destructive/10 hover:text-destructive"
               aria-label="Remove from collection"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -168,7 +168,7 @@ function CollectionItemCard({
             {buSlug && itemSlug && (
               <Link
                 to={`/${buSlug}/${itemSlug}`}
-                className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-border/60 text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center justify-center h-11 w-11 rounded-lg border border-border/60 text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Link>

@@ -546,10 +546,10 @@ export default function CartPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => removeItem(item.cartItemId ?? 'cl_0')}
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          className="h-11 w-11 text-muted-foreground hover:text-destructive"
                           aria-label={`Remove ${item.name}`}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                         <QuantitySelector
                           value={item.quantity}
@@ -592,11 +592,11 @@ export default function CartPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 text-emerald-700 hover:text-destructive"
+                      className="h-11 w-11 text-emerald-700 hover:text-destructive"
                       onClick={() => removeMealDeal(deal.mealDealId)}
                       aria-label={`Remove ${deal.name}`}
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}

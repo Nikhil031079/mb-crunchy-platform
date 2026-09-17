@@ -467,13 +467,19 @@ export const HeroSection = memo(function HeroSection({
                   key={i}
                   onClick={() => goToSlide(i)}
                   className={cn(
-                    "h-2 rounded-full transition-all duration-300",
-                    i === currentSlide
-                      ? "w-6 bg-white"
-                      : "w-2 bg-white/40 hover:bg-white/60"
+                    "flex h-11 w-11 items-center justify-center rounded-full transition-all duration-300",
                   )}
                   aria-label={`Go to slide ${i + 1}`}
-                />
+                >
+                  <span
+                    className={cn(
+                      "h-2 rounded-full transition-all duration-300",
+                      i === currentSlide
+                        ? "w-6 bg-white"
+                        : "w-2 bg-white/40 hover:bg-white/60"
+                    )}
+                  />
+                </button>
               ))}
             </div>
           )}

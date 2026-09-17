@@ -294,9 +294,9 @@ export function ItemDetailsModal({
         <div className="mt-6">
           <label className="block text-sm font-medium mb-1">Quantity</label>
           <div className="flex items-center gap-2">
-            <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="rounded-l-md border border-border/50 px-3 py-1.5 text-sm hover:border-border" disabled={quantity <= 1}>−</button>
+            <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="rounded-l-md border border-border/50 px-3 py-2.5 text-sm hover:border-border min-h-[44px]" disabled={quantity <= 1}>−</button>
             <span className="min-w-[1.5rem] text-center text-xs font-bold tabular-nums">{quantity}</span>
-            <button onClick={() => setQuantity((q) => q + 1)} className="rounded-r-md border border-border/50 px-3 py-1.5 text-sm hover:border-border">+</button>
+            <button onClick={() => setQuantity((q) => q + 1)} className="rounded-r-md border border-border/50 px-3 py-2.5 text-sm hover:border-border min-h-[44px]">+</button>
           </div>
         </div>
         <Button size="lg" onClick={handleAddToCart} className="w-full gap-2 mt-4" disabled={!selectedVariant && isProduct}>

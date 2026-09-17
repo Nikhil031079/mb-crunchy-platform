@@ -133,7 +133,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
                 You can contact us if you&apos;d like to discuss another delivery option.
               </p>
               <Button
-                size="sm"
+                size="default"
                 className="mt-3 gap-1.5"
                 onClick={() => onOrderAgain(order)}
               >
@@ -161,7 +161,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
                 : "This order was cancelled."}
             </p>
             <Button
-              size="sm"
+              size="default"
               className="mt-3 gap-1.5"
               onClick={() => onOrderAgain(order)}
             >
@@ -305,11 +305,11 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
               Delivery charge confirmed for your location. Accept to proceed with payment.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" className="gap-1.5" onClick={handleAccept} disabled={quoteAction !== "idle"}>
+              <Button size="default" className="gap-1.5" onClick={handleAccept} disabled={quoteAction !== "idle"}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 {quoteAction === "accepting" ? "Accepting..." : `Accept & Pay ${formatCurrency(order.total)}`}
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5 text-destructive" onClick={handleReject} disabled={quoteAction !== "idle"}>
+              <Button size="default" variant="outline" className="gap-1.5 text-destructive" onClick={handleReject} disabled={quoteAction !== "idle"}>
                 <XCircle className="h-3.5 w-3.5" />
                 {quoteAction === "rejecting" ? "Declining..." : "Decline"}
               </Button>
@@ -352,7 +352,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
-                size="sm"
+                size="default"
                 className="gap-1.5"
                 onClick={handlePayment}
                 disabled={paymentLoading}
@@ -414,7 +414,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
-                size="sm"
+                size="default"
                 className="gap-1.5"
                 onClick={handlePayment}
                 disabled={paymentLoading}
@@ -454,7 +454,7 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
             </p>
 
             <Button
-              size="sm"
+              size="default"
               className="mt-3 gap-1.5"
               onClick={handlePayment}
               disabled={paymentLoading}

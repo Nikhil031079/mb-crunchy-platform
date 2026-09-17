@@ -875,7 +875,7 @@ export default function BusinessUnitPage() {
                   size="icon"
                   onClick={() => setViewMode("grid")}
                   className={cn(
-                    "h-9 w-9 rounded-none",
+                    "h-11 w-11 rounded-none",
                     viewMode === "grid"
                       ? "bg-secondary text-foreground"
                       : "text-muted-foreground"
@@ -888,7 +888,7 @@ export default function BusinessUnitPage() {
                   size="icon"
                   onClick={() => setViewMode("list")}
                   className={cn(
-                    "h-9 w-9 rounded-none border-l border-border/60",
+                    "h-11 w-11 rounded-none border-l border-border/60",
                     viewMode === "list"
                       ? "bg-secondary text-foreground"
                       : "text-muted-foreground"

@@ -730,7 +730,7 @@ export default function ProductPage() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
                     onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
                     aria-label="Previous image"
                   >
@@ -739,7 +739,7 @@ export default function ProductPage() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-background/80 backdrop-blur-sm shadow-md hover:bg-background/95"
                     onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
                     aria-label="Next image"
                   >
@@ -790,7 +790,7 @@ export default function ProductPage() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="absolute left-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                    className="absolute left-4 z-10 h-11 w-11 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
                     onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
                     aria-label="Previous image"
                   >
@@ -815,7 +815,7 @@ export default function ProductPage() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="absolute right-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+                    className="absolute right-4 z-10 h-11 w-11 rounded-full bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
                     onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
                     aria-label="Next image"
                   >
@@ -831,7 +831,7 @@ export default function ProductPage() {
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleThumbnailClick(i); }}
                         className={cn(
-                          "h-10 w-10 shrink-0 overflow-hidden rounded-md border-2 transition-all",
+                          "h-11 w-11 shrink-0 overflow-hidden rounded-md border-2 transition-all",
                           selectedImageIndex === i
                             ? "border-white"
                             : "border-transparent opacity-60 hover:opacity-100"
