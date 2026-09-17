@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { cn } from "@/lib/utils";
+import { escapeHtml } from "@/lib/html-sanitizer";
 import { formatCurrency } from "@/utils";
 import type { OrderStatus } from "@/types";
 import { useKitchenAuth } from "@/hooks/use-kitchen-auth";
@@ -194,22 +195,22 @@ export default function KitchenDashboard() {
     const itemsHtml = order.items
       .map(
         (item: any) =>
-          `<tr><td>${item.name}</td><td style="text-align:right">${item.quantity}</td><td style="text-align:right">${formatCurrency(item.unitPrice)}</td></tr>`
+          `<tr><td>${escapeHtml(item.name)}</td><td style="text-align:right">${escapeHtml(String(item.quantity))}</td><td style="text-align:right">${escapeHtml(formatCurrency(item.unitPrice))}</td></tr>`
       )
       .join("");
     printWindow.document.write(`
-      <html><head><title>Kitchen Ticket #${order.orderNumber}</title>
+      <html><head><title>Kitchen Ticket ${escapeHtml(order.orderNumber)}</title>
       <style>body{font-family:monospace;padding:20px;font-size:14px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:4px}th{text-align:left}</style></head>
       <body>
-        <h2>Kitchen Ticket - ${order.orderNumber}</h2>
-        <p><strong>Customer:</strong> ${order.customerName}</p>
-        <p><strong>Phone:</strong> ${order.customerPhone}</p>
-        <p><strong>Type:</strong> ${order.orderType === "delivery" ? "Delivery" : "Pickup"}</p>
-        <p><strong>Address:</strong> ${order.deliveryAddress ?? "N/A"}</p>
-        <p><strong>Time:</strong> ${new Date(order.createdAt).toLocaleString()}</p>
+        <h2>Kitchen Ticket - ${escapeHtml(order.orderNumber)}</h2>
+        <p><strong>Customer:</strong> ${escapeHtml(order.customerName)}</p>
+        <p><strong>Phone:</strong> ${escapeHtml(order.customerPhone)}</p>
+        <p><strong>Type:</strong> ${escapeHtml(order.orderType === "delivery" ? "Delivery" : "Pickup")}</p>
+        <p><strong>Address:</strong> ${escapeHtml(order.deliveryAddress ?? "N/A")}</p>
+        <p><strong>Time:</strong> ${escapeHtml(new Date(order.createdAt).toLocaleString())}</p>
         <table><thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Price</th></tr></thead><tbody>${itemsHtml}</tbody></table>
-        <p><strong>Total:</strong> ${formatCurrency(order.total)}</p>
-        <p><strong>Notes:</strong> ${order.deliveryNotes ?? "None"}</p>
+        <p><strong>Total:</strong> ${escapeHtml(formatCurrency(order.total))}</p>
+        <p><strong>Notes:</strong> ${escapeHtml(order.deliveryNotes ?? "None")}</p>
       </body></html>
     `);
     printWindow.document.close();

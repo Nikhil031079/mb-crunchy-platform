@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,15 +10,17 @@ import {
   RefreshCcw,
   Truck,
   XCircle,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
-import { ROUTES } from "@/constants";
+import { ROUTES, SITE_NAME } from "@/constants";
 import { formatCurrency, formatDateTime } from "@/utils";
 import { cn } from "@/lib/utils";
+import { openRazorpayCheckout } from "@/hooks/use-razorpay";
 
 import { Button } from "@/components/ui/button";
 
@@ -51,7 +53,10 @@ interface PaymentConfig {
 export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendingCardProps) {
   const acceptDeliveryQuote = useMutation(api.orders.acceptDeliveryQuote);
   const rejectDeliveryQuote = useMutation(api.orders.rejectDeliveryQuote);
+  const createRazorpayOrder = useAction(api.razorpay.createOrder);
+  const verifyRazorpayPayment = useAction(api.razorpay.verifyPayment);
   const [quoteAction, setQuoteAction] = useState<"idle" | "accepting" | "rejecting">("idle");
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   const settings = useQuery(
     api.settings.getBusinessUnitSettings,
@@ -70,6 +75,44 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
   const quoteQuoted = isOutsideArea && order.deliveryQuoteStatus === "quoted";
   const quoteAccepted = isOutsideArea && order.deliveryQuoteStatus === "accepted";
   const quoteRejected = isOutsideArea && order.deliveryQuoteStatus === "rejected";
+
+  // Razorpay retry handler
+  const handlePayment = useCallback(async () => {
+    if (paymentLoading) return;
+    setPaymentLoading(true);
+    try {
+      const amount = order.total;
+      const razorpayResult = await openRazorpayCheckout({
+        orderId: order._id as Id<"orders">,
+        amount,
+        customerName: order.customerName || undefined,
+        customerPhone: order.customerPhone,
+        businessName: SITE_NAME,
+        createRazorpayOrder: (args) => createRazorpayOrder(args as any),
+        verifyRazorpayPayment: (args) => verifyRazorpayPayment(args as any),
+      });
+
+      if (razorpayResult.success) {
+        toast.success("Payment successful!", {
+          description: "Your order has been confirmed.",
+        });
+      } else if (razorpayResult.error) {
+        toast.error("Payment failed", {
+          description: razorpayResult.error,
+        });
+      } else {
+        toast.info("Payment pending", {
+          description: "Your order is reserved. Pay now or complete it later from Track Order.",
+        });
+      }
+    } catch {
+      toast.error("Payment failed", {
+        description: "Please try again or contact support.",
+      });
+    } finally {
+      setPaymentLoading(false);
+    }
+  }, [order, createRazorpayOrder, verifyRazorpayPayment, paymentLoading]);
 
   // --------------------------------------------------------------------------
   // Reservation expired / cancelled / refunded
@@ -311,9 +354,14 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => toast.info("Payment via Razorpay coming soon")}
+                onClick={handlePayment}
+                disabled={paymentLoading}
               >
-                <CreditCard className="h-3.5 w-3.5" />
+                {paymentLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CreditCard className="h-3.5 w-3.5" />
+                )}
                 Pay Now
               </Button>
             </div>
@@ -368,9 +416,14 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => toast.info("Payment via Razorpay coming soon")}
+                onClick={handlePayment}
+                disabled={paymentLoading}
               >
-                <CreditCard className="h-3.5 w-3.5" />
+                {paymentLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CreditCard className="h-3.5 w-3.5" />
+                )}
                 Pay Now
               </Button>
             </div>
@@ -403,9 +456,14 @@ export function PaymentPendingCard({ order, onOrderAgain, phone }: PaymentPendin
             <Button
               size="sm"
               className="mt-3 gap-1.5"
-              onClick={() => toast.info("Payment via Razorpay coming soon")}
+              onClick={handlePayment}
+              disabled={paymentLoading}
             >
-              <CreditCard className="h-3.5 w-3.5" />
+              {paymentLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CreditCard className="h-3.5 w-3.5" />
+              )}
               Pay Now
             </Button>
           </div>

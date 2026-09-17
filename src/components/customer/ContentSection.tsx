@@ -6,6 +6,7 @@ import { LayoutGrid, ArrowRight, ImageOff } from "lucide-react";
 import { api } from "@convex/_generated/api";
 
 import { cn } from "@/lib/utils";
+import { sanitizeHtml } from "@/lib/html-sanitizer";
 import { isContentActive, getContentMarketingSettings } from "@/utils";
 
 import { SectionHeader } from "./SectionHeader";
@@ -118,7 +119,7 @@ function ContentCard({ card }: { card: Content }) {
         {isRich && card.body ? (
           <div
             className="prose-sm mt-1 line-clamp-3 text-sm text-muted-foreground [&_a]:text-accent"
-            dangerouslySetInnerHTML={{ __html: card.body }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.body) }}
           />
         ) : (
           bodyText && (

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { hashPassword } from "@/utils/crypto";
+import { escapeHtml } from "@/lib/html-sanitizer";
 import { ROUTES } from "@/constants";
 import { useBranding } from "@/hooks/use-branding";
 
@@ -117,9 +118,9 @@ export default function AdminSetupPage() {
     printWindow.document.write(`
       <html><head><title>Recovery Key</title></head>
       <body style="font-family:monospace;padding:40px;">
-        <h2>${siteName} - Admin Recovery Key</h2>
-        <p><strong>Username:</strong> ${username}</p>
-        <p><strong>Recovery Key:</strong> ${recoveryKey}</p>
+        <h2>${escapeHtml(siteName)} - Admin Recovery Key</h2>
+        <p><strong>Username:</strong> ${escapeHtml(username)}</p>
+        <p><strong>Recovery Key:</strong> ${escapeHtml(recoveryKey)}</p>
         <p style="color:red;margin-top:20px;"><strong>Store this key in a safe place. It will not be shown again.</strong></p>
       </body></html>
     `);
