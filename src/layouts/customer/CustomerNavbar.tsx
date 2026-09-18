@@ -108,7 +108,7 @@ export function CustomerNavbar({
             </span>
           </Link>
 
-          {/* Location — desktop */}
+{/* Location — desktop */}
           <button
             type="button"
             onClick={() => setLocationPickerOpen(true)}
@@ -117,12 +117,12 @@ export function CustomerNavbar({
             <MapPin className="h-4 w-4 shrink-0" />
             <span className="max-w-[160px] truncate">
               {customerLocation.location?.zipCode
-                ? customerLocation.location.zipCode
+                ? `PIN ${customerLocation.location.zipCode}`
                 : customerLocation.location?.city
                   ? customerLocation.location.city
-                    : customerLocation.location?.address
-                      ? customerLocation.location.address.slice(0, 24)
-                      : "Select location"}
+                  : customerLocation.location?.address
+                    ? customerLocation.location.address.slice(0, 24)
+                    : "Select location"}
             </span>
           </button>
 

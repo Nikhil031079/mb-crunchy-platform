@@ -50,6 +50,9 @@ export function LocationPickerModal({
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
 
+  // Track whether GPS was already attempted this session, to avoid repeated prompts
+  const [gpsAttempted, setGpsAttempted] = useState(false);
+
   // PIN state
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
@@ -84,10 +87,10 @@ export function LocationPickerModal({
     [onOpenChange, reset],
   );
 
-  // --- GPS ---------------------------------------------------------------
+// --- GPS ---------------------------------------------------------------
   const handleUseCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      setGpsError("Geolocation is not supported by your browser.");
+      setGpsError("Couldn't get your location. You can enter your PIN code instead.");
       return;
     }
     setGpsLoading(true);
@@ -112,11 +115,11 @@ export function LocationPickerModal({
       (error) => {
         setGpsLoading(false);
         if (error.code === error.PERMISSION_DENIED) {
-          setGpsError("Location permission denied. Please enter PIN or address instead.");
+          setGpsError("Couldn't get your location. You can enter your PIN code instead.");
         } else if (error.code === error.POSITION_UNAVAILABLE) {
-          setGpsError("Location unavailable. Please enter PIN or address instead.");
+          setGpsError("Location unavailable. You can enter your PIN code instead.");
         } else {
-          setGpsError("Location request timed out. Please try again.");
+          setGpsError("Location request timed out. You can enter your PIN code instead.");
         }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
