@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
@@ -39,7 +39,7 @@ export const getForUser = query({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (args.sessionToken) {
-      await requireAdminSession(ctx, args.sessionToken);
+      await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     } else if (!identity || identity.subject !== args.userId) {
       return [];
     }
@@ -69,7 +69,7 @@ export const getUnreadCount = query({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (args.sessionToken) {
-      await requireAdminSession(ctx, args.sessionToken);
+      await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     } else if (!identity || identity.subject !== args.userId) {
       return 0;
     }

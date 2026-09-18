@@ -24,7 +24,9 @@ export default function KitchenLoginPage() {
     setError(null);
     setIsLoading(true);
 
-    const result = await login(username.trim(), password);
+    // Staff entry point only accepts the kitchen role (server-enforced;
+    // the hook also verifies role client-side as defense in depth).
+    const result = await login(username.trim(), password, ["kitchen"]);
     setIsLoading(false);
 
     if (result.success) {

@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
@@ -102,7 +102,7 @@ export const create = mutation({
     deliveryRadiusKm: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     // Enforce unique slug
     if (await slugExists(ctx, args.slug)) {
@@ -173,7 +173,7 @@ export const update = mutation({
     deliveryRadiusKm: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, id, ...fields } = args;
 
@@ -227,7 +227,7 @@ export const update = mutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -244,7 +244,7 @@ export const softDelete = mutation({
 export const restore = mutation({
   args: { sessionToken: v.string(), id: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

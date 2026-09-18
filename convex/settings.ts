@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 
 // ============================================================================
@@ -58,7 +58,7 @@ export const upsertBusinessUnitSettings = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
@@ -108,7 +108,7 @@ export const upsertGlobalSettings = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();

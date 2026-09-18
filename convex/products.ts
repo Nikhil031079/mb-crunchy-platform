@@ -5,7 +5,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 import { firstActivePrice } from "./utils/variantHelper";
 
 // ============================================================================
@@ -238,7 +238,7 @@ export const create = mutation({
     sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     // Validate shipping metadata
     if (args.weightGrams !== undefined && args.weightGrams <= 0) {
@@ -382,7 +382,7 @@ export const update = mutation({
     sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { id, sessionToken: _, ...fields } = args;
 
@@ -518,7 +518,7 @@ export const update = mutation({
 export const softDelete = mutation({
   args: { id: v.id("products"), sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -537,7 +537,7 @@ export const softDelete = mutation({
 export const getAll = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     // Return ALL products including archived/deleted for admin management
     return await ctx.db
       .query("products")
@@ -553,7 +553,7 @@ export const getAll = query({
 export const restore = mutation({
   args: { id: v.id("products"), sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const product = await ctx.db.get(args.id);
     if (!product) {

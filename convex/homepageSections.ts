@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // Default homepage layout sections
 const DEFAULT_SECTIONS = [
@@ -61,7 +61,7 @@ export const getVisible = query({
 export const initializeDefaults = mutation({
   args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
 
@@ -111,7 +111,7 @@ export const create = mutation({
     settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
@@ -134,7 +134,7 @@ export const update = mutation({
     settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
@@ -153,7 +153,7 @@ export const reorder = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     for (const item of args.items) {
@@ -169,7 +169,7 @@ export const reorder = mutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("homepageSections") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

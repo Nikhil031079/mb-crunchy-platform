@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Daily Metrics Queries
@@ -17,7 +17,7 @@ export const getDailyMetrics = query({
     date: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("dailyMetrics")
       .withIndex("by_business_unit", (q) =>
@@ -35,7 +35,7 @@ export const getMetricsRange = query({
     endDate: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("dailyMetrics")
       .withIndex("by_business_unit", (q) =>
@@ -136,7 +136,7 @@ export const getEvents = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     let query = ctx.db
       .query("analyticsEvents")
       .withIndex("by_business_unit", (q) =>
@@ -159,7 +159,7 @@ export const getMostViewed = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const events = await ctx.db
       .query("analyticsEvents")
       .withIndex("by_event_type", (q) => q.eq("eventType", "view"))

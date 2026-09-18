@@ -15,7 +15,7 @@ interface AdminAuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   hasAdmins: boolean | undefined;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string, allowedRoles?: string[]) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   getSessionToken: () => string | null;
 }
@@ -59,11 +59,12 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   }, [serverVerifySession, sessionToken, isChecking]);
 
   const login = useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string, allowedRoles?: string[]) => {
       try {
         const result = await serverLogin({
           username,
           password,
+          allowedRoles,
         });
 
         if (result.success) {

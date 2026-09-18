@@ -6,7 +6,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -523,7 +523,7 @@ export const create = mutation({
     status: v.union(v.literal("active"), v.literal("inactive")),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const name = args.name.trim();
     if (!name) throw new Error("Rate name is required.");
@@ -593,7 +593,7 @@ export const update = mutation({
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
@@ -663,7 +663,7 @@ export const softDelete = mutation({
     id: v.id("shippingRates"),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {

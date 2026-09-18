@@ -28,7 +28,9 @@ export default function AdminLoginPage() {
     setError(null);
     setIsLoading(true);
 
-    const result = await login(username.trim(), password);
+    // P2 F-10: admin entry point only accepts superadmin/admin roles.
+    // Staff credentials are rejected server-side with the generic message.
+    const result = await login(username.trim(), password, ["superadmin", "admin"]);
     setIsLoading(false);
 
     if (result.success) {

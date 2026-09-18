@@ -196,6 +196,10 @@ export const login = mutation({
   args: {
     username: v.string(),
     password: v.string(),
+    // P2 F-10: optional entry-point role gate. Admin login passes
+    // ["superadmin", "admin"], kitchen login passes ["kitchen"]. Rejection
+    // uses the generic message so no role information leaks.
+    allowedRoles: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const admin = await ctx.db
@@ -209,6 +213,10 @@ export const login = mutation({
 
     if (!admin.active) {
       return { success: false as const, error: "This account has been disabled." };
+    }
+
+    if (args.allowedRoles && !args.allowedRoles.includes(admin.role)) {
+      return { success: false as const, error: "Invalid username or password." };
     }
 
     // Brute-force protection

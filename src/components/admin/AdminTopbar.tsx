@@ -1,5 +1,5 @@
-import { ChevronDown, Menu, UserRound } from "lucide-react";
-import { Link } from "react-router";
+import { ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
+import { Link, useNavigate } from "react-router";
 
 import { AdminBreadcrumbs } from "./AdminBreadcrumbs";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -23,8 +23,15 @@ interface AdminTopbarProps {
 }
 
 export function AdminTopbar({ title, group, onOpenMobileNavigation }: AdminTopbarProps) {
-  const { getSessionToken } = useAdminAuth();
+  const { getSessionToken, logout } = useAdminAuth();
+  const navigate = useNavigate();
   const sessionToken = getSessionToken();
+
+  // P3 F-08: obvious global logout — visible on every admin page.
+  const handleLogout = async () => {
+    await logout();
+    navigate(ROUTES.ADMIN.LOGIN, { replace: true });
+  };
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
       <Button
@@ -67,6 +74,10 @@ export function AdminTopbar({ title, group, onOpenMobileNavigation }: AdminTopba
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link to={ROUTES.HOME}>View storefront</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={handleLogout}>
+              <LogOut /> Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

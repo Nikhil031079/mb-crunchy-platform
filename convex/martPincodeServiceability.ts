@@ -6,7 +6,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Types
@@ -141,7 +141,7 @@ export const create = mutation({
     shippingZoneId: v.optional(v.id("shippingZones")),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     // Validate pincode format
     if (!/^\d{6}$/.test(args.pincode)) {
@@ -206,7 +206,7 @@ export const update = mutation({
     shippingZoneId: v.optional(v.id("shippingZones")),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
@@ -241,7 +241,7 @@ export const softDelete = mutation({
     id: v.id("martPincodeServiceability"),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {

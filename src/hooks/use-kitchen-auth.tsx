@@ -15,7 +15,7 @@ interface KitchenAuthContextValue {
   kitchen: KitchenUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string, allowedRoles?: string[]) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   getSessionToken: () => string | null;
 }
@@ -41,6 +41,9 @@ export function KitchenAuthProvider({ children }: { children: React.ReactNode })
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
+    // When no session token exists, the verifySession query is skipped (stays
+    // undefined forever). Only wait for queries that actually run — otherwise
+    // logged-out users hang on "Loading..." forever (P3 F-07/F-11).
     const sessionResolved = !sessionToken || serverVerifySession !== undefined;
     if (sessionResolved) {
       setIsChecking(false);
@@ -56,11 +59,12 @@ export function KitchenAuthProvider({ children }: { children: React.ReactNode })
   }, [serverVerifySession, sessionToken, isChecking]);
 
   const login = useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string, allowedRoles?: string[]) => {
       try {
         const result = await serverLogin({
           username,
           password,
+          allowedRoles,
         });
 
         if (result.success) {
@@ -106,7 +110,9 @@ export function KitchenAuthProvider({ children }: { children: React.ReactNode })
         businessUnitIds: serverVerifySession.businessUnitIds ?? [],
       } : null,
       isAuthenticated: Boolean(serverVerifySession?.role === "kitchen"),
-      isLoading: isChecking || serverVerifySession === undefined,
+      // P3 F-07/F-11: with no token the query is skipped and stays undefined
+      // forever — do not treat that as loading (mirrors use-admin-auth).
+      isLoading: isChecking || (sessionToken !== null && serverVerifySession === undefined),
       login,
       logout,
       getSessionToken,

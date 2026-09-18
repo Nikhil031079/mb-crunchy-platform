@@ -5,7 +5,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -122,7 +122,7 @@ export const create = mutation({
     settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     await assertHeroExclusive(ctx, {
       excludeId: undefined,
@@ -165,7 +165,7 @@ export const update = mutation({
     settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Content not found");
@@ -187,7 +187,7 @@ export const update = mutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("content") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

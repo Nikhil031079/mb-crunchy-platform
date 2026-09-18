@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -74,7 +74,7 @@ export const create = mutation({
     status: v.union(v.literal("active"), v.literal("inactive")),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
@@ -101,7 +101,7 @@ export const update = mutation({
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
@@ -111,7 +111,7 @@ export const update = mutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("deliveryZones") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

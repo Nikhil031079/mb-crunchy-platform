@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -36,7 +36,7 @@ export const create = mutation({
     minimumBillableWeightGrams: v.number(),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     if (args.minimumBillableWeightGrams <= 0) {
       throw new Error("Minimum billable weight must be greater than 0.");
@@ -83,7 +83,7 @@ export const update = mutation({
     minimumBillableWeightGrams: v.number(),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     if (args.minimumBillableWeightGrams <= 0) {
       throw new Error("Minimum billable weight must be greater than 0.");

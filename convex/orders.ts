@@ -343,14 +343,20 @@ export const getByCustomer = query({
     // Admin sessions read the full document (UTR, address, contact details).
     // Customer-owner reads are projected so PII and internal metadata never
     // leave the server.
-    return args.sessionToken ? docs : docs.map(sanitizeOrderForCustomer);
+    // P2 F-10: kitchen-role sessions receive the sanitized projection too —
+    // full documents are reserved for superadmin/admin roles.
+    if (args.sessionToken) {
+      const { admin } = await requireAdminSession(ctx, args.sessionToken);
+      if (admin.role === "superadmin" || admin.role === "admin") return docs;
+    }
+    return docs.map(sanitizeOrderForCustomer);
   },
 });
 
 export const getByPhone = query({
   args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const phone = normalizeIndianPhone(args.phone); // returns null on invalid → graceful empty result
     return await ctx.db
       .query("orders")
@@ -377,7 +383,7 @@ export const getByStatus = query({
     ),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("orders")
       .withIndex("by_status", (q) => q.eq("status", args.status))
@@ -395,7 +401,7 @@ export const getByStatus = query({
 export const getAll = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("orders")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
@@ -407,7 +413,7 @@ export const getAll = query({
 export const getById = query({
   args: { sessionToken: v.string(), orderId: v.id("orders") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db.get(args.orderId);
   },
 });
@@ -1345,6 +1351,15 @@ export const updateStatus = mutation({
     const order = await ctx.db.get(args.id);
     if (!order) throw new Error("Order not found");
 
+    // P2 F-10: kitchen role may only transition orders that belong to its
+    // assigned business units. Full admins keep unrestricted access.
+    if (admin.role !== "superadmin" && admin.role !== "admin") {
+      const allowedBUs = admin.businessUnitIds ?? [];
+      if (!allowedBUs.includes(order.businessUnitId)) {
+        throw new Error("Insufficient permissions");
+      }
+    }
+
     const now = Date.now();
     const previousStatus = order.status;
     const previousPayment = order.paymentStatus;
@@ -1575,7 +1590,7 @@ export const updateDeliveryQuote = mutation({
     deliveryQuoteNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new Error("Order not found");
@@ -1712,7 +1727,7 @@ export const rejectDeliveryQuote = mutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("orders") },
   handler: async (ctx, args) => {
-    const { admin } = await requireAdminSession(ctx, args.sessionToken);
+    const { admin } = await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const order = await ctx.db.get(args.id);
     if (!order) throw new Error("Order not found");

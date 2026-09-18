@@ -12,7 +12,7 @@ import { mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 import { CANCELLABLE_STATUSES, getAllowedTransitions } from "./orderWorkflow";
 
 type OrderDoc = Doc<"orders">;
@@ -96,7 +96,7 @@ export const bulkUpdateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { succeeded, results } = await runBulk(
       ctx,
@@ -126,7 +126,7 @@ export const bulkUpdateStatus = mutation({
 export const bulkCancel = mutation({
   args: { sessionToken: v.string(), orderIds: v.array(v.id("orders")) },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { succeeded, results } = await runBulk(
       ctx,
@@ -156,7 +156,7 @@ export const bulkCancel = mutation({
 export const bulkRefund = mutation({
   args: { sessionToken: v.string(), orderIds: v.array(v.id("orders")) },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { succeeded, results } = await runBulk(
       ctx,

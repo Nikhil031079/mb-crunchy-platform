@@ -9,7 +9,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 import { isCustomerOwner } from "./utils/customerAccess";
 
 export const ACTIVITY_ACTIONS = [
@@ -71,7 +71,7 @@ export async function logActivity(ctx: MutationCtx, args: LogActivityArgs) {
 export const getByOrder = query({
   args: { sessionToken: v.string(), orderId: v.id("orders") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("orderActivities")
       .withIndex("by_order", (q) => q.eq("orderId", args.orderId))

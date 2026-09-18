@@ -29,6 +29,12 @@ export function AdminLayout() {
     return <Navigate to={ROUTES.ADMIN.LOGIN} replace />;
   }
 
+  // P2 F-10 (client-side UX gate; server remains authoritative): staff sessions
+  // must never render the admin shell, even if a token is present.
+  if (admin && admin.role !== "superadmin" && admin.role !== "admin") {
+    return <Navigate to={ROUTES.KITCHEN.LOGIN} replace />;
+  }
+
   return (
     <div className="min-h-screen bg-muted/30 text-foreground">
       <AdminSidebar

@@ -6,7 +6,7 @@ import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 
 // ============================================================================
@@ -59,7 +59,7 @@ export async function ensureCustomerByPhone(
 export const getAll = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const docs = await ctx.db
       .query("customers")
@@ -87,7 +87,7 @@ export const getAll = query({
 export const getByAuthUserId = query({
   args: { sessionToken: v.string(), authUserId: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("customers")
       .withIndex("by_auth_user", (q) => q.eq("authUserId", args.authUserId))
@@ -99,7 +99,7 @@ export const getByAuthUserId = query({
 export const getByPhone = query({
   args: { sessionToken: v.string(), phone: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const phone = normalizeIndianPhone(args.phone); // returns null on invalid → graceful empty result
     return await ctx.db
       .query("customers")
@@ -118,7 +118,7 @@ const NET_ORDER_STATUSES = ["cancelled", "refunded"];
 export const getCustomer360 = query({
   args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
@@ -196,7 +196,7 @@ export const getCustomer360 = query({
 export const getCustomerSummary = query({
   args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
@@ -259,7 +259,7 @@ export interface CustomerTimelineEvent {
 export const getCustomerTimeline = query({
   args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
@@ -476,7 +476,7 @@ function computeOrderingActivity(orders: Doc<"orders">[]) {
 export const getCustomerInsights = query({
   args: { sessionToken: v.string(), customerId: v.id("customers") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const customer = await ctx.db.get(args.customerId);
     if (!customer) return null;
@@ -640,7 +640,7 @@ export const update = mutation({
     const { sessionToken: _, id, ...fields } = args;
 
     if (args.sessionToken) {
-      await requireAdminSession(ctx, args.sessionToken);
+      await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     } else {
       const identity = await ctx.auth.getUserIdentity();
       if (!identity) throw new Error("Authentication required");
@@ -714,7 +714,7 @@ export const updateProfile = mutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("customers") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {

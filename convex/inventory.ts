@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 import { sanitizeInventoryForStorefront } from "./utils/customerAccess";
 import { logActivity } from "./orderActivities";
 
@@ -45,7 +45,7 @@ export async function logMovement(
 export const getAll = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("inventory")
       .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
@@ -66,7 +66,7 @@ export const getStorefrontAll = query({
 export const getByIds = query({
   args: { sessionToken: v.string(), ids: v.array(v.id("inventory")) },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const results = await Promise.all(
       args.ids.map((id) => ctx.db.get(id)),
     );
@@ -101,7 +101,7 @@ export const getByBusinessUnit = query({
 export const getAvailable = query({
   args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -120,7 +120,7 @@ export const getAvailable = query({
 export const getBySku = query({
   args: { sessionToken: v.string(), sku: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("inventory")
       .withIndex("by_sku", (q) => q.eq("sku", args.sku))
@@ -132,7 +132,7 @@ export const getBySku = query({
 export const getByBarcode = query({
   args: { sessionToken: v.string(), barcode: v.string() },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("inventory")
       .withIndex("by_barcode", (q) => q.eq("barcode", args.barcode))
@@ -144,7 +144,7 @@ export const getByBarcode = query({
 export const getLowStock = query({
   args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -162,7 +162,7 @@ export const getLowStock = query({
 export const getOutOfStock = query({
   args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -176,7 +176,7 @@ export const getOutOfStock = query({
 export const getInventorySummary = query({
   args: { sessionToken: v.string(), businessUnitId: v.id("businessUnits") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const items = await ctx.db
       .query("inventory")
       .withIndex("by_business_unit", (q) => q.eq("businessUnitId", args.businessUnitId))
@@ -226,7 +226,7 @@ export const getStockMovements = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("stockMovements")
       .withIndex("by_inventory", (q) => q.eq("inventoryId", args.inventoryId))
@@ -257,7 +257,7 @@ export const upsert = mutation({
     location: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     if (args.stockQuantity < 0) {
       throw new Error("Stock quantity cannot be negative");
@@ -303,7 +303,7 @@ export const updateStock = mutation({
     stockQuantity: v.number(),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     if (args.stockQuantity < 0) {
       throw new Error("Stock quantity cannot be negative");
@@ -332,7 +332,7 @@ export const adjustStock = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     const doc = await ctx.db.get(args.id);
@@ -561,7 +561,7 @@ export const bulkUpdateStock = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
 
@@ -601,7 +601,7 @@ export const bulkUpdateStock = mutation({
 export const markUnavailable = mutation({
   args: { sessionToken: v.string(), id: v.id("inventory") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const now = Date.now();
     await ctx.db.patch(args.id, {
       available: false,
@@ -615,7 +615,7 @@ export const markUnavailable = mutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("inventory") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const now = Date.now();
     await ctx.db.patch(args.id, {
       deletedAt: now,

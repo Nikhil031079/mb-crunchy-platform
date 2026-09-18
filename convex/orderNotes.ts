@@ -5,7 +5,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 import { logActivity } from "./orderActivities";
 
 // ============================================================================
@@ -15,7 +15,7 @@ import { logActivity } from "./orderActivities";
 export const getByOrder = query({
   args: { sessionToken: v.string(), orderId: v.id("orders") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("orderNotes")
       .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
@@ -36,7 +36,7 @@ export const add = mutation({
     note: v.string(),
   },
   handler: async (ctx, args) => {
-    const { admin } = await requireAdminSession(ctx, args.sessionToken);
+    const { admin } = await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new Error("Order not found");
 
@@ -75,7 +75,7 @@ export const update = mutation({
     note: v.string(),
   },
   handler: async (ctx, args) => {
-    const { admin } = await requireAdminSession(ctx, args.sessionToken);
+    const { admin } = await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const doc = await ctx.db.get(args.noteId);
     if (!doc || doc.deletedAt) throw new Error("Note not found");
 
@@ -105,7 +105,7 @@ export const remove = mutation({
     noteId: v.id("orderNotes"),
   },
   handler: async (ctx, args) => {
-    const { admin } = await requireAdminSession(ctx, args.sessionToken);
+    const { admin } = await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     const doc = await ctx.db.get(args.noteId);
     if (!doc || doc.deletedAt) throw new Error("Note not found");
 

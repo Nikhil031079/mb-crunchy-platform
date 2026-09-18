@@ -6,7 +6,7 @@ import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireAdminSession } from "./utils/adminAuth";
+import { requireAdminRole } from "./utils/adminAuth";
 
 // ============================================================================
 // Queries
@@ -98,7 +98,7 @@ export const create = mutation({
     settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
@@ -136,7 +136,7 @@ export const update = mutation({
     settings: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
@@ -175,7 +175,7 @@ export const decrementUsage = internalMutation({
 export const softDelete = mutation({
   args: { sessionToken: v.string(), id: v.id("offers") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -298,7 +298,7 @@ export const validateCoupon = query({
 export const restore = mutation({
   args: { sessionToken: v.string(), id: v.id("offers") },
   handler: async (ctx, args) => {
-    await requireAdminSession(ctx, args.sessionToken);
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
