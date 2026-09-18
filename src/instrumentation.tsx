@@ -73,6 +73,13 @@ async function reportErrorToVly(errorData: {
   const monitoringUrl = import.meta.env.VITE_VLY_MONITORING_URL;
 
   if (!appId || !monitoringUrl) {
+    // P2 CONFIG-001: error reporting is silently disabled when these env vars
+    // are missing. Warn loudly so a misconfigured production build is noticed
+    // instead of failing open without observability.
+    console.warn(
+      "[observability] Vly error reporting is disabled: " +
+        "VITE_VLY_APP_ID and/or VITE_VLY_MONITORING_URL are not set.",
+    );
     return;
   }
 

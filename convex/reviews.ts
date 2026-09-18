@@ -163,6 +163,16 @@ export const create = mutation({
       throw new Error("Rating must be between 1 and 5");
     }
 
+    // P2 SEC-013: the review's business unit must match the catalog item's
+    // actual business unit — prevents misattributed cross-store reviews.
+    const catalogItem = await ctx.db.get(args.catalogItemId);
+    if (!catalogItem || catalogItem.deletedAt) {
+      throw new Error("Product not found");
+    }
+    if (catalogItem.businessUnitId !== args.businessUnitId) {
+      throw new Error("This product does not belong to the selected store");
+    }
+
     const now = Date.now();
 
     // Check for duplicate review (one review per customer per product)

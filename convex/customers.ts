@@ -648,6 +648,14 @@ export const update = mutation({
       const customer = await ctx.db.get(id);
       if (!customer) throw new Error("Customer not found");
       if (customer.authUserId !== identity.subject) throw new Error("Unauthorized");
+
+      // P2 SEC-008: account status is server/admin-managed. A customer
+      // updating their own profile must not be able to archive, deactivate,
+      // or otherwise change their account status.
+      if (args.status !== undefined) {
+        throw new Error("Only admins can change account status");
+      }
+      delete (fields as Record<string, unknown>).status;
     }
 
     const patch: Record<string, unknown> = { ...fields, updatedAt: Date.now() };

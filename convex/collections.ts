@@ -24,6 +24,14 @@ export const getByCustomer = query({
     ),
   },
   handler: async (ctx, args) => {
+    // P2 SEC-007: ownership verification — a caller may only read their own
+    // collections. Matches the guard already enforced on mutations below.
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     let q = ctx.db
       .query("customerCollections")
       .withIndex("by_customer_type", (q) => q.eq("customerId", args.customerId));
@@ -50,6 +58,13 @@ export const getByCustomerAndType = query({
     ),
   },
   handler: async (ctx, args) => {
+    // P2 SEC-007: ownership verification (see getByCustomer).
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     return await ctx.db
       .query("customerCollections")
       .withIndex("by_customer_type", (q) =>
@@ -78,6 +93,13 @@ export const bulkCheck = query({
     ),
   },
   handler: async (ctx, args) => {
+    // P2 SEC-007: ownership verification (see getByCustomer).
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+
+    const customer = await ctx.db.query("customers").withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject)).first();
+    if (!customer || customer._id !== args.customerId) throw new Error("Unauthorized");
+
     if (args.items.length === 0) return [];
 
     const results: { itemType: string; itemId: string; inCollection: boolean }[] = [];

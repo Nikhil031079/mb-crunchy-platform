@@ -124,8 +124,11 @@ export const softDelete = mutation({
 // ============================================================================
 
 export const seedPolicies = mutation({
-  args: {},
-  handler: async (ctx) => {
+  // P2 SEC-011: seeding writes global delivery configuration — admin only.
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+
     const now = Date.now();
 
     // Check if policies already exist
