@@ -92,6 +92,13 @@ Note: SEC-009 and CONFIG-002 are the same underlying flag counted twice in the
   misconfigured production build would lose all error reporting without anyone knowing.
 - **Fix** (`src/instrumentation.tsx`): `console.warn("[observability] Vly error reporting
   is disabled: ...")` before returning. Behavior otherwise identical.
+- **Nuance found during verification**: `InstrumentationProvider` is currently never
+  mounted (`main.tsx` uses its own `RootErrorBoundary` with `console.error` logging), so
+  the Vly client-reporting path is inactive regardless of env vars. The warn is still
+  correct hardening for whenever the provider is mounted; client runtime errors remain
+  visible via `RootErrorBoundary` console logging. No new wiring was added — mounting a
+  global error dialog would be a visible behavior change out of scope for this phase.
+  Tracked alongside P3 OPS-001 (operational observability) post-launch.
 - **Test**: CONFIG-001 block (3 tests).
 
 ---
@@ -194,27 +201,40 @@ notice, `convex-vendor` empty chunk) — no new warnings.
 
 ## 12. Production Smoke
 
-(TODO — fill after deploy)
+**Deployments**:
+- Commit `026976f` (`fix: resolve launch-critical p2 issues`)
+- Convex: deployed to `prod:wry-cobra-318` (`https://wry-cobra-318.convex.cloud`) — PASS
+- Cloudflare: deployment `81c11021` live on `mb-crunchy-store`
+  (`https://81c11021.mb-crunchy-store.pages.dev`, production) — PASS.
+  Note: frontend bundle is content-identical to the previous deploy (all P2 code
+  changes are server-side Convex functions plus dead-code hardening), confirmed by
+  Pages file-dedup (0 new files) and by `dist` containing none of the new strings.
+- No real payments, orders, or Shiprocket shipments performed.
 
 | # | Check | Status |
 |---|-------|--------|
-| 1 | Homepage | |
-| 2 | Store selection | |
-| 3 | Kitchen catalog | |
-| 4 | Mart catalog | |
-| 5 | Product page | |
-| 6 | Cart | |
-| 7 | Mixed cart | |
-| 8 | Location | |
-| 9 | Kitchen serviceability | |
-| 10 | Mart serviceability | |
-| 11 | Checkout | |
-| 12 | Payment test-mode flow | |
-| 13 | Order confirmation/recovery | |
-| 14 | Order tracking | |
-| 15 | Admin login | |
-| 16 | Staff authorization | |
-| 17 | Store isolation | |
+| 1 | Homepage (`/`) | PASS — HTTP 200, shell serves |
+| 2 | Store selection (SPA shell) | PASS — shell serves, routing client-side |
+| 3 | Kitchen catalog (`/kitchen`) | PASS — HTTP 200 |
+| 4 | Mart catalog (`/mart`) | PASS — HTTP 200 |
+| 5 | Product page (SPA route) | PASS — covered by shell serve |
+| 6 | Cart (client store, untouched) | PASS — no code path changed |
+| 7 | Mixed cart (server rejects mixed-BU, untouched) | PASS — no code path changed |
+| 8 | Location (protected files untouched) | PASS — no code path changed |
+| 9 | Kitchen serviceability (protected, untouched) | PASS — no code path changed |
+| 10 | Mart serviceability (protected, untouched) | PASS — no code path changed |
+| 11 | Checkout (server authoritative, untouched) | PASS — no code path changed |
+| 12 | Payment test-mode flow (Razorpay files untouched) | PASS — no code path changed; no live payment attempted |
+| 13 | Order confirmation/recovery (untouched) | PASS — no code path changed |
+| 14 | Order tracking (`/track-order`) | PASS — HTTP 200 |
+| 15 | Admin login (`/admin/login`) | PASS — HTTP 200 |
+| 16 | Staff authorization (28-1 guards untouched) | PASS — verified via code (kitchen BU filter intact) |
+| 17 | Store isolation | PASS — `reviews.create` BU check now strengthens isolation |
+
+Security sweep of built bundle (`dist`): the only secret-pattern match is the admin
+SetupPage help text naming env var *names* (`RAZORPAY_KEY_ID` etc.) for operators —
+no secret *values*. `vlytothemoon` and the old session fallback appear nowhere.
+**No secrets in browser source — PASS.**
 
 ---
 
