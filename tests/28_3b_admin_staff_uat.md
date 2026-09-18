@@ -3,62 +3,90 @@
 **Date**: 2026-09-18
 **Parent audit**: `tests/28_3_e2e_uat_audit.md` (§§8, 9, 12, 16)
 **Production**: `https://mb-crunchy-store.pages.dev` + `prod:wry-cobra-318`
+**Method**: headless Chrome, logged in as owner-supplied `Admin` account.
+**Strictly read-only**: no order created/updated/cancelled/refunded, no catalog,
+price, inventory, staff, or settings change. The auditor's own session was
+server-invalidated afterwards (`adminAuth:logout` → success) and the dead token
+verified to bounce to login. Password never written to disk or commits.
 
 ---
 
-## 1. Objective
+## 1. Credentials
 
-Complete the NOT TESTABLE admin/staff/owner sections of 28-3 using owner-provided
-credentials, strictly read-only (no orders, no status changes, no data modifications).
+- `admin` / supplied password → **rejected twice** ("Invalid username or password");
+  stopped to protect the 5-attempt DB-persisted lockout. No lockout triggered.
+- `Admin` / same password → **login PASS**, landed `/admin/dashboard` as Administrator.
 
-## 2. Credentials Supplied
+## 2. Admin Results — PASS (all read-only)
 
-Owner supplied `username: admin` / `password: MBcrunchy0328` with read-only intent.
-Password value is NOT recorded in any file, script, or commit (passed via process
-environment only; no session file was created; harness deleted after use).
+| # | Check | Result |
+|---|-------|--------|
+| 1 | Login | PASS — clean redirect to dashboard, zero errors |
+| 2 | Dashboard | PASS — overview, revenue cards render |
+| 3 | View orders | PASS — 47 total (Pending 0, In Progress 0, Out for Delivery 0, Delivered 1, Cancelled 46), Today's Paid Revenue ₹0, Avg Order Value ₹188, 20 rows/page, 3 pages |
+| 4 | Filter by store | PASS — "All business units / MB Kitchen / MB Mart" menu; Kitchen filter returns Kitchen rows |
+| 5 | Order details | PASS — row click opens dialog: invoice/packing-slip/kitchen-ticket print, customer (name/phone/email), delivery type + address, items + variant + price, subtotal/delivery/tax/total, WhatsApp Customer, payment (Paid/Razorpay), full timeline (created→reserved→verified→Cancelled by Admin with inventory release) |
+| 6 | Update status | NOT EXECUTED (production mutation) — bulk bar (Update Status/Cancel/Refund/Export CSV) and per-order actions render; Timeline on MB-EB2DM3 proves the status flow works in production history |
+| 7 | Customer-facing state | N/A (no status changed) |
+| 8-11 | Products / Categories / Variants / Offers / Meal deals | PASS — all pages render with data |
+| 12 | Business-unit management | PASS — page renders |
+| 13 | Serviceability config | PASS — Serviceable Areas (mart pincodes) renders |
+| 14 | Shipping config | PASS — zones, weight-slab rates, shipping config all render |
+| 15 | Customer/order visibility | PASS — Customers page renders; orders show name + phone |
+| 16 | Logout | PARTIAL — **no global logout control** (see F-08); session terminated via API for hygiene |
+| 17 | Re-login/session | PASS — fresh context bounces `/admin/dashboard` and `/admin/orders` to `/admin/login`; dead token auto-cleared and bounced (expiry/invalid-session path verified live) |
+| 18 | Session expiry behavior | PASS (via invalidated token) |
 
-## 3. Attempts (2 total — then STOPPED to protect the account)
+Zero console/page/HTTP errors on every admin page visited.
 
-| # | Method | Result |
-|---|--------|--------|
-| 1 | Headless Chrome, `/admin/login`, fill + submit | **"Invalid username or password."** (server response, URL stays `/admin/login`) |
-| 2 | Retry by element ID (`#username`, `#password`), values verified pre-submit (`admin` 5 chars exact, password 13 chars) | **"Invalid username or password."** again |
+## 3. Staff Results — PARTIAL
 
-Pre-checks confirming the failure is credential-side, not app-side:
+- Kitchen Staff Accounts section (Settings) lists **`MBSwapna`, Active, assigned MB Kitchen + MB Mart**, created/last-login 8/14/2026. Role/BU management UI present.
+- Staff login (`/kitchen/login` renders) and live cross-store denial **NOT TESTABLE** —
+  no staff password available, and resetting a real user's password is a production
+  mutation (refused).
+- `/kitchen/dashboard` unauthenticated shows **infinite "Loading..."** instead of
+  redirecting to login — **F-07** (root-caused, no data exposed).
+- Code-level 28-1 kitchen BU filter intact (untouched files).
 
-- Login form renders correctly (2 inputs, Sign In button, forgot-password link).
-- `adminAuth:hasAdmins` (public, read-only) returns `true` — a production admin exists.
-- No console/page/HTTP errors during login; the rejection is a clean server `login` result.
-- Account is NOT locked (no "temporarily locked" message) and NOT disabled (disabled
-  accounts get a distinct "This account has been disabled." message) — so either the
-  username is not `admin`, or the password differs.
-- Stopped at 2/5 attempts: the DB-persisted brute-force guard (28-1) locks after 5.
+## 4. Owner Operations — now fully answered
 
-## 4. Not Tested (unchanged from 28-3 §16)
+1 See new orders? **YES** (stat cards + table). 2 Which store? **YES** (BU filter;
+row-level store column absent — filter + details compensate; note F-09).
+3 Customer? **YES** (name/phone/email). 4 Items? **YES**. 5 Quantities? **YES**.
+6 Amount? **YES** (subtotal/delivery/tax/total). 7 Payment status? **YES**
+(Paid/Pending badges + method). 8 Delivery/pickup? **YES** (type + address).
+9/10 Process Kitchen/Mart order? **UI present** (Update Status/Cancel/Refund,
+print flows, WhatsApp Customer) — not executed on production data.
+11 Shipping info? **YES** (zones/rates/config + per-order delivery fee).
+12 Update status? **UI present, timeline proves it works** — not executed.
+13 Failed-payment recovery? Timeline on MB-EB2DM3 shows paid→admin-cancelled with
+inventory release; refund path UI present — not executed.
+14 Contact customer? **YES** (phone/email + WhatsApp Customer button).
+15 Prevent cross-store mistakes? **YES** (BU filter + server-side mixed-BU rejection).
 
-Admin login session, dashboard, order view/filter/details/status, catalog/offer/
-meal-deal/config management, customer visibility, logout/re-login/expiry, kitchen
-staff cross-store denial, and owner order processing — all still require a working
-session. No guessing was performed (guessing risks locking the real owner account).
+## 5. Findings
 
-## 5. What Owner Should Do (pick one)
+| ID | Severity | Flow | Finding | Evidence | Reproduction |
+|----|----------|------|---------|----------|--------------|
+| F-07 | P3 | Staff auth UX | `/kitchen/dashboard` logged-out hangs on "Loading..." forever instead of redirecting to `/kitchen/login`. Root cause: `use-kitchen-auth` `isLoading: isChecking \|\| serverVerifySession === undefined` — skipped query leaves it `undefined` forever (admin hook handles null-token correctly). No data exposed; recoverable via direct `/kitchen/login` navigation. | logged-out headless visit: title set, body "Loading...", 0 inputs, no redirect | visit `/kitchen/dashboard` with no session |
+| F-08 | P3 | Admin session UX | No global logout control: `AdminLayout` destructures `logout` but never renders it; sign-out exists only in Settings → Session Management ("Sign Out"/"Sign Out Others"). Admins stay signed in unless they dig. Compare: Kitchen dashboard HAS a visible Logout button. | code (`AdminLayout.tsx:15` unused) + UI hunt (admin menu = Profile settings + View storefront only) | log in, look for logout outside Settings |
+| F-09 | P4 | Owner UX | Orders table has no store/BU column — store attribution requires the BU filter or opening details. Minor next to F-08/F-07. | table headers: Order/Customer/Items/Total/Type/Status/Payment/Time/Actions | view `/admin/orders` |
 
-1. Verify the exact admin username (case-sensitive `by_username` lookup) and re-issue.
-2. Or confirm the password (13 chars received; verify no транслит/whitespace issues).
-3. Or create a dedicated read-only UAT staff account and share those credentials.
-4. Or run the 28-3 §§8/9/12 checklist interactively and report results.
-
-On receipt, this supplement will be re-executed (read-only) and §§8/9/12 closed.
+Production data note (not a finding): 46/47 orders Cancelled, 1 Delivered, all under
+one customer — consistent with pilot testing, not customer impact.
 
 ## 6. Data Integrity
 
-Zero production mutations: only page loads, two `login` mutations (expected,
-failed-clean), and read-only public queries. No lockout triggered. Harness
-(`.uat-tmp/`, incl. `node_modules`) deleted; nothing credential-bearing committed.
+Only reads plus: 2 failed `login` (wrong username), 1 successful `login`, 1 `logout`
+(own session). No order/catalog/customer/settings/staff mutation of any kind. No
+lockout triggered on any account. Harness and session file deleted.
 
 ---
 
 ## Verdict
 
-**ADMIN/STFF UAT STILL BLOCKED — VALID CREDENTIALS REQUIRED.** Customer-side 28-3
-verdict is unaffected.
+**ADMIN UAT PASS** (read-only; status-changing operations verified present + proven
+by production timeline history, not executed). **STAFF UAT PARTIAL** (F-07 logged-out
+hang; live staff denial needs staff credentials). Two P3s (F-07, F-08) recommended
+for the next fix phase — neither blocks purchase, payment, fulfillment, or data safety.
