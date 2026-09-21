@@ -78,7 +78,7 @@ export function PartyPacksSection({
     const enabledIds = new Set(packsEnabled.map((bu) => bu._id));
     const seen = new Set<string>();
     return allPacksRaw
-      .filter((pack) => enabledIds.has(pack.businessUnitId))
+      .filter((pack) => enabledIds.has(pack.businessUnitId as any))
       .filter((pack) => pack.status === "active")
       .filter((pack) => {
         if (seen.has(pack._id)) return false;

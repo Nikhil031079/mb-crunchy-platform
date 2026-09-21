@@ -20,6 +20,7 @@ import { getAllowedTransitions } from "./orderWorkflow";
 import { isStoreCurrentlyOpen } from "./utils/storeHours";
 import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 import { resolveMartShippingQuote } from "./shippingRates";
+import { executeBookingWorkflow } from "./courier/bookingWorkflow";
 
 // ============================================================================
 // Constants
@@ -226,6 +227,25 @@ export const finalizePaidOrder = internalMutation({
       actor: "system",
       visibleToCustomer: true,
     });
+
+    // --- Shiprocket booking trigger ---
+    // Fire-and-forget: initiate courier booking for eligible Mart delivery
+    // orders. The booking workflow is fully idempotent and handles its own
+    // eligibility checks, so failures here must not block payment finalization.
+    // Uses ctx.runMutation so the booking runs within the same Convex transaction
+    // context as payment finalization (ensures DB visibility).
+    try {
+      await ctx.runMutation(internal.courier.bookingWorkflow.executeBookingWorkflowInternal, {
+        orderId: args.orderId,
+      });
+    } catch (err) {
+      // Booking failure must not fail payment finalization.
+      // The booking can be retried later via admin or webhook.
+      console.error(
+        "[finalizePaidOrder] Shipment booking trigger failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   },
 });
 
@@ -950,6 +970,7 @@ export const create = mutation({
       name: args.customerName,
       phone: customerPhone,
       email: args.customerEmail,
+      authUserId: identity?.subject,
     });
 
     const submittedNonCouponDiscount = args.discount - couponDiscount;

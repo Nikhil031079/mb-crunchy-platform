@@ -22,6 +22,11 @@ const NAV_ITEMS = [
   { label: "Addresses", href: ROUTES.ACCOUNT.ADDRESSES, icon: MapPin },
   { label: "Favourites", href: ROUTES.ACCOUNT.FAVOURITES, icon: Heart },
   { label: "Loyalty", href: ROUTES.ACCOUNT.LOYALTY, icon: Star },
+  { label: "Privacy", href: ROUTES.POLICY.PRIVACY, icon: User },
+  { label: "Terms", href: ROUTES.POLICY.TERMS, icon: User },
+  { label: "Shipping", href: ROUTES.POLICY.SHIPPING, icon: MapPin },
+  { label: "Refunds", href: ROUTES.POLICY.REFUND, icon: X },
+  { label: "Help", href: ROUTES.POLICY.HELP, icon: Menu },
 ];
 
 export function AccountSidebar() {

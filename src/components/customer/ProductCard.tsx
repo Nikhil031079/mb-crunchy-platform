@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from "react";
 import { motion } from "framer-motion";
-import { Heart, ImageOff, Star, Minus, Plus } from "lucide-react";
+import { Heart, ImageOff, Star, Minus, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +25,7 @@ interface ProductCardProps {
   businessUnitSlug?: string;
   categorySlug?: string;
   index?: number;
-  onAddToCart?: (product: CardProduct | CatalogItem) => void;
+  onAddToCart?: (product: CardProduct | CatalogItem) => void | Promise<void>;
   onFavorite?: (product: CardProduct | CatalogItem) => void;
   isFavorited?: boolean;
   showDescription?: boolean;
@@ -56,6 +56,7 @@ export const ProductCard = memo(function ProductCard({
   const [imageError, setImageError] = useState(false);
   const [hoverImageError, setHoverImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
   const { cart, updateQuantity } = useCart();
   const { isAuthenticated } = useAuth();
 
@@ -104,12 +105,17 @@ export const ProductCard = memo(function ProductCard({
   // Veg/Non-veg indicator
   const vegNonVeg = "vegNonVeg" in product ? (product as CardProduct).vegNonVeg as "veg" | "nonveg" | undefined : undefined;
 
-  const handleAdd = useCallback((e: React.MouseEvent) => {
+  const handleAdd = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isOutOfStock) return;
-    onAddToCart?.(product);
-  }, [isOutOfStock, onAddToCart, product]);
+    if (isOutOfStock || isAdding) return;
+    setIsAdding(true);
+    try {
+      await onAddToCart?.(product);
+    } finally {
+      setIsAdding(false);
+    }
+  }, [isOutOfStock, isAdding, onAddToCart, product]);
 
   // cartItemId is guaranteed by the cart store's migration logic,
   // but TypeScript doesn't know this invariant. Generate one if missing.
@@ -292,10 +298,15 @@ export const ProductCard = memo(function ProductCard({
                 {cartQuantity === 0 ? (
                   <button
                     onClick={handleAdd}
-                    aria-label={`Add ${product.name} to cart`}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md transition-all duration-200 hover:bg-emerald-700 active:scale-95"
+                    disabled={isAdding}
+                    aria-label={isAdding ? `Adding ${product.name} to cart` : `Add ${product.name} to cart`}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md transition-all duration-200 hover:bg-emerald-700 active:scale-95 disabled:pointer-events-none disabled:opacity-70"
                   >
-                    <Plus className="h-4 w-4" />
+                    {isAdding ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
                   </button>
                 ) : (
                   <div className="flex h-8 items-center rounded-full bg-emerald-600 text-white shadow-md">

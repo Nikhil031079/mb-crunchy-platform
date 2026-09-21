@@ -1823,6 +1823,22 @@ export default function CheckoutPage() {
                               <p className="text-xs text-destructive">{errors.destinationPincode}</p>
                             )}
                           </div>
+                          {form.destinationPincode.length === 6 && (
+                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                              {martDelivery !== undefined ? (martDelivery.available ? (
+                                <>
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                  <span>Delivery available</span>
+                                </>
+                              ) : true && martDelivery.reason ? (
+                                <span>{getMartDeliveryErrorMessage(martDelivery.reason)}</span>
+                              ) : martDelivery === undefined && form.destinationPincode.length > 0 ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <span>Enter a valid 6-digit pincode</span>
+                              )) : null}
+                            </div>
+                          )}
                           {form.destinationPincode && checkMartPincodeFormat(form.destinationPincode) && martDelivery !== undefined && (
                             <div className={cn(
                               "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
@@ -2441,12 +2457,12 @@ export default function CheckoutPage() {
                 )}
 
                 <div className="flex justify-between text-lg font-bold">
-                  <span>{effectiveDeliveryType === "outside_area" ? "Payable Now" : "Total"}</span>
+                  <span>{effectiveDeliveryType === "outside_area" ? "Amount Due Now" : "Total"}</span>
                   <span>{effectiveDeliveryType === "outside_area" ? formatCurrency(pricing.subtotal - pricing.discount + pricing.tax) : formatCurrency(pricing.total)}</span>
                 </div>
                 {effectiveDeliveryType === "outside_area" && (
                   <p className="text-[11px] text-muted-foreground text-center">
-                    Delivery charge will be confirmed separately
+                    Delivery charge will be confirmed separately via WhatsApp
                   </p>
                 )}
 

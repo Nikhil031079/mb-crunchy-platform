@@ -37,6 +37,13 @@ export const ROUTES = {
   CART: "/cart",
   CHECKOUT: "/checkout",
   TRACK_ORDER: "/track-order",
+  POLICY: {
+    PRIVACY: "/policy/privacy",
+    TERMS: "/policy/terms",
+    SHIPPING: "/policy/shipping",
+    REFUND: "/policy/refund",
+    HELP: "/help",
+  },
   ADMIN: {
     ROOT: "/admin",
     DASHBOARD: "/admin/dashboard",
@@ -77,7 +84,11 @@ export const ROUTES = {
     ORDERS: "/account/orders",
     ADDRESSES: "/account/addresses",
     FAVOURITES: "/account/favourites",
-    LOYALTY: "/account/loyalty",
+    LOYALTY: "/account",
+    PRIVACY: "/policy/privacy",
+    TERMS: "/policy/terms",
+    SHIPPING: "/policy/shipping",
+    REFUND: "/policy/refund",
   },
 } as const;
 

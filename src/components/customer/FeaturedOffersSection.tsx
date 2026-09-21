@@ -49,7 +49,7 @@ export function FeaturedOffersSection({
     const enabledIds = new Set(offerEnabled.map((bu) => bu._id));
     const seen = new Set<string>();
     return allOffersRaw
-      .filter((offer) => enabledIds.has(offer.businessUnitId))
+      .filter((offer) => enabledIds.has(offer.businessUnitId as any))
       .filter((offer) => offer.status === "active" && isOfferActive(offer))
       .filter((offer) => getOfferMarketingSettings(offer).homeVisible)
       .filter((offer) => {

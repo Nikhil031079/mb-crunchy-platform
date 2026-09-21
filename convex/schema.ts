@@ -1047,6 +1047,80 @@ const shippingConfig = defineTable({
   .index("by_business_unit", ["businessUnitId"]);
 
 // ============================================================================
+// SHIPMENTS (Courier shipment lifecycle for Mart orders)
+// ============================================================================
+
+const shipments = defineTable({
+  orderId: v.id("orders"),
+  businessUnitId: v.id("businessUnits"),
+  // Provider is extensible: "shiprocket" today, others in future.
+  provider: v.union(v.literal("shiprocket")),
+  providerShipmentId: v.optional(v.string()),
+  shipmentStatus: v.union(
+    v.literal("pending"),
+    v.literal("processing"),
+    v.literal("booked"),
+    v.literal("shipped"),
+    v.literal("in_transit"),
+    v.literal("out_for_delivery"),
+    v.literal("delivered"),
+    v.literal("cancelled"),
+    v.literal("failed"),
+  ),
+  // Courier details populated after booking/assignment.
+  courierName: v.optional(v.string()),
+  awbNumber: v.optional(v.string()),
+  trackingUrl: v.optional(v.string()),
+  // Shipping address snapshot — immutable reference for this shipment.
+  shippingAddress: v.optional(v.string()),
+  destinationPincode: v.optional(v.string()),
+  destinationCity: v.optional(v.string()),
+  destinationState: v.optional(v.string()),
+  // Metadata from provider (booking status, errors, etc.)
+  providerMetadata: v.optional(v.any()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_order", ["orderId"])
+  .index("by_business_unit", ["businessUnitId"])
+  .index("by_status", ["shipmentStatus"])
+  .index("by_awb", ["awbNumber"]);
+
+// ============================================================================
+// TRACKING EVENTS (Individual tracking events for a shipment)
+// ============================================================================
+
+const trackingEvents = defineTable({
+  shipmentId: v.id("shipments"),
+  orderId: v.id("orders"),
+  // Provider-specific event idempotency key (e.g. Shiprocket event ID).
+  providerEventId: v.optional(v.string()),
+  // Normalized internal status at time of event.
+  status: v.union(
+    v.literal("pending"),
+    v.literal("processing"),
+    v.literal("booked"),
+    v.literal("shipped"),
+    v.literal("in_transit"),
+    v.literal("out_for_delivery"),
+    v.literal("delivered"),
+    v.literal("cancelled"),
+    v.literal("failed"),
+  ),
+  // Raw provider status string — for debugging, never exposed to customers.
+  providerStatus: v.optional(v.string()),
+  description: v.optional(v.string()),
+  location: v.optional(v.string()),
+  // When the event occurred at the provider (may differ from createdAt).
+  eventTimestamp: v.number(),
+  createdAt: v.number(),
+})
+  .index("by_shipment", ["shipmentId", "eventTimestamp"])
+  .index("by_order", ["orderId", "eventTimestamp"])
+  .index("by_provider_event_id", ["providerEventId"]);
+
+// ============================================================================
 // Export Schema (auth tables + business tables merged)
 // ============================================================================
 
@@ -1088,6 +1162,8 @@ export default defineSchema({
   shippingZones,
   shippingRates,
   shippingConfig,
+  shipments,
+  trackingEvents,
 }, {
   schemaValidation: false,
 });

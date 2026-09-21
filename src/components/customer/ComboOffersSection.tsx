@@ -67,7 +67,7 @@ export function ComboOffersSection({ businessUnits, onOpenItemDetails }: ComboOf
     const enabledIds = new Set(combosEnabled.map((bu) => bu._id));
     const seen = new Set<string>();
     return allCombosRaw
-      .filter((combo) => enabledIds.has(combo.businessUnitId))
+      .filter((combo) => enabledIds.has(combo.businessUnitId as any))
       .filter((combo) => combo.status === "active")
       .filter((combo) => {
         if (seen.has(combo._id)) return false;

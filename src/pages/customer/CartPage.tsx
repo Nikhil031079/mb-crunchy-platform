@@ -345,7 +345,7 @@ export default function CartPage() {
                 ) : (
                   <p className="text-sm font-medium">
                     Add{" "}
-                    <span className="text-primary font-semibold">
+                    <span className="inline-flex items-center gap-1 rounded border border-primary/20 bg-primary/10 text-primary px-1.5">
                       {formatCurrency(freeDeliveryProgress.remaining)}
                     </span>{" "}
                     more for free delivery

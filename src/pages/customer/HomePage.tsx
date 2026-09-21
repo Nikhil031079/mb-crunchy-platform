@@ -28,6 +28,7 @@ import {
   TodaySpecialsSection,
   ComboOffersSection,
   PartyPacksSection,
+  BestSellersSection,
 } from "@/components/customer";
 
 // Modal
@@ -255,34 +256,50 @@ export default function HomePage() {
     <div className="min-h-screen bg-background">
       {/* ================================================================ */}
       {/* 1. HERO SECTION — Full-width rotating banner (dynamic content)   */}
+      {/*    Communicates: Fresh Kitchen Favorites + Everyday Mart Essentials */}
+      {/*    With [ORDER FROM KITCHEN] and [SHOP MART] primary CTAs       */}
       {/* ================================================================ */}
 
       {isLoading ? (
         <HeroSectionSkeleton />
       ) : (
         <HeroSection
-          title="Fresh Food, Organic Groceries & Everyday Essentials"
-          subtitle="Delicious snacks, refreshing beverages, natural groceries and daily essentials delivered to your doorstep."
-          description="One destination for Frozen Foods, Organic Products, Fresh Beverages and Everyday Essentials."
+          title="Fresh Kitchen Favorites"
+          subtitle="Everyday Mart Essentials"
+          description="One destination for fresh prepared food and quality grocery products."
           badge="Your Favourite Stores, One Cart"
           size="lg"
           banners={heroBanners ?? defaultPromoSlides}
           businessUnits={activeBusinessUnits}
+          actions={[
+            { label: "Order from Kitchen", href: "/kitchen", variant: "default" },
+            { label: "Shop Mart", href: "/mb-mart", variant: "outline" },
+          ]}
         />
       )}
 
       {/* ================================================================ */}
-      {/* 2. COMBO OFFERS — Global merchandising section              */}
+      {/* 2. CATEGORIES — Premium category grid from BU data              */}
       {/* ================================================================ */}
-      <ComboOffersSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />
+
+      {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
-      {/* 3. PARTY PACKS — Global merchandising section                */}
+      {/* 3. POPULAR PRODUCTS — Best sellers across stores                 */}
       {/* ================================================================ */}
-      <PartyPacksSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />
+
+      {!isLoading && (
+        <BestSellersSection businessUnits={activeBusinessUnits} />
+      )}
 
       {/* ================================================================ */}
-      {/* 3. EXPERIENCE CTA — below the hero for an early conversion       */}
+      {/* 4. TODAY'S SPECIALS — Featured picks across stores               */}
+      {/* ================================================================ */}
+
+      {!isLoading && <TodaySpecialsSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
+
+      {/* ================================================================ */}
+      {/* 5. EXPERIENCE CTA — early conversion, show Kitchen/Mart context  */}
       {/* ================================================================ */}
 
       {!isLoading && (
@@ -332,31 +349,19 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 4. INFO STRIP — merged promo / announcement / trust points       */}
+      {/* 5. INFO STRIP — merged promo / announcement / trust points       */}
       {/* ================================================================ */}
 
       {!isLoading && <HomepageInfoStrip />}
 
       {/* ================================================================ */}
-      {/* 5. BROWSE BY CATEGORY — Premium category grid                    */}
-      {/* ================================================================ */}
-
-      {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
-
-      {/* ================================================================ */}
-      {/* 6. TODAY'S SPECIALS — deduped featured products across stores    */}
-      {/* ================================================================ */}
-
-      {!isLoading && <TodaySpecialsSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
-
-      {/* ================================================================ */}
-      {/* 7. RECOMMENDED FOR YOU — deterministic personalized picks        */}
+      {/* 6. RECOMMENDED FOR YOU — deterministic personalized picks         */}
       {/* ================================================================ */}
 
       {!isLoading && <RecommendedForYouSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
 
       {/* ================================================================ */}
-      {/* 8. TRUST BAND — compact brand trust points                       */}
+      {/* 7. TRUST BAND — compact brand trust points                       */}
       {/* ================================================================ */}
 
       <section className="border-t border-border/40 bg-secondary/20 py-10 sm:py-12">

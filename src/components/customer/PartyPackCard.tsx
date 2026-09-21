@@ -1,6 +1,6 @@
 import { useState, memo } from "react";
 import { motion } from "framer-motion";
-import { ShoppingCart, Heart, ImageOff, Users, Check } from "lucide-react";
+import { ShoppingCart, Heart, ImageOff, Users, Check, Ban } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ interface PartyPackCardProps {
   onAddToCart?: (partyPack: PartyPack) => void;
   onFavorite?: (partyPack: PartyPack) => void;
   isFavorited?: boolean;
+  isUnavailable?: boolean;
   className?: string;
   /** Called when the card body is clicked - opens Item Details Modal */
   onOpenItemDetails?: (partyPack: PartyPack) => void;
@@ -35,6 +36,7 @@ export const PartyPackCard = memo(function PartyPackCard({
   onAddToCart,
   onFavorite,
   isFavorited = false,
+  isUnavailable = false,
   className,
   onOpenItemDetails,
   getItemName,
@@ -77,6 +79,7 @@ export const PartyPackCard = memo(function PartyPackCard({
       <Card
         className={cn(
           "group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer",
+          isUnavailable && "opacity-70",
           className
         )}
         onClick={cardOnClick}
@@ -106,6 +109,19 @@ export const PartyPackCard = memo(function PartyPackCard({
               >
                 -{discount}%
               </Badge>
+            )}
+
+            {/* Unavailable Overlay */}
+            {isUnavailable && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
+                <Badge
+                  variant="destructive"
+                  className="text-xs font-semibold px-3 py-1 gap-1"
+                >
+                  <Ban className="h-3 w-3" />
+                  Unavailable
+                </Badge>
+              </div>
             )}
 
             {/* Favorite Button */}
@@ -210,10 +226,11 @@ export const PartyPackCard = memo(function PartyPackCard({
                   variant="default"
                   size="sm"
                   onClick={handleAddToCart}
-                  className="gap-1.5 rounded-lg text-xs"
+                  disabled={isUnavailable}
+                  className="gap-1.5 rounded-lg text-xs active:scale-95 transition-transform"
                 >
                   <ShoppingCart className="h-3.5 w-3.5" />
-                  Add
+                  {isUnavailable ? "Unavailable" : "Add"}
                 </Button>
               )}
             </div>

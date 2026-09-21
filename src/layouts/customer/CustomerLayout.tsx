@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Outlet } from "react-router";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 
 import { api } from "@convex/_generated/api";
 
@@ -18,6 +18,15 @@ export function CustomerLayout() {
     (useQuery(api.businessUnits.getActive) as BusinessUnit[] | undefined) ?? [];
   const { itemCount } = useCart();
   const { isAuthenticated, user, signOut } = useAuth();
+  const ensureCustomer = useMutation(api.customers.ensureCustomerForAuthUser);
+
+  // Ensure a customer record exists for the current auth user.
+  // Idempotent: returns existing customer if already linked.
+  useEffect(() => {
+    if (isAuthenticated) {
+      ensureCustomer();
+    }
+  }, [isAuthenticated, ensureCustomer]);
 
   const buIds = useMemo(
     () => businessUnits.map((bu) => bu._id),

@@ -15,11 +15,41 @@ import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
 
 export async function ensureCustomerByPhone(
   ctx: MutationCtx,
-  args: { name: string; phone: string; email?: string }
+  args: { name: string; phone: string; email?: string; authUserId?: string }
 ): Promise<Id<"customers">> {
   const now = Date.now();
   const phone = requireIndianPhone(args.phone);
 
+  // 1. Check if a customer already linked to this auth user exists
+  if (args.authUserId) {
+    const authLinked = await ctx.db
+      .query("customers")
+      .withIndex("by_auth_user", (q) => q.eq("authUserId", args.authUserId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .first();
+
+    if (authLinked) {
+      // Auth-linked customer exists — update order count and merge phone if missing
+      const patch: Record<string, unknown> = {
+        totalOrders: authLinked.totalOrders + 1,
+        lastOrderAt: now,
+        updatedAt: now,
+      };
+      if (!authLinked.phone && phone) {
+        patch.phone = phone;
+      }
+      if (!authLinked.name && args.name.trim()) {
+        patch.name = args.name.trim();
+      }
+      if (!authLinked.email && args.email?.trim()) {
+        patch.email = args.email.trim();
+      }
+      await ctx.db.patch(authLinked._id, patch);
+      return authLinked._id;
+    }
+  }
+
+  // 2. Check if a customer exists with this phone number
   const existing = await ctx.db
     .query("customers")
     .withIndex("by_phone", (q) => q.eq("phone", phone))
@@ -35,14 +65,20 @@ export async function ensureCustomerByPhone(
     if (!existing.name && args.name.trim()) {
       patch.name = args.name.trim();
     }
+    // Link authUserId if not already set and a valid one is provided
+    if (args.authUserId && !existing.authUserId) {
+      patch.authUserId = args.authUserId;
+    }
     await ctx.db.patch(existing._id, patch);
     return existing._id;
   }
 
+  // 3. No existing customer — create new
   return await ctx.db.insert("customers", {
     name: args.name.trim(),
     email: args.email?.trim() || undefined,
     phone,
+    authUserId: args.authUserId || undefined,
     totalOrders: 0,
     totalSpent: 0,
     lastOrderAt: now,
@@ -677,6 +713,43 @@ export const getByAuthUser = query({
       .withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject))
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .first();
+  },
+});
+
+/**
+ * Ensure a customer record exists for the current authenticated user.
+ * Idempotent: returns existing customer if already linked.
+ * Creates a new customer record if none exists for this auth user.
+ * Called from the frontend on mount/auth change so account features work.
+ */
+export const ensureCustomerForAuthUser = mutation({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    // Check if customer already linked to this auth user
+    const existing = await ctx.db
+      .query("customers")
+      .withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .first();
+
+    if (existing) return existing._id;
+
+    // No customer linked — create one with auth user info
+    const now = Date.now();
+    const customerId = await ctx.db.insert("customers", {
+      name: identity.name || "",
+      email: identity.email || undefined,
+      authUserId: identity.subject,
+      totalOrders: 0,
+      totalSpent: 0,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return customerId;
   },
 });
 
