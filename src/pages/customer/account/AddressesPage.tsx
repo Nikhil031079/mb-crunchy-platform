@@ -65,14 +65,14 @@ export default function AddressesPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="rounded-3xl glass-tier-1 overflow-hidden">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="font-culinary-heading text-base font-bold tracking-tight flex items-center gap-2">
               <MapPin className="h-4 w-4" />
               Saved Addresses
             </CardTitle>
-            <Button size="sm" onClick={handleAdd} className="gap-1">
+            <Button size="sm" variant="crunch" onClick={handleAdd} className="gap-1">
               <Plus className="h-3 w-3" />
               Add Address
             </Button>
@@ -91,7 +91,7 @@ export default function AddressesPage() {
               description="Add a delivery address for faster checkout."
               icon={MapPin}
               action={
-                <Button size="sm" onClick={handleAdd}>
+                <Button size="sm" variant="crunch" onClick={handleAdd}>
                   Add Address
                 </Button>
               }
@@ -101,19 +101,19 @@ export default function AddressesPage() {
               {addresses.map((addr) => (
                 <div
                   key={addr._id}
-                  className="rounded-lg border border-border/60 p-4"
+                  className="rounded-2xl border border-border/50 bg-white/50 p-4 dark:bg-white/5"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{addr.label}</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-culinary-heading text-sm font-bold">{addr.label}</span>
                         {addr.isDefault && (
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge variant="secondary" className="bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary text-xs">
                             Default
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">{addr.address}</p>
+                      <p className="text-sm text-muted-foreground break-words">{addr.address}</p>
                       {addr.city && (
                         <p className="text-xs text-muted-foreground">
                           {[addr.city, addr.state, addr.zipCode].filter(Boolean).join(", ")}

@@ -77,6 +77,10 @@ interface OfferFormDialogProps {
   businessUnits: { id: string; name: string }[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: OfferFormValues) => void;
+  /** When creating from the Flash Sales page, new offers start as flash-sale items. Edit behavior is unchanged. */
+  defaultFlashSale?: boolean;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 export function OfferFormDialog({
@@ -85,6 +89,8 @@ export function OfferFormDialog({
   businessUnits,
   onOpenChange,
   onSubmit,
+  defaultFlashSale = false,
+  isSaving = false,
 }: OfferFormDialogProps) {
   const dialogKey = `${offer?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(offer);
@@ -107,6 +113,8 @@ export function OfferFormDialog({
           offer={offer}
           businessUnits={businessUnits}
           isEditing={isEditing}
+          defaultFlashSale={defaultFlashSale}
+          isSaving={isSaving}
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
         />
@@ -119,6 +127,8 @@ interface OfferFormProps {
   offer?: Offer;
   businessUnits: { id: string; name: string }[];
   isEditing: boolean;
+  defaultFlashSale: boolean;
+  isSaving: boolean;
   onSubmit: (values: OfferFormValues) => void;
   onCancel: () => void;
 }
@@ -127,12 +137,16 @@ function OfferForm({
   offer,
   businessUnits,
   isEditing,
+  defaultFlashSale,
+  isSaving,
   onSubmit,
   onCancel,
 }: OfferFormProps) {
-  const [values, setValues] = useState<OfferFormValues>(() =>
-    toFormValues(offer)
-  );
+  const [values, setValues] = useState<OfferFormValues>(() => {
+    const initial = toFormValues(offer);
+    if (!offer && defaultFlashSale) initial.isFlashSale = true;
+    return initial;
+  });
   const formId = useId();
 
   const update = <K extends keyof OfferFormValues>(
@@ -469,7 +483,7 @@ function OfferForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" form={formId}>
+        <Button type="submit" form={formId} disabled={isSaving}>
           {isEditing ? "Save changes" : "Create offer"}
         </Button>
       </DialogFooter>

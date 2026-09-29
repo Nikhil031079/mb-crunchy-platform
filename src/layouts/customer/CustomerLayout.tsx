@@ -55,7 +55,10 @@ export function CustomerLayout() {
   }, [buIds, s1, s2, s3]);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // Culinary Glass Tier 0 canvas (Phase 3) — base storefront layer.
+    // Individual pages keep their own surfaces for now and adopt the
+    // canvas progressively in later phases; layout/spacing untouched.
+    <div className="flex min-h-screen flex-col culinary-canvas">
       <CustomerNavbar
         businessUnits={businessUnits}
         cartItemCount={itemCount}

@@ -28,6 +28,39 @@ import { EMPTY_MESSAGES } from "@/constants";
 
 const PAGE_SIZE = 8;
 
+/**
+ * Client-side validation for party pack create/edit. Returns an error
+ * message for the first problem found, or null when the values are valid.
+ * Drafts may hold temporarily blank rows while editing, but Save is
+ * blocked until every row is valid. Server checks in convex/partyPacks.ts
+ * remain authoritative.
+ */
+export function validatePartyPackValues(values: PartyPackFormValues): string | null {
+  if (!values.businessUnitId) return "Select a business unit.";
+  if (!Number.isInteger(values.minServings) || values.minServings < 1) {
+    return "Min servings must be a whole number of at least 1.";
+  }
+  if (!Number.isInteger(values.maxServings) || values.maxServings < 1) {
+    return "Max servings must be a whole number of at least 1.";
+  }
+  if (values.minServings > values.maxServings) {
+    return "Min servings must not exceed max servings.";
+  }
+  if (!Array.isArray(values.items) || values.items.length === 0) {
+    return "Add at least one item to the party pack.";
+  }
+  for (let index = 0; index < values.items.length; index += 1) {
+    const item = values.items[index];
+    if (!item || !item.catalogItemId) {
+      return `Item ${index + 1} must reference a valid product.`;
+    }
+    if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+      return `Item ${index + 1} must have a whole quantity of at least 1.`;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Mapping helpers — keep Convex document shapes out of the UI layer
 // ---------------------------------------------------------------------------
@@ -111,7 +144,8 @@ function toUpdateArgs(id: string, values: PartyPackFormValues) {
 
 export default function PartyPacksPage() {
   const { getSessionToken } = useAdminAuth();
-  const allDocs = useQuery(api.partyPacks.getAll);
+  const token = getSessionToken();
+  const allDocs = useQuery(api.partyPacks.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const allCatalogItems = useQuery(api.catalogItems.getAll);
   const createPartyPack = useMutation(api.partyPacks.create);
@@ -121,7 +155,10 @@ export default function PartyPacksPage() {
 
   const isLoading =
     allDocs === undefined || allBUs === undefined || allCatalogItems === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
 
   const [filters, setFilters] = useState<PartyPackFilters>({
     query: "",
@@ -135,6 +172,7 @@ export default function PartyPacksPage() {
   const [editingPartyPack, setEditingPartyPack] = useState<PartyPack>();
   const [deleteTarget, setDeleteTarget] = useState<PartyPack>();
   const [restoreTarget, setRestoreTarget] = useState<PartyPack>();
+  const [isSaving, setIsSaving] = useState(false);
 
   const buMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -222,6 +260,13 @@ export default function PartyPacksPage() {
   };
 
   const savePartyPack = async (values: PartyPackFormValues) => {
+    if (isSaving) return;
+    const validationError = validatePartyPackValues(values);
+    if (validationError) {
+      setActionError({ title: "Could not save party pack", message: validationError });
+      return;
+    }
+    setIsSaving(true);
     try {
       if (editingPartyPack) {
         await updatePartyPack({ ...toUpdateArgs(editingPartyPack.id, values), sessionToken: getSessionToken()! });
@@ -230,9 +275,9 @@ export default function PartyPacksPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save party pack"
-      );
+      setActionError({ title: "Could not save party pack", message: err instanceof Error ? err.message : "Failed to save party pack" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -242,9 +287,7 @@ export default function PartyPacksPage() {
       await softDeletePartyPack({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to archive party pack"
-      );
+      setActionError({ title: "Could not delete party pack", message: err instanceof Error ? err.message : "Failed to archive party pack" });
     }
   };
 
@@ -254,9 +297,7 @@ export default function PartyPacksPage() {
       await restorePartyPack({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to restore party pack"
-      );
+      setActionError({ title: "Could not restore party pack", message: err instanceof Error ? err.message : "Failed to restore party pack" });
     }
   };
 
@@ -271,6 +312,19 @@ export default function PartyPacksPage() {
           Add party pack
         </Button>
       </PageHeader>
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}>
+              <RefreshCw className="size-3.5" /> Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -396,6 +450,7 @@ export default function PartyPacksPage() {
         catalogItems={catalogItemOptions}
         onOpenChange={setFormOpen}
         onSubmit={savePartyPack}
+        isSaving={isSaving}
       />
       <PartyPackDialogs
         deleteTarget={deleteTarget}

@@ -31,7 +31,9 @@ export const CategoryNavBar = memo(function CategoryNavBar({
   return (
     <div
       className={cn(
-        "sticky top-16 z-40 border-b border-border/40 bg-background/85 backdrop-blur-lg supports-[backdrop-filter]:bg-background/70",
+        // Culinary Glass Tier 3 (Phase 3) — floating nav surface.
+        // Positioning, scroll, and keyboard behavior unchanged.
+        "sticky top-16 z-40 glass-tier-3",
         className
       )}
     >
@@ -54,9 +56,12 @@ export const CategoryNavBar = memo(function CategoryNavBar({
                 className={cn(
                   "group flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-200",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                  // Culinary pills (Phase 3): neutral glass resting,
+                  // saffron-tinted glass when selected. Structure,
+                  // roles, and selection behavior unchanged.
                   isActive
-                    ? "border-accent bg-accent text-white shadow-sm"
-                    : "border-border/60 bg-card text-muted-foreground hover:border-accent/40 hover:text-foreground"
+                    ? "badge-glass-selected"
+                    : "badge-glass hover:border-accent/40 hover:text-foreground"
                 )}
               >
                 <span
@@ -75,7 +80,7 @@ export const CategoryNavBar = memo(function CategoryNavBar({
                 <span
                   className={cn(
                     "rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums",
-                    isActive ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground"
+                    isActive ? "bg-culinary-primary/15 text-culinary-primary" : "bg-secondary text-muted-foreground"
                   )}
                 >
                   {count}

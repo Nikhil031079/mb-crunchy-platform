@@ -109,7 +109,7 @@ function CollectionItemCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.03 }}
     >
-      <Card className="group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+      <Card className="group rounded-2xl border-border/50 bg-white/50 overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 dark:bg-white/5">
         <div className="relative aspect-square overflow-hidden bg-secondary">
           {itemImage && !imageError ? (
             <img
@@ -150,7 +150,7 @@ function CollectionItemCard({
           </div>
 
           {itemPrice !== undefined && (
-            <p className="text-sm font-bold">{formatCurrency(itemPrice)}</p>
+            <p className="font-culinary-heading text-sm font-bold tabular-nums">{formatCurrency(itemPrice)}</p>
           )}
 
           <div className="flex items-center gap-2">

@@ -66,7 +66,17 @@ export const getByType = query({
       .filter((q) =>
         q.and(
           q.eq(q.field("deletedAt"), undefined),
-          q.eq(q.field("status"), "active")
+          q.eq(q.field("status"), "active"),
+          // Active window with missing-dates-mean-no-boundary semantics,
+          // mirroring the client isContentActive helper in src/utils/marketing.ts.
+          q.or(
+            q.eq(q.field("startDate"), undefined),
+            q.lte(q.field("startDate"), now)
+          ),
+          q.or(
+            q.eq(q.field("endDate"), undefined),
+            q.gte(q.field("endDate"), now)
+          )
         )
       );
 
@@ -80,8 +90,17 @@ export const getByType = query({
   },
 });
 
+/**
+ * Admin-only full content listing. The only callers are the admin
+ * Banners/HappyHour pages, which pass their session token. Returns the
+ * complete unfiltered documents (including inactive/archived) for admin
+ * management; customer surfaces use getByType/getActiveForCustomer-style
+ * windowed queries.
+ */
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("content")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
@@ -193,6 +212,26 @@ export const softDelete = mutation({
     await ctx.db.patch(args.id, {
       status: "archived",
       deletedAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Restore — clears deletedAt and reactivates the content record.
+ */
+export const restore = mutation({
+  args: { sessionToken: v.string(), id: v.id("content") },
+  handler: async (ctx, args) => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
+
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Content not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "active",
+      deletedAt: undefined,
       updatedAt: now,
     });
   },

@@ -65,7 +65,15 @@ export default function HomepageSectionsPage() {
   const s3 = useQuery(api.homepageSections.getByBusinessUnit, bu3 ? { businessUnitId: bu3 } : "skip");
 
   const [scope, setScope] = useState<string>("both");
+  // 19G (19C pattern): `error` is the list-level load error (query failures).
+  // Mutation failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  // Re-entry guards: saveSection performs multi-BU upserts; row ops mutate
+  // across stores. Guards live in the handlers so repeats are impossible
+  // even without (in addition to) disabled UI.
+  const [isSaving, setIsSaving] = useState(false);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<HomepageSectionRow>();
   const [previewRow, setPreviewRow] = useState<HomepageSectionRow>();
@@ -160,6 +168,8 @@ export default function HomepageSectionsPage() {
   );
 
   const saveSection = async (values: HomepageSectionFormValues) => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       const token = getSessionToken()!;
       const settings: Record<string, unknown> = {
@@ -190,11 +200,15 @@ export default function HomepageSectionsPage() {
 
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save section");
+      setActionError({ title: "Could not save section", message: err instanceof Error ? err.message : "Failed to save section" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const toggleVisible = async (row: HomepageSectionRow, visible: boolean) => {
+    if (pendingKey) return;
+    setPendingKey(row.sectionType);
     try {
       const token = getSessionToken()!;
       const buIds = row.target === "both" ? activeBUs.map((bu) => bu._id) : [row.target];
@@ -205,13 +219,17 @@ export default function HomepageSectionsPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to toggle section");
+      setActionError({ title: "Could not update section", message: err instanceof Error ? err.message : "Failed to toggle section" });
+    } finally {
+      setPendingKey(null);
     }
   };
 
   const moveSection = async (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= rows.length) return;
+    if (pendingKey) return;
+    setPendingKey(rows[index].sectionType);
     const next = [...rows];
     [next[index], next[target]] = [next[target], next[index]];
     const orderedTypes = next.map((row) => row.sectionType);
@@ -233,12 +251,15 @@ export default function HomepageSectionsPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reorder sections");
+      setActionError({ title: "Could not reorder sections", message: err instanceof Error ? err.message : "Failed to reorder sections" });
+    } finally {
+      setPendingKey(null);
     }
   };
 
   const archiveSection = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || pendingKey) return;
+    setPendingKey(deleteTarget.sectionType);
     try {
       const token = getSessionToken()!;
       const buIds = deleteTarget.target === "both" ? activeBUs.map((bu) => bu._id) : [deleteTarget.target];
@@ -250,7 +271,9 @@ export default function HomepageSectionsPage() {
       }
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete section");
+      setActionError({ title: "Could not delete section", message: err instanceof Error ? err.message : "Failed to delete section" });
+    } finally {
+      setPendingKey(null);
     }
   };
 
@@ -270,6 +293,19 @@ export default function HomepageSectionsPage() {
           Add section
         </Button>
       </PageHeader>
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}>
+              <RefreshCw className="size-3.5" />Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -326,6 +362,7 @@ export default function HomepageSectionsPage() {
         usedOrdersForTarget={usedOrdersForTarget}
         onOpenChange={setFormOpen}
         onSubmit={saveSection}
+        isSaving={isSaving}
       />
       <HomepageSectionPreview
         open={Boolean(previewRow)}

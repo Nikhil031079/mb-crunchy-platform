@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 import { ProductRowActions } from "./ProductRowActions";
 import type { Product, ProductSortKey, SortDirection } from "./types";
+import { productShippingState } from "./types";
 
 const statusClassNames = { active: "border-emerald-200 bg-emerald-500/10 text-emerald-700", inactive: "border-amber-200 bg-amber-500/10 text-amber-700", archived: "border-slate-200 bg-slate-500/10 text-slate-700" } as const;
 
@@ -49,15 +50,31 @@ function StockCell({ product }: { product: Product }) {
   );
 }
 
+function ShippingCell({ product }: { product: Product }) {
+  const state = productShippingState(product);
+  if (state === "non-shippable") {
+    return <Badge variant="secondary">Not shippable</Badge>;
+  }
+  if (state === "needs-weight") {
+    return <Badge variant="outline" className="border-amber-200 bg-amber-500/10 text-amber-700">Missing weight</Badge>;
+  }
+  const label =
+    typeof product.weightGrams === "number" && product.weightGrams > 0
+      ? `${product.weightGrams} g`
+      : "Variants OK";
+  return <Badge variant="outline" className="border-emerald-200 bg-emerald-500/10 text-emerald-700">{label}</Badge>;
+}
+
 export function ProductTable({ products, isLoading = false, sortKey, sortDirection, onSort, onEdit, onDelete, onRestore, onToggleFeatured, onToggleAvailable }: ProductTableProps) {
-  return <Table>
+  // 19D: horizontal scroll on narrow screens (Banner/MealDeal table pattern).
+  return <div className="overflow-x-auto"><Table>
     <TableHeader><TableRow>
-      <TableHead>Image</TableHead><TableHead><SortButton column="name" label="Name" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="slug" label="Slug" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="businessUnitName" label="Business Unit" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="categoryName" label="Category" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="price" label="Price" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="stockTotal" label="Stock" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead>Featured</TableHead><TableHead>Available</TableHead><TableHead><SortButton column="status" label="Status" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="displayOrder" label="Order" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><span className="sr-only">Actions</span></TableHead>
+      <TableHead>Image</TableHead><TableHead><SortButton column="name" label="Name" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="slug" label="Slug" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="businessUnitName" label="Business Unit" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="categoryName" label="Category" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="price" label="Price" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="stockTotal" label="Stock" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead>Shipping</TableHead><TableHead>Featured</TableHead><TableHead>Available</TableHead><TableHead><SortButton column="status" label="Status" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="displayOrder" label="Order" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><span className="sr-only">Actions</span></TableHead>
     </TableRow></TableHeader>
     <TableBody>
-      {isLoading ? Array.from({ length: 6 }, (_, index) => <TableRow key={index}><TableCell><Skeleton className="size-9" /></TableCell>{Array.from({ length: 10 }, (_, cellIndex) => <TableCell key={cellIndex}><Skeleton className="h-5 w-24" /></TableCell>)}</TableRow>) : products.map((product) => <TableRow key={product.id}>
-        <TableCell><ImagePreview product={product} /></TableCell><TableCell className="font-medium">{product.name}</TableCell><TableCell className="text-muted-foreground">/{product.slug}</TableCell><TableCell className="text-muted-foreground">{product.businessUnitName}</TableCell><TableCell className="text-muted-foreground">{product.categoryName}</TableCell>        <TableCell className="text-muted-foreground">{product.variants.length > 1 ? <span>₹{Math.min(...product.variants.map((v) => v.price))} – ₹{Math.max(...product.variants.map((v) => v.price))}</span> : product.compareAtPrice ? <span><span className="line-through">{product.compareAtPrice}</span> ₹{product.price}</span> : <span>₹{product.price}</span>}</TableCell><TableCell><StockCell product={product} /></TableCell><TableCell><Switch checked={product.featured} onCheckedChange={() => onToggleFeatured(product)} disabled={product.status === "archived"} aria-label={`Toggle featured for ${product.name}`} /></TableCell><TableCell><Switch checked={product.available} onCheckedChange={() => onToggleAvailable(product)} disabled={product.status === "archived"} aria-label={`Toggle availability for ${product.name}`} /></TableCell><TableCell><Badge variant="outline" className={cn("capitalize", statusClassNames[product.status])}>{product.status}</Badge></TableCell><TableCell>{product.displayOrder}</TableCell><TableCell><ProductRowActions product={product} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} /></TableCell>
+      {isLoading ? Array.from({ length: 6 }, (_, index) => <TableRow key={index}><TableCell><Skeleton className="size-9" /></TableCell>{Array.from({ length: 11 }, (_, cellIndex) => <TableCell key={cellIndex}><Skeleton className="h-5 w-24" /></TableCell>)}</TableRow>) : products.map((product) => <TableRow key={product.id}>
+        <TableCell><ImagePreview product={product} /></TableCell><TableCell className="font-medium">{product.name}</TableCell><TableCell className="text-muted-foreground">/{product.slug}</TableCell><TableCell className="text-muted-foreground">{product.businessUnitName}</TableCell><TableCell className="text-muted-foreground">{product.categoryName}</TableCell>        <TableCell className="text-muted-foreground">{product.variants.length > 1 ? <span>₹{Math.min(...product.variants.map((v) => v.price))} – ₹{Math.max(...product.variants.map((v) => v.price))}</span> : product.compareAtPrice ? <span><span className="line-through">{product.compareAtPrice}</span> ₹{product.price}</span> : <span>₹{product.price}</span>}</TableCell><TableCell><StockCell product={product} /></TableCell><TableCell><ShippingCell product={product} /></TableCell><TableCell><Switch checked={product.featured} onCheckedChange={() => onToggleFeatured(product)} disabled={product.status === "archived"} aria-label={`Toggle featured for ${product.name}`} /></TableCell><TableCell><Switch checked={product.available} onCheckedChange={() => onToggleAvailable(product)} disabled={product.status === "archived"} aria-label={`Toggle availability for ${product.name}`} /></TableCell><TableCell><Badge variant="outline" className={cn("capitalize", statusClassNames[product.status])}>{product.status}</Badge></TableCell><TableCell>{product.displayOrder}</TableCell><TableCell><ProductRowActions product={product} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} /></TableCell>
       </TableRow>)}
     </TableBody>
-  </Table>;
+  </Table></div>;
 }

@@ -94,14 +94,20 @@ function toUpdateArgs(id: string, values: BannerFormValues) {
 
 export default function BannersPage() {
   const { getSessionToken } = useAdminAuth();
-  const allDocs = useQuery(api.content.getAll);
+  const token = getSessionToken();
+  const allDocs = useQuery(api.content.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const createContent = useMutation(api.content.create);
   const updateContent = useMutation(api.content.update);
   const softDeleteContent = useMutation(api.content.softDelete);
+  const restoreContent = useMutation(api.content.restore);
 
   const isLoading = allDocs === undefined || allBUs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [filters, setFilters] = useState<BannerFilters>({ query: "", status: "all", contentType: "all", businessUnitId: "all" });
   const [sortKey, setSortKey] = useState<BannerSortKey>("displayOrder");
@@ -149,6 +155,8 @@ export default function BannersPage() {
   const openCreateDialog = () => { setEditingBanner(undefined); setFormOpen(true); };
 
   const saveBanner = async (values: BannerFormValues) => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       if (editingBanner) {
         await updateContent({ ...toUpdateArgs(editingBanner.id, values), sessionToken: getSessionToken()! });
@@ -157,7 +165,9 @@ export default function BannersPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save banner");
+      setActionError({ title: "Could not save banner", message: err instanceof Error ? err.message : "Failed to save banner" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -167,17 +177,17 @@ export default function BannersPage() {
       await softDeleteContent({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive banner");
+      setActionError({ title: "Could not delete banner", message: err instanceof Error ? err.message : "Failed to archive banner" });
     }
   };
 
   const confirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      await updateContent({ id: restoreTarget.id as any, status: "active" as any, sessionToken: getSessionToken()! });
+      await restoreContent({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to restore banner");
+      setActionError({ title: "Could not restore banner", message: err instanceof Error ? err.message : "Failed to restore banner" });
     }
   };
 
@@ -186,6 +196,17 @@ export default function BannersPage() {
       <PageHeader title="Banners" description="Manage promotional banners and content across your stores.">
         <Button size="sm" onClick={openCreateDialog}><Plus className="mr-1.5 size-4" />Add banner</Button>
       </PageHeader>
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}><RefreshCw className="size-3.5" />Dismiss</Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -246,6 +267,7 @@ export default function BannersPage() {
         businessUnits={businessUnitOptions}
         onOpenChange={setFormOpen}
         onSubmit={saveBanner}
+        isSaving={isSaving}
       />
       <BannerDialogs
         deleteTarget={deleteTarget}

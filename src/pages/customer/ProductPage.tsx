@@ -118,11 +118,11 @@ function findMatchingVariant(
 
 function DetailFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-secondary/20 px-3 py-2">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+    <div className="min-w-0 rounded-xl border border-culinary-outline-variant/50 bg-white/50 px-3 py-2 backdrop-blur-md">
+      <p className="font-culinary-heading text-[10px] font-semibold uppercase tracking-wider text-culinary-on-surface-variant">
         {label}
       </p>
-      <p className="mt-0.5 truncate text-xs font-medium" title={value}>
+      <p className="mt-0.5 truncate font-culinary-body text-xs font-medium" title={value}>
         {value}
       </p>
     </div>
@@ -487,7 +487,7 @@ export default function ProductPage() {
 
   if (isBuLoading || isProductLoading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-2">
             <div className="aspect-square rounded-xl bg-secondary animate-pulse" />
@@ -518,7 +518,7 @@ export default function ProductPage() {
 
   if (isBuNotFound) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen culinary-canvas flex items-center justify-center">
         <ErrorState
           title="Store Not Found"
           message={`The store "${businessUnitSlug}" doesn't exist or has been archived.`}
@@ -529,7 +529,7 @@ export default function ProductPage() {
 
   if (isProductNotFound) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen culinary-canvas flex items-center justify-center">
         <ErrorState
           title="Product Not Found"
           message={`The product "${productSlug}" doesn't exist in ${businessUnit?.name ?? "this store"}.`}
@@ -563,12 +563,12 @@ export default function ProductPage() {
   const freeDeliveryThreshold = buSettings?.freeDeliveryThreshold;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen culinary-canvas">
       {/* ================================================================== */}
       {/* BREADCRUMBS                                                        */}
       {/* ================================================================== */}
 
-      <div className="border-b border-border/40 bg-secondary/30 py-3">
+      <div className="border-b border-white/60 bg-white/40 py-2.5 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Link to="/" className="transition-colors hover:text-foreground">
@@ -590,7 +590,7 @@ export default function ProductPage() {
               </>
             )}
             <ChevronRight className="h-3 w-3" />
-            <span className="font-medium text-foreground">{prod.name}</span>
+            <span className="min-w-0 flex-1 truncate font-medium text-foreground">{prod.name}</span>
           </nav>
         </div>
       </div>
@@ -604,13 +604,13 @@ export default function ProductPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="grid gap-10 lg:grid-cols-[1fr_1fr]"
+          className="grid gap-8 lg:grid-cols-12 lg:gap-8"
         >
           {/* ================================================================ */}
           {/* PRODUCT IMAGE GALLERY                                           */}
           {/* ================================================================ */}
 
-          <div className="flex flex-col-reverse gap-3 lg:flex-row lg:gap-4">
+          <div className="flex flex-col-reverse gap-3 lg:col-span-7 lg:flex-row lg:gap-4">
             {galleryImages.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-x-auto lg:overflow-y-auto lg:pb-0 lg:min-w-[72px]">
                 {galleryImages.map((img, i) => (
@@ -619,10 +619,10 @@ export default function ProductPage() {
                     type="button"
                     onClick={() => handleThumbnailClick(i)}
                     className={cn(
-                      "relative shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                      "relative shrink-0 overflow-hidden rounded-2xl border-2 bg-white/60 backdrop-blur-md transition-all",
                       "h-16 w-16 lg:h-[72px] lg:w-[72px]",
                       selectedImageIndex === i
-                        ? "border-primary ring-1 ring-primary"
+                        ? "border-culinary-primary opacity-100 ring-2 ring-culinary-primary/30"
                         : "border-transparent opacity-60 hover:opacity-100"
                     )}
                   >
@@ -636,7 +636,7 @@ export default function ProductPage() {
               </div>
             )}
 
-            <div className="relative flex-1">
+            <div className="relative flex-1 rounded-3xl glass-tier-1 p-2">
               <div
                 ref={mainImageRef}
                 className={cn(
@@ -699,10 +699,16 @@ export default function ProductPage() {
                   </div>
                 )}
 
+                {/* Subtle lower-edge depth overlay (5C, decorative only) */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-black/25 via-transparent to-transparent"
+                />
+
                 {discount > 0 && (
                   <Badge
                     variant="default"
-                    className="absolute left-4 top-4 bg-accent text-accent-foreground text-xs font-bold px-2 py-1 pointer-events-none"
+                    className="absolute left-4 top-4 rounded-full border border-white/60 bg-accent text-accent-foreground text-xs font-bold px-2.5 py-1 pointer-events-none shadow-md backdrop-blur-md"
                   >
                     -{discount}%
                   </Badge>
@@ -711,7 +717,7 @@ export default function ProductPage() {
                 {prod.featured && (
                   <Badge
                     variant="secondary"
-                    className="absolute right-4 top-4 gap-1 bg-background/80 backdrop-blur-sm text-xs pointer-events-none"
+                    className="absolute right-4 top-4 gap-1 rounded-full border border-white/60 bg-background/80 backdrop-blur-md text-xs pointer-events-none shadow-md"
                   >
                     <Star className="h-3 w-3 fill-accent text-accent" />
                     Featured
@@ -846,17 +852,16 @@ export default function ProductPage() {
             )}
           </AnimatePresence>
 
-          {/* ================================================================ */}
-          {/* PRODUCT DETAILS                                                 */}
+          {/* PRODUCT DETAILS — Stitch frosted information shell (5B, visual only) */}
           {/* ================================================================ */}
 
-          <div className="flex flex-col">
+          <div className="flex flex-col rounded-3xl glass-tier-1 p-5 sm:p-6 lg:col-span-5 lg:p-6">
             {prod.tags && prod.tags.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-1.5">
                 {prod.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                    className="inline-flex items-center gap-1 rounded-full border border-culinary-outline-variant/60 bg-white/60 px-2.5 py-0.5 font-culinary-heading text-[10px] font-semibold text-culinary-on-surface-variant backdrop-blur-md"
                   >
                     <Tag className="h-2.5 w-2.5" />
                     {tag}
@@ -865,7 +870,7 @@ export default function ProductPage() {
               </div>
             )}
 
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+            <h1 className="font-culinary-heading text-2xl font-bold tracking-tight md:text-3xl">
               {prod.name}
             </h1>
 
@@ -876,7 +881,7 @@ export default function ProductPage() {
                   <button
                     type="button"
                     onClick={() => document.getElementById("reviews-section")?.scrollIntoView({ behavior: "smooth" })}
-                    className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    className="flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-2.5 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur-md transition-colors hover:text-foreground"
                     aria-label={`Rated ${reviewStats!.average.toFixed(1)} out of 5 from ${reviewStats!.count} reviews. Scroll to reviews.`}
                   >
                     <span className="flex items-center gap-0.5">
@@ -896,7 +901,7 @@ export default function ProductPage() {
                     <span>({reviewStats!.count})</span>
                   </button>
                 ) : (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-2.5 py-1 text-xs text-muted-foreground backdrop-blur-md">
                     <Star className="h-3.5 w-3.5 fill-transparent text-muted-foreground/30" />
                     No reviews yet
                   </span>
@@ -941,7 +946,7 @@ export default function ProductPage() {
             </div>
 
             {prod.description && (
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-3 font-culinary-body text-sm leading-relaxed text-muted-foreground">
                 {prod.description}
               </p>
             )}
@@ -950,7 +955,7 @@ export default function ProductPage() {
 
             {/* Price */}
             <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold">
+              <span className="font-culinary-heading text-3xl font-extrabold tracking-tight">
                 {formatCurrency(selectedVariant?.price ?? minPrice)}
               </span>
               {hasVariants && maxPrice > minPrice && (
@@ -970,13 +975,13 @@ export default function ProductPage() {
             {/* ============================================================ */}
 
             {hasVariants && variantGroups.map((group) => (
-              <div key={group.groupName} className="mt-6 space-y-2">
-                <label className="text-sm font-medium">{group.groupName}</label>
+              <div key={group.groupName} className="mt-6 space-y-2 rounded-2xl border border-culinary-outline-variant/50 bg-white/50 p-3 backdrop-blur-md sm:p-4">
+                <label className="font-culinary-heading text-sm font-medium">{group.groupName}</label>
                 <Select
                   value={selections[group.groupName] ?? group.options[0]?.optionValue}
                   onValueChange={(val) => handleSelectionChange(group.groupName, val)}
                 >
-                  <SelectTrigger className="w-full sm:w-64">
+                  <SelectTrigger className="w-full rounded-xl border-culinary-outline-variant/60 bg-white/70 shadow-sm backdrop-blur-md sm:w-64">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -987,7 +992,7 @@ export default function ProductPage() {
                         <SelectItem key={opt.optionValue} value={opt.optionValue} disabled={optDisabled}>
                           <span className="flex items-center gap-2">
                             <span>{opt.optionValue}</span>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="font-culinary-heading text-xs font-semibold text-culinary-on-surface-variant">
                               {formatCurrency(opt.price)}
                             </span>
                             {!opt.active && (
@@ -1033,20 +1038,22 @@ export default function ProductPage() {
 
               <div className="flex items-center gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Quantity</label>
+                  <label className="font-culinary-heading text-sm font-medium">Quantity</label>
                   <QuantitySelector
                     value={quantity}
                     onChange={setQuantity}
                     min={selectedVariant?.minOrderQty ?? 1}
                     max={99}
+                    className="rounded-xl border-white/60 bg-white/60 shadow-sm backdrop-blur-md"
                   />
                 </div>
               </div>
 
               <Button
                 size="lg"
+                variant="crunch"
                 onClick={handleAddToCart}
-                className="w-full gap-2"
+                className="h-12 w-full gap-2 font-culinary-heading"
                 disabled={!selectedVariant || !storeIsOpen || isOutOfStock}
               >
                 <ShoppingCart className="h-4 w-4" />
@@ -1082,14 +1089,14 @@ export default function ProductPage() {
               )}
 
               {isItemInCart && (
-                <p className="text-center text-xs text-muted-foreground">
+                <p className="rounded-xl border border-culinary-outline-variant/50 bg-white/50 px-3 py-2 text-center text-xs text-muted-foreground backdrop-blur-md">
                   This item is already in your cart
                 </p>
               )}
             </div>
 
             {/* Business Unit Link */}
-            <div className="mt-8 rounded-xl border border-border/60 bg-secondary/30 p-4">
+            <div className="mt-8 rounded-2xl glass-tier-1 p-4">
               <div className="flex items-center gap-3">
                 {bu.logo ? (
                   <img
@@ -1106,8 +1113,8 @@ export default function ProductPage() {
                   </div>
                 )}
                 <div className="flex-1">
-                  <p className="text-sm font-medium">{bu.name}</p>
-                  <p className="text-xs text-muted-foreground">Browse more items</p>
+                  <p className="font-culinary-heading text-sm font-semibold">{bu.name}</p>
+                  <p className="font-culinary-body text-xs text-muted-foreground">Browse more items</p>
                 </div>
                 <Link to={`/${buSlug}`}>
                   <Button variant="ghost" size="sm">
@@ -1139,14 +1146,14 @@ export default function ProductPage() {
         {/* ================================================================ */}
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="rounded-2xl glass-tier-1 p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
                 <Bike className="h-4.5 w-4.5" />
               </div>
               <div>
-                <p className="text-xs font-semibold">Delivery</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                <p className="font-culinary-heading text-xs font-semibold">Delivery</p>
+                <p className="mt-0.5 font-culinary-body text-[11px] leading-snug text-muted-foreground">
                   {deliveryFee > 0
                     ? `Delivery fee ${formatCurrency(deliveryFee)}${freeDeliveryThreshold ? ` — free above ${formatCurrency(freeDeliveryThreshold)}` : ""}`
                     : "Delivery available near you"}
@@ -1155,42 +1162,42 @@ export default function ProductPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="rounded-2xl glass-tier-1 p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400">
                 <Store className="h-4.5 w-4.5" />
               </div>
               <div>
-                <p className="text-xs font-semibold">Pickup</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                <p className="font-culinary-heading text-xs font-semibold">Pickup</p>
+                <p className="mt-0.5 font-culinary-body text-[11px] leading-snug text-muted-foreground">
                   Order online &amp; pick up from {bu.name}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="rounded-2xl glass-tier-1 p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
                 <RotateCcw className="h-4.5 w-4.5" />
               </div>
               <div>
-                <p className="text-xs font-semibold">Easy Returns</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                <p className="font-culinary-heading text-xs font-semibold">Easy Returns</p>
+                <p className="mt-0.5 font-culinary-body text-[11px] leading-snug text-muted-foreground">
                   Returns within 7 days on non-perishable items
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="rounded-2xl glass-tier-1 p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400">
                 <ShieldCheck className="h-4.5 w-4.5" />
               </div>
               <div>
-                <p className="text-xs font-semibold">Quality Promise</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                <p className="font-culinary-heading text-xs font-semibold">Quality Promise</p>
+                <p className="mt-0.5 font-culinary-body text-[11px] leading-snug text-muted-foreground">
                   Fresh, quality-checked items every order
                 </p>
               </div>
@@ -1202,8 +1209,8 @@ export default function ProductPage() {
         {/* RETURN POLICY                                                    */}
         {/* ================================================================ */}
 
-        <div className="mt-6 rounded-xl border border-border/60 bg-secondary/20 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="mt-6 rounded-2xl glass-tier-1 p-5 sm:p-6">
+          <p className="font-culinary-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Return Policy
           </p>
           <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -1229,16 +1236,22 @@ export default function ProductPage() {
 
       {product && businessUnit && catalogItem && (
         <>
-          <FrequentlyBoughtTogetherSection
-            catalogItemId={catalogItem._id}
-            businessUnitId={businessUnit._id}
-            businessUnits={[businessUnit]}
-            productName={product.name}
-          />
-          <CrossSellSections
-            businessUnit={businessUnit}
-            excludeIds={catalogItem ? [catalogItem._id] : []}
-          />
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="overflow-hidden rounded-3xl glass-tier-1">
+              <FrequentlyBoughtTogetherSection
+                catalogItemId={catalogItem._id}
+                businessUnitId={businessUnit._id}
+                businessUnits={[businessUnit]}
+                productName={product.name}
+              />
+            </div>
+          </div>
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+            <CrossSellSections
+              businessUnit={businessUnit}
+              excludeIds={catalogItem ? [catalogItem._id] : []}
+            />
+          </div>
         </>
       )}
 
@@ -1247,12 +1260,14 @@ export default function ProductPage() {
       {/* ================================================================== */}
 
       <div id="reviews-section" className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-12 sm:px-6 lg:px-8">
-        {catalogItem ? (
-          <ReviewSection
-            catalogItemId={catalogItem._id}
-            businessUnitId={bu._id}
-          />
-        ) : null}
+        <div className="rounded-3xl glass-tier-1 p-4 sm:p-6 lg:p-8">
+          {catalogItem ? (
+            <ReviewSection
+              catalogItemId={catalogItem._id}
+              businessUnitId={bu._id}
+            />
+          ) : null}
+        </div>
       </div>
 
       {/* ================================================================== */}
@@ -1264,7 +1279,7 @@ export default function ProductPage() {
         <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
           <div className="space-y-10">
             {relatedItems && relatedItems.length > 0 && (
-              <section>
+              <section className="rounded-3xl glass-tier-1 p-4 sm:p-6">
                 <SectionHeader
                   title="Related Products"
                   subtitle="You might also like these"
@@ -1285,7 +1300,7 @@ export default function ProductPage() {
             )}
 
             {trendingItems && trendingItems.length > 0 && (
-              <section>
+              <section className="rounded-3xl glass-tier-1 p-4 sm:p-6">
                 <SectionHeader
                   title="Trending Now"
                   subtitle="Popular in your area this week"
@@ -1327,9 +1342,10 @@ export default function ProductPage() {
           </div>
           <Button
             size="lg"
+            variant="crunch"
             onClick={handleAddToCart}
             disabled={!selectedVariant || !storeIsOpen || isOutOfStock}
-            className="h-11 shrink-0 gap-2 px-6"
+            className="h-11 shrink-0 gap-2 px-6 font-culinary-heading"
           >
             <ShoppingCart className="h-4 w-4" />
             {!storeIsOpen

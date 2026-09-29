@@ -10,7 +10,9 @@ import { ProductFormDialog } from "@/components/admin/products/ProductFormDialog
 import { ProductTable } from "@/components/admin/products/ProductTable";
 import { ProductToolbar } from "@/components/admin/products/ProductToolbar";
 import type { Product, ProductFilters, ProductFormValues, ProductSortKey, SortDirection } from "@/components/admin/products/types";
+import { productShippingState } from "@/components/admin/products/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -217,9 +219,13 @@ export default function ProductsPage() {
   const restoreProd = useMutation(api.products.restore);
 
   const isLoading = allDocs === undefined || allBUs === undefined || allCats === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const [filters, setFilters] = useState<ProductFilters>({ query: "", status: "all", businessUnitId: "all" });
+  const [filters, setFilters] = useState<ProductFilters>({ query: "", status: "all", businessUnitId: "all", shipping: "all" });
   const [sortKey, setSortKey] = useState<ProductSortKey>("displayOrder");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [page, setPage] = useState(1);
@@ -240,7 +246,7 @@ export default function ProductsPage() {
     return map;
   }, [allCats]);
 
-  const businessUnitOptions = useMemo(() => (allBUs ?? []).map((bu) => ({ id: bu._id, name: bu.name })), [allBUs]);
+  const businessUnitOptions = useMemo(() => (allBUs ?? []).map((bu: any) => ({ id: bu._id, name: bu.name, serviceabilityMode: bu.serviceabilityMode as string | undefined })), [allBUs]);
 
   const categoryOptions = useMemo(() => (allCats ?? []).map((cat) => ({ id: cat._id, businessUnitId: cat.businessUnitId, name: cat.name })), [allCats]);
 
@@ -251,9 +257,18 @@ export default function ProductsPage() {
     return products.filter((prod) =>
       (filters.status === "all" || prod.status === filters.status)
       && (filters.businessUnitId === "all" || prod.businessUnitId === filters.businessUnitId)
+      && (filters.shipping === "all" || productShippingState(prod) === filters.shipping)
       && (!query || prod.name.toLowerCase().includes(query) || prod.slug.toLowerCase().includes(query))
     );
   }, [products, filters]);
+
+  // 12D shipping-weight coverage summary (read-only aggregate;
+  // superadmin/admin only). Shown when a single BU is selected.
+  const singleBuId = filters.businessUnitId !== "all" ? filters.businessUnitId : null;
+  const weightCoverage = useQuery(
+    api.products.getShippingWeightCoverage,
+    token && singleBuId ? { sessionToken: token, businessUnitId: singleBuId as Id<"businessUnits"> } : "skip",
+  );
 
   const sortedProducts = useMemo(() => [...filteredProducts].sort((left, right) => {
     const leftValue = left[sortKey];
@@ -270,6 +285,8 @@ export default function ProductsPage() {
   const openCreateDialog = () => { setEditingProduct(undefined); setFormOpen(true); };
 
   const saveProduct = async (values: ProductFormValues) => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       const token = getSessionToken();
       if (editingProduct) {
@@ -279,7 +296,9 @@ export default function ProductsPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save product");
+      setActionError({ title: "Could not save product", message: err instanceof Error ? err.message : "Failed to save product" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -289,7 +308,7 @@ export default function ProductsPage() {
       await softDeleteProd({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive product");
+      setActionError({ title: "Could not delete product", message: err instanceof Error ? err.message : "Failed to archive product" });
     }
   };
 
@@ -299,7 +318,7 @@ export default function ProductsPage() {
       await restoreProd({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to restore product");
+      setActionError({ title: "Could not restore product", message: err instanceof Error ? err.message : "Failed to restore product" });
     }
   };
 
@@ -326,14 +345,28 @@ export default function ProductsPage() {
       <Button size="sm" onClick={openCreateDialog}><Plus className="mr-1.5 size-4" />Add product</Button>
     </PageHeader>
 
+    {actionError ? <Alert variant="destructive" className="mb-4"><AlertCircle className="size-4" /><AlertTitle>{actionError.title}</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{actionError.message}<Button size="sm" variant="outline" onClick={() => setActionError(null)}><RefreshCw className="size-3.5" />Dismiss</Button></AlertDescription></Alert> : null}
     {error ? <Alert variant="destructive"><AlertCircle className="size-4" /><AlertTitle>Could not load products</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{error}<Button size="sm" variant="outline" onClick={() => setError(null)}><RefreshCw className="size-4" />Try again</Button></AlertDescription></Alert> : <section className="overflow-hidden rounded-xl border" aria-label="Product management">
-      <ProductToolbar filters={filters} businessUnits={businessUnitOptions} onFiltersChange={resetPageAndSetFilters} onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all" })} />
+      <ProductToolbar filters={filters} businessUnits={businessUnitOptions} onFiltersChange={resetPageAndSetFilters} onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all", shipping: "all" })} />
+      {/* 12D shipping-weight coverage summary — read-only aggregates. */}
+      {weightCoverage && (
+        <div className="flex flex-wrap gap-2 border-b px-4 py-3" aria-label="Shipping weight coverage summary">
+          <Badge variant="outline">{weightCoverage.total} active products</Badge>
+          <Badge variant="default">{weightCoverage.usable} shippable-ready</Badge>
+          <Badge variant="outline" className="border-amber-200 bg-amber-500/10 text-amber-700" title={weightCoverage.missingWeight.map((p) => p.name).join(", ") || "None"}>
+            {weightCoverage.missingWeight.length} missing weight
+          </Badge>
+          <Badge variant="secondary" title={weightCoverage.nonShippable.map((p) => p.name).join(", ") || "None"}>
+            {weightCoverage.nonShippable.length} not shippable
+          </Badge>
+        </div>
+      )}
       {isLoading ? <ProductTable products={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={() => undefined} onDelete={() => undefined} onRestore={() => undefined} onToggleFeatured={() => undefined} onToggleAvailable={() => undefined} /> : visibleProducts.length === 0 ? <EmptyState icon={Package} title="No products found" description={filteredProducts.length === 0 && products.length > 0 ? "Try adjusting your search or filters." : EMPTY_MESSAGES.PRODUCTS} action={products.length === 0 ? { label: "Create product", onClick: openCreateDialog } : undefined} /> : <>
         <ProductTable products={visibleProducts} sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={(prod) => { setEditingProduct(prod); setFormOpen(true); }} onDelete={setDeleteTarget} onRestore={setRestoreTarget} onToggleFeatured={toggleFeatured} onToggleAvailable={toggleAvailable} />
         <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedProducts.length)} of {sortedProducts.length}</p><Pagination className="mx-0 w-auto"><PaginationContent><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2" aria-live="polite">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination></div>
       </>}
     </section>}
-    <ProductFormDialog open={formOpen} product={editingProduct} businessUnits={businessUnitOptions} categories={categoryOptions} onOpenChange={setFormOpen} onSubmit={saveProduct} />
+    <ProductFormDialog open={formOpen} product={editingProduct} businessUnits={businessUnitOptions} categories={categoryOptions} onOpenChange={setFormOpen} onSubmit={saveProduct} isSaving={isSaving} />
     <ProductDialogs deleteTarget={deleteTarget} restoreTarget={restoreTarget} onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }} onRestoreOpenChange={(open) => { if (!open) setRestoreTarget(undefined); }} onConfirmDelete={archiveProduct} onConfirmRestore={confirmRestore} />
   </div>;
 }

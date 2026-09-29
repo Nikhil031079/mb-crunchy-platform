@@ -98,6 +98,49 @@ export type MaxRedeemableResult = {
   reason: string | null;
 };
 
+// ============================================================================
+// Loyalty spend authorization (10B — P1 guest-redemption fix).
+//
+// Phone-resolved order identity NEVER authorizes redemption. Only a
+// pre-existing customer record already linked to the caller's authenticated
+// identity (`loyaltyOwnerId`) may spend, and only up to the server-computed
+// owner maximum. Guests (null owner) always resolve max 0 upstream, so any
+// positive submitted value is rejected here. Pure decision predicate so the
+// rule is unit-testable; the mutation supplies owner + server max.
+// ============================================================================
+
+export interface LoyaltySpendAuthorizationInput {
+  /** Pre-existing auth-linked customer id, or null for guests/unlinked callers. */
+  loyaltyOwnerId: Id<"customers"> | null;
+  /** Loyalty discount value (rupees) submitted with the order. */
+  submittedLoyaltyValue: number;
+  /** Server-computed max redeemable value for the OWNER (0 when no owner). */
+  ownerMaxValue: number;
+  /** Price tolerance used across order creation. */
+  tolerance: number;
+}
+
+export interface LoyaltySpendAuthorization {
+  /** Customer id authorized to be debited, or null when nothing is authorized. */
+  authorizedCustomerId: Id<"customers"> | null;
+  /** Rejection reason when unauthorized; null when permitted (incl. zero no-op). */
+  error: string | null;
+}
+
+export function authorizeLoyaltySpend(
+  input: LoyaltySpendAuthorizationInput,
+): LoyaltySpendAuthorization {
+  if (input.submittedLoyaltyValue > input.ownerMaxValue + input.tolerance) {
+    return {
+      authorizedCustomerId: null,
+      error: input.loyaltyOwnerId
+        ? "Loyalty discount exceeds your available points"
+        : "Sign in to redeem loyalty points",
+    };
+  }
+  return { authorizedCustomerId: input.loyaltyOwnerId, error: null };
+}
+
 /**
  * Shared max-redeemable computation used by the `getMaxRedeemable` query and
  * by the order-creation flow (server clamps any loyalty discount).

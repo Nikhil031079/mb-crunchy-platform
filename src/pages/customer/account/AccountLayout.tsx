@@ -30,18 +30,21 @@ export default function AccountLayout() {
 
   if (isLoading || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      <div className="min-h-screen culinary-canvas flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="min-h-screen culinary-canvas">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight">
+        <div className="mb-6 sm:mb-8">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            My Account
+          </p>
+          <h1 className="font-culinary-heading mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
             Welcome back{customer?.name ? `, ${customer.name}` : ""}!
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -49,9 +52,9 @@ export default function AccountLayout() {
           </p>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[240px_1fr]">
+        <div className="grid items-start gap-6 sm:gap-8 lg:grid-cols-[240px_1fr]">
           <AccountSidebar />
-          <div>
+          <div className="min-w-0">
             <Outlet />
           </div>
         </div>

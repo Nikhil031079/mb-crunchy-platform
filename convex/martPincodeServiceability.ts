@@ -126,6 +126,68 @@ export const checkServiceability = query({
 });
 
 // ============================================================================
+// Coverage Reporting (12D — read-only admin visibility)
+// ----------------------------------------------------------------------------
+// Single indexed read per business unit; counts plus distinct city/state/
+// zone sets for the admin summary. No writes; superadmin/admin only.
+// ============================================================================
+
+export interface PincodeCoverage {
+  total: number;
+  active: number;
+  inactive: number;
+  zones: Array<Id<"shippingZones">>;
+  cities: string[];
+  states: string[];
+}
+
+export const getCoverage = query({
+  args: {
+    sessionToken: v.string(),
+    businessUnitId: v.id("businessUnits"),
+  },
+  handler: async (ctx, args): Promise<PincodeCoverage> => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
+    const rows = await ctx.db
+      .query("martPincodeServiceability")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    const active = rows.filter((r) => r.status === "active");
+    const distinctStrings = (
+      values: Array<string | undefined>
+    ): string[] =>
+      [
+        ...new Set(
+          values.filter(
+            (v): v is string => typeof v === "string" && v.trim().length > 0
+          )
+        ),
+      ].sort();
+
+    return {
+      total: rows.length,
+      active: active.length,
+      inactive: rows.length - active.length,
+      zones: [
+        ...new Set(
+          active
+            .map((r) => r.shippingZoneId)
+            .filter(
+              (v): v is Id<"shippingZones"> => v !== undefined
+            )
+        ),
+      ].sort(),
+      cities: distinctStrings(active.map((r) => r.city)),
+      states: distinctStrings(active.map((r) => r.state)),
+    };
+  },
+});
+
+// ============================================================================
 // Mutations
 // ============================================================================
 
@@ -178,6 +240,9 @@ export const create = mutation({
       if (zone.businessUnitId !== args.businessUnitId) {
         throw new Error("Shipping zone does not belong to this business unit.");
       }
+      if (zone.status !== "active") {
+        throw new Error("Shipping zone is inactive and cannot be assigned.");
+      }
     }
 
     const now = Date.now();
@@ -221,6 +286,9 @@ export const update = mutation({
       }
       if (zone.businessUnitId !== existing.businessUnitId) {
         throw new Error("Shipping zone does not belong to this business unit.");
+      }
+      if (zone.status !== "active") {
+        throw new Error("Shipping zone is inactive and cannot be assigned.");
       }
     }
 

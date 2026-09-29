@@ -47,9 +47,9 @@ export const SectionHeader = memo(function SectionHeader({
       {/* Title with decorative accent bar */}
       <div className="relative">
         {alignment === "left" && (
-          <div className="mb-2 h-1 w-8 rounded-full bg-accent" />
+          <div className="mb-2 h-1 w-8 rounded-full bg-culinary-primary" />
         )}
-        <h2 className={cn("font-bold tracking-tight", titleSize[size])}>
+        <h2 className={cn("font-culinary-heading font-bold tracking-tight", titleSize[size])}>
           {title}
         </h2>
       </div>

@@ -63,7 +63,8 @@ function MarketingBadges({ offer }: { offer: Offer }) {
 }
 
 export function OfferTable({ offers, isLoading = false, sortKey, sortDirection, onSort, onEdit, onDelete, onRestore }: OfferTableProps) {
-  return <Table>
+  // 19D: horizontal scroll on narrow screens (Banner/MealDeal table pattern).
+  return <div className="overflow-x-auto"><Table>
     <TableHeader><TableRow>
       <TableHead>Banner</TableHead><TableHead><SortButton column="title" label="Title" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="code" label="Code" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="businessUnitName" label="Business Unit" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="discountValue" label="Discount" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead>Min Order</TableHead><TableHead>Usage</TableHead><TableHead>Dates</TableHead><TableHead><SortButton column="status" label="Status" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="displayOrder" label="Order" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><span className="sr-only">Actions</span></TableHead>
     </TableRow></TableHeader>
@@ -72,5 +73,5 @@ export function OfferTable({ offers, isLoading = false, sortKey, sortDirection, 
         <TableCell><ImagePreview offer={offer} /></TableCell><TableCell className="font-medium"><div className="min-w-0"><p className="truncate">{offer.title}</p><MarketingBadges offer={offer} /></div></TableCell><TableCell className="text-muted-foreground">{offer.code ? <Badge variant="secondary" className="font-mono">{offer.code}</Badge> : <span className="text-muted-foreground italic">Auto</span>}</TableCell><TableCell className="text-muted-foreground">{offer.businessUnitName}</TableCell><TableCell><Badge variant="outline" className="border-emerald-200 bg-emerald-500/10 text-emerald-700">{formatDiscount(offer.discountType, offer.discountValue, offer.maxDiscount)}</Badge></TableCell><TableCell className="text-muted-foreground">{offer.minOrderValue ? `₹${offer.minOrderValue}` : "—"}</TableCell><TableCell className="text-muted-foreground">{offer.usedCount}{offer.usageLimit ? ` / ${offer.usageLimit}` : ""}</TableCell><TableCell className="text-muted-foreground">{formatTimestamp(offer.startsAt)} — {formatTimestamp(offer.endsAt)}</TableCell><TableCell><Badge variant="outline" className={cn("capitalize", statusClassNames[offer.status])}>{offer.status}</Badge></TableCell><TableCell>{offer.displayOrder}</TableCell><TableCell><OfferRowActions offer={offer} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} /></TableCell>
       </TableRow>)}
     </TableBody>
-  </Table>;
+  </Table></div>;
 }

@@ -1,7 +1,6 @@
 import { memo, useMemo } from "react";
-import { Link } from "react-router";
 import { useQuery } from "convex/react";
-import { Clock3, Megaphone, Truck, Salad, ShieldCheck, Star, ArrowRight } from "lucide-react";
+import { Megaphone, Truck, Salad, ShieldCheck, Star } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
 
@@ -56,10 +55,8 @@ export const HomepageInfoStrip = memo(function HomepageInfoStrip() {
     contentType: "promotion",
   }) as Content[] | undefined;
 
-  const announcements = useQuery(api.content.getByType, {
-    contentType: "announcement",
-  }) as Content[] | undefined;
-
+  // Note (Phase 4D): announcements render in PromoRibbonSection — this
+  // strip keeps promo chips + trust points only (no duplication).
   const activePromos = useMemo(
     () =>
       (promoBanners ?? [])
@@ -68,20 +65,11 @@ export const HomepageInfoStrip = memo(function HomepageInfoStrip() {
     [promoBanners]
   );
 
-  const activeAnnouncement = useMemo(() => {
-    if (!announcements) return undefined;
-    return announcements
-      .filter((a) => a.status === "active" && isContentActive(a))
-      .sort((a, b) => a.displayOrder - b.displayOrder)[0];
-  }, [announcements]);
-
-  const hasDynamic = activeAnnouncement || activePromos.length > 0;
+  const hasDynamic = activePromos.length > 0;
 
   return (
     <section className="border-b border-border/40 bg-background">
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        {activeAnnouncement && <AnnouncementBar banner={activeAnnouncement} />}
-
         {activePromos.length > 0 && (
           <div className="flex items-center gap-2">
             <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent lg:flex">
@@ -125,35 +113,6 @@ export const HomepageInfoStrip = memo(function HomepageInfoStrip() {
     </section>
   );
 });
-
-// ============================================================================
-// AnnouncementBar — compact happy-hour style gradient bar
-// ============================================================================
-
-function AnnouncementBar({ banner }: { banner: Content }) {
-  const inner = (
-    <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2.5 text-white">
-      <Clock3 className="h-4 w-4 shrink-0" />
-      <p className="min-w-0 flex-1 truncate text-sm font-semibold">{banner.title}</p>
-      {banner.subtitle && (
-        <span className="hidden max-w-[40%] truncate text-xs text-white/85 sm:inline">
-          {banner.subtitle}
-        </span>
-      )}
-      {banner.buttonText && <ArrowRight className="h-4 w-4 shrink-0" />}
-    </div>
-  );
-
-  if (banner.buttonLink) {
-    return (
-      <Link to={banner.buttonLink} className="mb-3 flex rounded-xl transition-opacity hover:opacity-95">
-        {inner}
-      </Link>
-    );
-  }
-
-  return <div className="mb-3">{inner}</div>;
-}
 
 // ============================================================================
 // PromoChip — compact promotional card

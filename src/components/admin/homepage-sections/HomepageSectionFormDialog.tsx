@@ -19,6 +19,8 @@ interface HomepageSectionFormDialogProps {
   usedOrdersForTarget: (target: SectionTarget, excludeSectionType?: string) => Set<number>;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: HomepageSectionFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 function toDatetimeLocal(ts?: number): string {
@@ -64,6 +66,7 @@ export function HomepageSectionFormDialog({
   usedOrdersForTarget,
   onOpenChange,
   onSubmit,
+  isSaving = false,
 }: HomepageSectionFormDialogProps) {
   const isEditing = Boolean(row);
   const dialogKey = `${row?.sectionType ?? "new"}-${open ? "open" : "closed"}`;
@@ -84,6 +87,7 @@ export function HomepageSectionFormDialog({
           usedOrdersForTarget={usedOrdersForTarget}
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
+          isSaving={isSaving}
         />
       </DialogContent>
     </Dialog>
@@ -96,6 +100,7 @@ interface HomepageSectionFormProps {
   usedOrdersForTarget: (target: SectionTarget, excludeSectionType?: string) => Set<number>;
   onSubmit: (values: HomepageSectionFormValues) => void;
   onCancel: () => void;
+  isSaving: boolean;
 }
 
 function HomepageSectionForm({
@@ -104,6 +109,7 @@ function HomepageSectionForm({
   usedOrdersForTarget,
   onSubmit,
   onCancel,
+  isSaving,
 }: HomepageSectionFormProps) {
   const [values, setValues] = useState<HomepageSectionFormValues>(() => toFormValues(row));
   const [error, setError] = useState<string | null>(null);
@@ -218,7 +224,7 @@ function HomepageSectionForm({
       </form>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" form={formId}>{row ? "Save changes" : "Add section"}</Button>
+        <Button type="submit" form={formId} disabled={isSaving}>{row ? "Save changes" : "Add section"}</Button>
       </DialogFooter>
     </>
   );

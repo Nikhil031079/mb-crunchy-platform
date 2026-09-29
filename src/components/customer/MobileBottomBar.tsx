@@ -45,7 +45,10 @@ export function MobileBottomBar() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden"
+      // Culinary Glass Tier 3 (Phase 3) — floating tab bar.
+      // Destinations, active state, badges, fixed positioning,
+      // touch targets, and safe-area padding unchanged.
+      className="fixed inset-x-0 bottom-0 z-50 glass-tier-3 lg:hidden"
       aria-label="Mobile navigation"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >

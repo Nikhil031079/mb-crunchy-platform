@@ -45,7 +45,7 @@ const toOrderId = (id: string) => id as unknown as Id<"orders">;
 // ---------------------------------------------------------------------------
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function enrichOrder(doc: any, buMap: Map<string, string>): OrderRecord {
+export function enrichOrder(doc: any, buMap: Map<string, string>): OrderRecord {
   const itemCount = doc.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) ?? 0;
   return {
     id: doc._id,
@@ -304,7 +304,10 @@ export default function OrdersPage() {
   const bulkRefund = useMutation(api.orderBulk.bulkRefund);
 
   const isLoading = allOrders === undefined || allBUs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
 
   const [filters, setFilters] = useState<OrderFilters>(DEFAULT_FILTERS);
   const [sortKey, setSortKey] = useState<OrderSortKey>("createdAt");
@@ -505,7 +508,7 @@ export default function OrdersPage() {
       reportBulkResult("updated", res);
       clearSelection();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update order statuses");
+      setActionError({ title: "Could not update orders", message: err instanceof Error ? err.message : "Failed to update order statuses" });
     } finally {
       setIsBulkPending(false);
     }
@@ -521,7 +524,7 @@ export default function OrdersPage() {
       reportBulkResult("cancelled", res);
       clearSelection();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel orders");
+      setActionError({ title: "Could not cancel orders", message: err instanceof Error ? err.message : "Failed to cancel orders" });
     } finally {
       setIsBulkPending(false);
     }
@@ -537,7 +540,7 @@ export default function OrdersPage() {
       reportBulkResult("refunded", res);
       clearSelection();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to refund orders");
+      setActionError({ title: "Could not refund orders", message: err instanceof Error ? err.message : "Failed to refund orders" });
     } finally {
       setIsBulkPending(false);
     }
@@ -557,7 +560,7 @@ export default function OrdersPage() {
 
   const handleKitchenAdvance = async (order: OrderRecord, target: OrderStatus) => {
     if (target === "preparing" && order.paymentStatus !== "paid") {
-      setError(`${order.orderNumber} — payment must be verified before preparation can begin`);
+      setActionError({ title: "Cannot update order status", message: `${order.orderNumber} — payment must be verified before preparation can begin` });
       return;
     }
     setKitchenPendingId(order.id);
@@ -569,7 +572,7 @@ export default function OrdersPage() {
       });
       toast.success(`${order.orderNumber} → ${STATUS_LABELS[target]}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update order status");
+      setActionError({ title: "Could not update order status", message: err instanceof Error ? err.message : "Failed to update order status" });
     } finally {
       setKitchenPendingId(null);
     }
@@ -583,7 +586,7 @@ export default function OrdersPage() {
   const confirmStatusUpdate = async () => {
     if (!statusTarget || !statusGoal) return;
     if (statusGoal === "preparing" && statusTarget.paymentStatus !== "paid") {
-      setError("Payment must be verified before preparation can begin");
+      setActionError({ title: "Cannot update order status", message: "Payment must be verified before preparation can begin" });
       setStatusTarget(null);
       setStatusGoal(null);
       return;
@@ -597,9 +600,8 @@ export default function OrdersPage() {
       setStatusTarget(null);
       setStatusGoal(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update order status");
-      setStatusTarget(null);
-      setStatusGoal(null);
+      // 19C: keep the dialog open on failure so the admin can retry.
+      setActionError({ title: "Could not update order status", message: err instanceof Error ? err.message : "Failed to update order status" });
     }
   };
 
@@ -634,6 +636,19 @@ export default function OrdersPage() {
         <SummaryCard title="Avg Order Value" value={`₹${Math.round(summary.averageOrderValue).toLocaleString()}`} icon={ShoppingCart} />
       </div>
 
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}>
+              <RefreshCw className="size-3.5" /> Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {error ? (
         <Alert variant="destructive">
           <AlertCircle className="size-4" />
@@ -646,7 +661,7 @@ export default function OrdersPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <section className="overflow-hidden rounded-xl border" aria-label="Order management">
+        <section className="overflow-x-auto overflow-y-hidden rounded-xl border" aria-label="Order management">
           <OrderToolbar
             filters={filters}
             businessUnits={buOptions}

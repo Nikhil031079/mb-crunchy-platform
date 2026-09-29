@@ -616,7 +616,7 @@ export default function BusinessUnitPage() {
 
   if (isBuLoading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         {/* Hero Skeleton */}
         <div className="min-h-[350px] w-full bg-secondary/50 animate-pulse flex items-center">
           <div className="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8">
@@ -651,7 +651,7 @@ export default function BusinessUnitPage() {
 
   if (isBuNotFound) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen culinary-canvas flex items-center justify-center">
         <ErrorState
           title="Store Not Found"
           message={`The store "${businessUnitSlug}" doesn't exist or has been archived.`}
@@ -681,12 +681,12 @@ export default function BusinessUnitPage() {
   // ==========================================================================
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen culinary-canvas">
       {/* ================================================================ */}
       {/* BUSINESS UNIT HERO / BANNER                                     */}
       {/* ================================================================ */}
 
-      <section className="relative overflow-hidden bg-gradient-to-br from-secondary/80 via-background to-background py-12 md:py-20">
+      <section className="relative overflow-hidden py-12 md:py-20">
         {/* Decorative */}
         {bu.themeColor && (
           <>
@@ -723,9 +723,9 @@ export default function BusinessUnitPage() {
               )}
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-                    {bu.name}
-                  </h1>
+                    <h1 className="font-culinary-heading text-2xl font-bold tracking-tight md:text-3xl">
+                      {bu.name}
+                    </h1>
                   {buSettings && (
                     <StoreStatusBadge
                       isOpen={buSettings.isOpen}
@@ -744,24 +744,24 @@ export default function BusinessUnitPage() {
             {/* Quick Stats */}
             <div className="flex flex-wrap gap-4">
               {catalogItems && catalogItems.length > 0 && (
-                <div className="rounded-lg border border-border/60 bg-card px-4 py-2.5 text-center">
-                  <p className="text-lg font-bold">{catalogItems.length}</p>
+                <div className="rounded-2xl glass-tier-1 px-4 py-2.5 text-center">
+                  <p className="font-culinary-heading text-lg font-bold tabular-nums">{catalogItems.length}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                     Products
                   </p>
                 </div>
               )}
               {enableCombos && (
-                <div className="rounded-lg border border-border/60 bg-card px-4 py-2.5 text-center">
-                  <p className="text-lg font-bold">{activeCombos.length}</p>
+                <div className="rounded-2xl glass-tier-1 px-4 py-2.5 text-center">
+                  <p className="font-culinary-heading text-lg font-bold tabular-nums">{activeCombos.length}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                     Combos
                   </p>
                 </div>
               )}
               {enablePartyPacks && (
-                <div className="rounded-lg border border-border/60 bg-card px-4 py-2.5 text-center">
-                  <p className="text-lg font-bold">{activePartyPacks.length}</p>
+                <div className="rounded-2xl glass-tier-1 px-4 py-2.5 text-center">
+                  <p className="font-culinary-heading text-lg font-bold tabular-nums">{activePartyPacks.length}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                     Packs
                   </p>
@@ -837,7 +837,7 @@ export default function BusinessUnitPage() {
       {/* SEARCH + FILTERS BAR                                            */}
       {/* ================================================================ */}
 
-      <div className="sticky top-16 z-40 border-b border-border/40 bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
+      <div className="sticky top-16 z-40 border-b border-white/60 bg-white/55 backdrop-blur-lg dark:border-white/10 dark:bg-[#1A1412]/70">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Search */}
@@ -874,10 +874,12 @@ export default function BusinessUnitPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setViewMode("grid")}
+                  aria-pressed={viewMode === "grid"}
+                  aria-label="Grid view"
                   className={cn(
                     "h-11 w-11 rounded-none",
                     viewMode === "grid"
-                      ? "bg-secondary text-foreground"
+                      ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary"
                       : "text-muted-foreground"
                   )}
                 >
@@ -887,10 +889,12 @@ export default function BusinessUnitPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setViewMode("list")}
+                  aria-pressed={viewMode === "list"}
+                  aria-label="List view"
                   className={cn(
                     "h-11 w-11 rounded-none border-l border-border/60",
                     viewMode === "list"
-                      ? "bg-secondary text-foreground"
+                      ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary"
                       : "text-muted-foreground"
                   )}
                 >
@@ -919,10 +923,11 @@ export default function BusinessUnitPage() {
             <button
               key={mode}
               onClick={() => handleCatalogModeChange(mode)}
+              aria-pressed={catalogMode === mode}
               className={cn(
                 "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all",
                 catalogMode === mode
-                  ? "bg-foreground text-background shadow-sm"
+                  ? "bg-culinary-primary text-white shadow-sm"
                   : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
               )}
             >

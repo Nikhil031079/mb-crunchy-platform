@@ -1,4 +1,36 @@
-import { verifySessionToken } from "./crypto";
+import { verifySessionToken, sha256Hex } from "./crypto";
+
+// ============================================================================
+// findSessionByToken — hashed-primary session lookup with legacy fallback
+// (10F). New rows store tokenHash only; pre-migration plaintext rows are
+// still honored, then upgraded in place (tokenHash populated, plaintext
+// removed, expiry/createdAt untouched). Queries must pass
+// { upgradeLegacy: false } because Convex queries cannot write.
+// ============================================================================
+
+export async function findSessionByToken(
+  ctx: any,
+  sessionToken: string,
+  opts?: { upgradeLegacy?: boolean },
+) {
+  const tokenHash = await sha256Hex(sessionToken);
+  const hashed = await ctx.db
+    .query("adminSessions")
+    .withIndex("by_token_hash", (q: any) => q.eq("tokenHash", tokenHash))
+    .first();
+  if (hashed) return hashed;
+
+  const legacy = await ctx.db
+    .query("adminSessions")
+    .withIndex("by_token", (q: any) => q.eq("token", sessionToken))
+    .first();
+  if (!legacy) return null;
+
+  if (opts?.upgradeLegacy === false || legacy.tokenHash) return legacy;
+
+  await ctx.db.patch(legacy._id, { tokenHash, token: undefined });
+  return { ...legacy, tokenHash, token: undefined };
+}
 
 // ============================================================================
 // requireAdminSession — reusable admin auth guard for Convex mutations
@@ -10,10 +42,7 @@ export async function requireAdminSession(ctx: any, sessionToken: string) {
   const payload = await verifySessionToken(sessionToken);
   if (!payload) throw new Error("Invalid or expired session");
 
-  const session = await ctx.db
-    .query("adminSessions")
-    .withIndex("by_token", (q: any) => q.eq("token", sessionToken))
-    .first();
+  const session = await findSessionByToken(ctx, sessionToken);
 
   if (!session) throw new Error("Session not found");
   if (session.expiresAt < Date.now()) {

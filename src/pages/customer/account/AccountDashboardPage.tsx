@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -134,7 +134,7 @@ function QuickStatsBar({ totalOrders, totalSpent, pointsBalance, memberSince }: 
   ];
 
   return (
-    <Card>
+    <Card className="rounded-3xl glass-tier-1 overflow-hidden">
       <CardContent className="p-4">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {stats.map((stat) => (
@@ -143,7 +143,7 @@ function QuickStatsBar({ totalOrders, totalSpent, pointsBalance, memberSince }: 
                 <stat.icon className={`h-5 w-5 ${stat.color}`} />
               </div>
               <div className="min-w-0">
-                <p className="text-base font-bold leading-tight truncate">{stat.value}</p>
+                <p className="font-culinary-heading text-base font-bold leading-tight truncate tabular-nums">{stat.value}</p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   {stat.label}
                 </p>
@@ -166,13 +166,15 @@ interface QuickReorderProps {
 }
 
 function QuickReorder({ lastOrder, onReorder }: QuickReorderProps) {
+  // Visual-only thumbnail fallback for stored image URLs that fail to load.
+  const [failedImages, setFailedImages] = useState<ReadonlySet<number>>(new Set());
   if (!lastOrder) return null;
 
   return (
-    <Card>
+    <Card className="rounded-3xl glass-tier-1 overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
             <RotateCcw className="h-4 w-4" />
             Quick Reorder
           </CardTitle>
@@ -191,12 +193,15 @@ function QuickReorder({ lastOrder, onReorder }: QuickReorderProps) {
                 className="flex w-24 shrink-0 flex-col items-center gap-1.5"
               >
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary/50 border border-border/40">
-                  {item.image ? (
+                  {item.image && !failedImages.has(index) ? (
                     <img
                       src={item.image}
                       alt={item.name}
                       className="h-full w-full object-cover"
                       loading="lazy"
+                      onError={() =>
+                        setFailedImages((prev) => new Set(prev).add(index))
+                      }
                     />
                   ) : (
                     <Package className="h-6 w-6 text-muted-foreground/40" />
@@ -222,7 +227,8 @@ function QuickReorder({ lastOrder, onReorder }: QuickReorderProps) {
 
         <Button
           onClick={() => onReorder(lastOrder)}
-          className="w-full gap-2"
+          variant="crunch"
+          className="h-10 w-full gap-2 font-culinary-heading"
           size="sm"
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -244,9 +250,9 @@ interface LoyaltyTransactionsProps {
 function LoyaltyTransactions({ transactions }: LoyaltyTransactionsProps) {
   if (!transactions || transactions.length === 0) {
     return (
-      <Card>
+      <Card className="rounded-3xl glass-tier-1 overflow-hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
             <TrendingUp className="h-4 w-4" />
             Loyalty Transactions
           </CardTitle>
@@ -261,10 +267,10 @@ function LoyaltyTransactions({ transactions }: LoyaltyTransactionsProps) {
   }
 
   return (
-    <Card>
+    <Card className="rounded-3xl glass-tier-1 overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
             <TrendingUp className="h-4 w-4" />
             Loyalty Transactions
           </CardTitle>
@@ -316,11 +322,13 @@ interface RecentlyViewedProps {
 }
 
 function RecentlyViewedItems({ items, isLoading }: RecentlyViewedProps) {
+  // Visual-only thumbnail fallback for stored image URLs that fail to load.
+  const [failedImages, setFailedImages] = useState<ReadonlySet<string>>(new Set());
   if (isLoading) {
     return (
-      <Card>
+      <Card className="rounded-3xl glass-tier-1 overflow-hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
             <Clock className="h-4 w-4" />
             Recently Viewed
           </CardTitle>
@@ -343,9 +351,9 @@ function RecentlyViewedItems({ items, isLoading }: RecentlyViewedProps) {
   if (!items || items.length === 0) return null;
 
   return (
-    <Card>
+    <Card className="rounded-3xl glass-tier-1 overflow-hidden">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
           <Clock className="h-4 w-4" />
           Recently Viewed
         </CardTitle>
@@ -358,12 +366,19 @@ function RecentlyViewedItems({ items, isLoading }: RecentlyViewedProps) {
               className="group w-24 shrink-0 text-center"
             >
               <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-secondary/50 transition-shadow group-hover:shadow-md">
-                {item.coverImage || item.thumbnail ? (
+                {(item.coverImage || item.thumbnail) && !failedImages.has(item._id) ? (
                   <img
                     src={item.thumbnail || item.coverImage}
                     alt={item.name}
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                     loading="lazy"
+                    onError={() =>
+                      setFailedImages((prev) => {
+                        const next = new Set(prev);
+                        next.add(item._id);
+                        return next;
+                      })
+                    }
                   />
                 ) : (
                   <Package className="h-6 w-6 text-muted-foreground/40" />
@@ -514,9 +529,9 @@ export default function AccountDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.05 }}
       >
-        <Card>
+        <Card className="rounded-3xl glass-tier-1 overflow-hidden">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Profile Completion</CardTitle>
+            <CardTitle className="font-culinary-heading text-base font-bold tracking-tight">Profile Completion</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between text-sm">
@@ -564,10 +579,10 @@ export default function AccountDashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.15 }}
         >
-          <Card>
+          <Card className="rounded-3xl glass-tier-1 overflow-hidden">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
+                <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
                   <Star className="h-4 w-4" />
                   Loyalty Points
                 </CardTitle>
@@ -580,7 +595,7 @@ export default function AccountDashboardPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="py-4 text-center">
-                <div className="text-3xl font-bold text-primary">
+                <div className="font-culinary-heading text-3xl font-bold tabular-nums text-primary">
                   {loyaltyAccount?.pointsBalance ?? 0}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">points available</p>
@@ -626,9 +641,9 @@ export default function AccountDashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
         >
-          <Card>
+          <Card className="rounded-3xl glass-tier-1 overflow-hidden">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
+              <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
                 <Tag className="h-4 w-4" />
                 Current Offers
               </CardTitle>
@@ -674,10 +689,10 @@ export default function AccountDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.35 }}
       >
-        <Card>
+        <Card className="rounded-3xl glass-tier-1 overflow-hidden">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
+              <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
                 <Package className="h-4 w-4" />
                 Recent Orders
               </CardTitle>
@@ -723,7 +738,7 @@ export default function AccountDashboardPage() {
                       >
                         {PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus}
                       </span>
-                      <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
+                        <span className="text-sm font-medium tabular-nums">{formatCurrency(order.total)}</span>
                     </div>
                   </div>
                 ))}
@@ -739,10 +754,10 @@ export default function AccountDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.4 }}
       >
-        <Card>
+        <Card className="rounded-3xl glass-tier-1 overflow-hidden">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
+              <CardTitle className="font-culinary-heading flex items-center gap-2 text-base font-bold tracking-tight">
                 <MapPin className="h-4 w-4" />
                 Saved Addresses
               </CardTitle>

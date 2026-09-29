@@ -435,7 +435,7 @@ const handleAddToCart = useCallback(
 
   if (isBuLoading || !isDataLoaded) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         {/* Header skeleton */}
         <div className="border-b border-border/40 bg-secondary/30 py-8">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -450,7 +450,7 @@ const handleAddToCart = useCallback(
         </div>
 
         {/* Chips skeleton */}
-        <div className="border-b border-border/40 bg-background/80">
+        <div className="border-b border-white/60 bg-white/40">
           <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
             <div className="flex gap-2 overflow-x-auto">
               {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -473,7 +473,7 @@ const handleAddToCart = useCallback(
 
   if (isBuNotFound) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen culinary-canvas flex items-center justify-center">
         <ErrorState
           title="Store Not Found"
           message={`The store "${businessUnitSlug}" doesn't exist or has been archived.`}
@@ -490,7 +490,7 @@ const handleAddToCart = useCallback(
     // redirect effect will navigate to the product page shortly; render the
     // loading state so we never flash a "Category Not Found" error.
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         <div className="border-b border-border/40 bg-secondary/30 py-8">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mb-4 flex items-center gap-2">
@@ -511,7 +511,7 @@ const handleAddToCart = useCallback(
 
   if (catNotFound) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen culinary-canvas flex items-center justify-center">
         <ErrorState
           title="Category Not Found"
           message={`The category "${categorySlug}" doesn't exist in ${businessUnit?.name ?? "this store"}.`}
@@ -535,12 +535,12 @@ const handleAddToCart = useCallback(
         : Store;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen culinary-canvas">
       {/* ================================================================ */}
       {/* STORE HEADER                                                    */}
       {/* ================================================================ */}
 
-      <section className="relative overflow-hidden bg-gradient-to-br from-secondary/80 via-background to-background py-8 md:py-10">
+      <section className="relative overflow-hidden py-8 md:py-10">
         {/* Decorative */}
         {bu.themeColor && (
           <>
@@ -557,16 +557,19 @@ const handleAddToCart = useCallback(
 
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Breadcrumbs */}
-          <nav className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Link to="/" className="transition-colors hover:text-foreground">
+          <nav
+            aria-label="Breadcrumb"
+            className="mb-4 inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/60 bg-white/50 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur-md dark:border-white/10 dark:bg-white/5"
+          >
+            <Link to="/" className="shrink-0 transition-colors hover:text-foreground">
               Home
             </Link>
-            <ChevronRight className="h-3 w-3" />
-            <Link to={`/${buSlug}`} className="transition-colors hover:text-foreground">
+            <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <Link to={`/${buSlug}`} className="min-w-0 truncate transition-colors hover:text-foreground">
               {bu.name}
             </Link>
-            <ChevronRight className="h-3 w-3" />
-            <span className="font-medium text-foreground">Categories</span>
+            <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="shrink-0 font-medium text-foreground">Categories</span>
           </nav>
 
           {/* Title */}
@@ -591,7 +594,7 @@ const handleAddToCart = useCallback(
                 <BU_ICON className="h-5 w-5" />
               </span>
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">
+                <h1 className="font-culinary-heading truncate text-2xl font-bold tracking-tight md:text-3xl">
                   {bu.name} Categories
                 </h1>
                 {bu.description && (
@@ -622,7 +625,7 @@ const handleAddToCart = useCallback(
       {/* SEARCH + FILTERS BAR                                            */}
       {/* ================================================================ */}
 
-      <div className="border-b border-border/40 bg-background/60">
+      <div className="border-b border-white/60 bg-white/55 backdrop-blur-lg dark:border-white/10 dark:bg-[#1A1412]/70">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="w-full sm:max-w-sm">
@@ -650,16 +653,17 @@ const handleAddToCart = useCallback(
                 </SelectContent>
               </Select>
 
-              <div className="flex overflow-hidden rounded-lg border border-border/60">
+              <div className="flex overflow-hidden rounded-xl border border-border/60 bg-white/50 dark:bg-white/5">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setViewMode("grid")}
                   className={cn(
                     "h-11 w-11 rounded-none",
-                    viewMode === "grid" ? "bg-secondary text-foreground" : "text-muted-foreground"
+                    viewMode === "grid" ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary" : "text-muted-foreground"
                   )}
                   aria-label="Grid view"
+                  aria-pressed={viewMode === "grid"}
                 >
                   <Grid3X3 className="h-3.5 w-3.5" />
                 </Button>
@@ -669,9 +673,10 @@ const handleAddToCart = useCallback(
                   onClick={() => setViewMode("list")}
                   className={cn(
                     "h-11 w-11 rounded-none border-l border-border/60",
-                    viewMode === "list" ? "bg-secondary text-foreground" : "text-muted-foreground"
+                    viewMode === "list" ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary" : "text-muted-foreground"
                   )}
                   aria-label="List view"
+                  aria-pressed={viewMode === "list"}
                 >
                   <List className="h-3.5 w-3.5" />
                 </Button>
@@ -723,7 +728,7 @@ const handleAddToCart = useCallback(
                       Browse
                     </span>
                   </div>
-                  <h2 className="text-xl font-bold sm:text-2xl">All Categories</h2>
+                  <h2 className="font-culinary-heading text-xl font-bold tracking-tight sm:text-2xl">All Categories</h2>
                 </div>
               </div>
 
@@ -793,7 +798,7 @@ const handleAddToCart = useCallback(
                           </span>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <h2 className="truncate text-lg font-bold sm:text-xl">
+                              <h2 className="font-culinary-heading truncate text-lg font-bold tracking-tight sm:text-xl">
                                 {cat.name}
                               </h2>
                               {cat.catalog?.featured && (

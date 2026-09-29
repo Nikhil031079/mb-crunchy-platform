@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAdminRole } from "./utils/adminAuth";
 
@@ -59,13 +59,31 @@ export const getByCode = query({
  * Returns all active offers across ALL active business units.
  * Each offer retains its businessUnitId for store attribution.
  * Used by FeaturedOffersSection to avoid fixed-N BU query slots.
+ *
+ * Server-enforced lifecycle: status active, not deleted, and inside the
+ * startsAt/endsAt window (missing dates mean no boundary), mirroring the
+ * client isOfferActive helper in src/utils/marketing.ts. Callers keep
+ * their defensive client-side filtering.
  */
 export const getAllActiveAcrossBusinessUnits = query({
   handler: async (ctx) => {
+    const now = Date.now();
     const offers = await ctx.db
       .query("offers")
       .withIndex("by_status", (q) => q.eq("status", "active"))
-      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("deletedAt"), undefined),
+          q.or(
+            q.eq(q.field("startsAt"), undefined),
+            q.lte(q.field("startsAt"), now)
+          ),
+          q.or(
+            q.eq(q.field("endsAt"), undefined),
+            q.gte(q.field("endsAt"), now)
+          )
+        )
+      )
       .order("asc")
       .collect();
     return offers;
@@ -75,6 +93,30 @@ export const getAllActiveAcrossBusinessUnits = query({
 // ============================================================================
 // Mutations
 // ============================================================================
+
+/**
+ * Reject a coupon code that is already used by another live offer.
+ * Comparison is upper-cased to match the redemption lookup in
+ * validateCouponInternal (which queries by_code with the upper-cased code).
+ * Code-less (automatic) offers never collide; soft-deleted offers are
+ * ignored. Updates pass excludeId so an offer keeps its own code.
+ */
+async function assertUniqueCouponCode(
+  ctx: { db: QueryCtx["db"] },
+  code: string | undefined,
+  excludeId?: string
+): Promise<void> {
+  if (!code) return;
+  const normalized = code.toUpperCase();
+  const clash = await ctx.db
+    .query("offers")
+    .withIndex("by_code", (q) => q.eq("code", normalized))
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .first();
+  if (clash && clash._id !== excludeId) {
+    throw new Error(`Coupon code "${normalized}" is already in use`);
+  }
+}
 
 export const create = mutation({
   args: {
@@ -99,6 +141,21 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
+
+    if (!args.businessUnitId) throw new Error("Select a business unit.");
+    if (args.endsAt <= args.startsAt) {
+      throw new Error("End date must be after the start date.");
+    }
+    if (
+      args.discountType === "percentage" &&
+      (args.discountValue <= 0 || args.discountValue > 100)
+    ) {
+      throw new Error("Percentage discount must be between 1 and 100.");
+    }
+    if (args.discountType === "fixed" && args.discountValue < 0) {
+      throw new Error("Fixed discount must not be negative.");
+    }
+    await assertUniqueCouponCode(ctx, args.code);
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
@@ -138,22 +195,78 @@ export const update = mutation({
   handler: async (ctx, args) => {
     await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Offer not found");
+
+    const startsAt = args.startsAt ?? existing.startsAt;
+    const endsAt = args.endsAt ?? existing.endsAt;
+    if (startsAt !== undefined && endsAt !== undefined && endsAt <= startsAt) {
+      throw new Error("End date must be after the start date.");
+    }
+    const discountType = args.discountType ?? existing.discountType;
+    const discountValue = args.discountValue ?? existing.discountValue;
+    if (
+      discountType === "percentage" &&
+      discountValue !== undefined &&
+      (discountValue <= 0 || discountValue > 100)
+    ) {
+      throw new Error("Percentage discount must be between 1 and 100.");
+    }
+    if (
+      discountType === "fixed" &&
+      discountValue !== undefined &&
+      discountValue < 0
+    ) {
+      throw new Error("Fixed discount must not be negative.");
+    }
+    if (args.code !== undefined) {
+      await assertUniqueCouponCode(ctx, args.code, args.id);
+    }
+
     const { sessionToken: _, id, ...fields } = args;
     await ctx.db.patch(id, { ...fields, updatedAt: Date.now() });
   },
 });
 
-export const incrementUsage = internalMutation({
-  args: { id: v.id("offers") },
-  handler: async (ctx, args) => {
-    const offer = await ctx.db.get(args.id);
-    if (!offer) throw new Error("Offer not found");
-    await ctx.db.patch(args.id, {
-      usedCount: offer.usedCount + 1,
-      updatedAt: Date.now(),
-    });
-  },
-});
+export interface CouponConsumption {
+  /** True when a usage slot was reserved (usedCount incremented). */
+  consumed: boolean;
+  /** usedCount after this call (unchanged when not consumed). */
+  usedCount: number;
+}
+
+/**
+ * Atomically consume one coupon usage slot (10C — P2 usage race fix).
+ *
+ * MUST run inline inside the caller's mutation transaction
+ * (orders.create, finalizePaidOrder) — never via a separate ctx.runMutation
+ * — so the limit check and the increment share one Convex
+ * optimistic-concurrency transaction: a concurrent committer retries the
+ * whole caller mutation against fresh state instead of overshooting.
+ *
+ * Enforces ONLY the usage limit. Offer validity (active/window/eligibility)
+ * is validated upstream at order time; re-litigating it here would strand
+ * in-flight paid orders if an admin deactivates a coupon mid-flow.
+ * Returns consumed:false (no write) when exhausted or already over-limit.
+ */
+export async function consumeCouponUsage(
+  ctx: { db: MutationCtx["db"] },
+  offerId: Id<"offers">,
+): Promise<CouponConsumption> {
+  const offer = await ctx.db.get(offerId);
+  if (!offer || offer.deletedAt !== undefined) {
+    throw new Error("Offer not found");
+  }
+  if (offer.usageLimit != null && offer.usedCount >= offer.usageLimit) {
+    return { consumed: false, usedCount: offer.usedCount };
+  }
+  const nextCount = offer.usedCount + 1;
+  await ctx.db.patch(offerId, {
+    usedCount: nextCount,
+    updatedAt: Date.now(),
+  });
+  return { consumed: true, usedCount: nextCount };
+}
 
 /**
  * Decrement coupon usage count exactly once per order cancellation/refund.
@@ -186,8 +299,17 @@ export const softDelete = mutation({
   },
 });
 
+/**
+ * Admin-only full offer listing (10I). Previously public; Phase 10H
+ * established zero customer callers — the only callers are the admin
+ * Offers/FlashSales pages, which pass their session token. Returns the
+ * complete unfiltered documents (including inactive/archived) for admin
+ * management; customer surfaces use getActive/getAllActiveAcrossBusinessUnits.
+ */
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("offers")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))

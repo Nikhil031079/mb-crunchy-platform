@@ -152,9 +152,9 @@ export function AddressFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl glass-tier-2">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Address" : "Add Address"}</DialogTitle>
+          <DialogTitle className="font-culinary-heading font-bold tracking-tight">{isEditing ? "Edit Address" : "Add Address"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -165,11 +165,16 @@ export function AddressFormDialog({
             <Input
               id="addr-label"
               placeholder="Home, Office, etc."
+              glass
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className={cn(errors.label && "border-destructive")}
+              className={cn("h-11", errors.label && "border-destructive")}
             />
-            {errors.label && <p className="text-xs text-destructive">{errors.label}</p>}
+            {errors.label && (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                {errors.label}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -179,31 +184,40 @@ export function AddressFormDialog({
             <Textarea
               id="addr-street"
               placeholder="Street address, building, apartment..."
+              glass
               value={streetAddress}
               onChange={(e) => setStreetAddress(e.target.value)}
               className={cn("min-h-[80px]", errors.address && "border-destructive")}
             />
-            {errors.address && <p className="text-xs text-destructive">{errors.address}</p>}
+            {errors.address && (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                {errors.address}
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="addr-city">City</Label>
-              <Input
-                id="addr-city"
-                placeholder="City"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-              />
+            <Input
+              id="addr-city"
+              placeholder="City"
+              glass
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="h-11"
+            />
             </div>
             <div className="space-y-2">
               <Label htmlFor="addr-state">State</Label>
-              <Input
-                id="addr-state"
-                placeholder="State"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-              />
+            <Input
+              id="addr-state"
+              placeholder="State"
+              glass
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              className="h-11"
+            />
             </div>
           </div>
 
@@ -212,11 +226,16 @@ export function AddressFormDialog({
             <Input
               id="addr-zip"
               placeholder="6-digit pincode"
+              glass
               value={zipCode}
               onChange={(e) => setZipCode(e.target.value)}
-              className={cn(errors.zipCode && "border-destructive")}
+              className={cn("h-11 tabular-nums", errors.zipCode && "border-destructive")}
             />
-            {errors.zipCode && <p className="text-xs text-destructive">{errors.zipCode}</p>}
+            {errors.zipCode && (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                {errors.zipCode}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -224,8 +243,10 @@ export function AddressFormDialog({
             <Input
               id="addr-landmark"
               placeholder="Near park, opposite mall, etc."
+              glass
               value={landmark}
               onChange={(e) => setLandmark(e.target.value)}
+              className="h-11"
             />
           </div>
 
@@ -234,8 +255,10 @@ export function AddressFormDialog({
             <Input
               id="addr-zone"
               placeholder="e.g. Zone A, Central, etc."
+              glass
               value={deliveryZone}
               onChange={(e) => setDeliveryZone(e.target.value)}
+              className="h-11"
             />
           </div>
 
@@ -244,6 +267,7 @@ export function AddressFormDialog({
             <Textarea
               id="addr-instructions"
               placeholder="Gate code, floor number, call on arrival..."
+              glass
               value={deliveryInstructions}
               onChange={(e) => setDeliveryInstructions(e.target.value)}
               className="min-h-[60px]"
@@ -262,11 +286,16 @@ export function AddressFormDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="max-sm:space-y-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="max-sm:w-full">
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+          <Button
+            variant="crunch"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="gap-2 font-culinary-heading max-sm:w-full"
+          >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isEditing ? "Save Changes" : "Add Address"}
           </Button>

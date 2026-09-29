@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { AlertCircle, Pencil, Plus, RefreshCw, Trash2, Truck } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -13,6 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  crudDialogKey,
+  crudDialogReducer,
+  initialCrudDialogState,
+} from "@/components/admin/crudDialogState";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 
@@ -58,6 +63,23 @@ const fromConvex = (doc: Doc<"shippingRates">, zoneName?: string): RateRecord =>
   zoneName,
 });
 
+export function toRateFormValues(
+  record: RateRecord | undefined,
+  zones: { _id: string; name: string }[],
+): RateFormValues {
+  if (record) {
+    return {
+      shippingZoneId: record.shippingZoneId,
+      name: record.name,
+      minWeightGrams: String(record.minWeightGrams),
+      maxWeightGrams: String(record.maxWeightGrams),
+      charge: String(record.charge),
+      status: record.status,
+    };
+  }
+  return { ...EMPTY_FORM, shippingZoneId: zones[0]?._id ?? "" };
+}
+
 function RateFormDialog({
   open,
   record,
@@ -72,16 +94,7 @@ function RateFormDialog({
   onSubmit: (values: RateFormValues) => void;
 }) {
   const [values, setValues] = useState<RateFormValues>(() =>
-    record
-      ? {
-          shippingZoneId: record.shippingZoneId,
-          name: record.name,
-          minWeightGrams: String(record.minWeightGrams),
-          maxWeightGrams: String(record.maxWeightGrams),
-          charge: String(record.charge),
-          status: record.status,
-        }
-      : { ...EMPTY_FORM, shippingZoneId: zones[0]?._id ?? "" }
+    toRateFormValues(record, zones),
   );
   const isEditing = Boolean(record);
 
@@ -150,6 +163,7 @@ function RateFormDialog({
 
 export default function ShippingRatesPage() {
   const { getSessionToken } = useAdminAuth();
+  const token = getSessionToken();
   const allBUs = useQuery(api.businessUnits.getAll);
   const [selectedBuId, setSelectedBuId] = useState<string | null>(null);
   const zones = useQuery(
@@ -160,13 +174,21 @@ export default function ShippingRatesPage() {
     api.shippingRates.getByBusinessUnit,
     selectedBuId ? { businessUnitId: selectedBuId as Id<"businessUnits"> } : "skip",
   );
+  // 12D coverage summary (read-only aggregate; superadmin/admin only).
+  const coverage = useQuery(
+    api.shippingRates.getCoverage,
+    token && selectedBuId
+      ? { sessionToken: token, businessUnitId: selectedBuId as Id<"businessUnits"> }
+      : "skip",
+  );
   const createRate = useMutation(api.shippingRates.create);
   const updateRate = useMutation(api.shippingRates.update);
   const softDeleteRate = useMutation(api.shippingRates.softDelete);
 
   const [error, setError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<RateRecord | undefined>(undefined);
+  // 13C: dialog lifecycle via shared state machine — every open mounts
+  // fresh (record id + open session in key), save success clears selection.
+  const [dialog, dispatchDialog] = useReducer(crudDialogReducer, initialCrudDialogState);
   const [deleteTarget, setDeleteTarget] = useState<RateRecord | undefined>(undefined);
   const [saving, setSaving] = useState(false);
 
@@ -183,6 +205,9 @@ export default function ShippingRatesPage() {
   const rateRecords = (rates ?? [])
     .map((doc) => fromConvex(doc, zoneMap.get(doc.shippingZoneId)))
     .sort((a, b) => a.minWeightGrams - b.minWeightGrams);
+  const editingRecord = dialog.editingId
+    ? rateRecords.find((r) => r.id === dialog.editingId)
+    : undefined;
 
   const isLoading = rates === undefined && Boolean(selectedBuId);
 
@@ -208,7 +233,7 @@ export default function ShippingRatesPage() {
           businessUnitId: selectedBuId as Id<"businessUnits">,
         });
       }
-      setFormOpen(false);
+      dispatchDialog({ type: "saveSuccess" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save rate");
     } finally {
@@ -233,7 +258,7 @@ export default function ShippingRatesPage() {
   return (
     <div>
       <PageHeader title="Shipping Rates" description="Configure static weight-slab shipping rates per zone.">
-        <Button size="sm" onClick={() => { setEditingRecord(undefined); setFormOpen(true); }} disabled={!selectedBuId || zoneList.length === 0}>
+        <Button size="sm" onClick={() => dispatchDialog({ type: "openAdd" })} disabled={!selectedBuId || zoneList.length === 0}>
           <Plus className="mr-1.5 size-4" />Add rate
         </Button>
       </PageHeader>
@@ -259,12 +284,42 @@ export default function ShippingRatesPage() {
         </Select>
       </div>
 
+      {/* 12D coverage summary — read-only aggregates; warnings are advisory only. */}
+      {coverage && (
+        <div className="mb-4 space-y-2">
+          <div className="flex flex-wrap gap-2" aria-label="Rate coverage summary">
+            <Badge variant="outline">{coverage.total} total rates</Badge>
+            <Badge variant="default">{coverage.active} active</Badge>
+            <Badge variant="secondary">{coverage.inactive} inactive</Badge>
+            {coverage.lowestActiveMin !== null && coverage.highestActiveMax !== null && (
+              <Badge variant="outline">
+                Active coverage {coverage.lowestActiveMin}g – {coverage.highestActiveMax}g
+              </Badge>
+            )}
+          </div>
+          {(coverage.overlaps.length > 0 || coverage.gaps.length > 0) && (
+            <Alert variant="destructive">
+              <AlertCircle className="size-4" />
+              <AlertTitle>Rate coverage warning (display only — nothing was changed)</AlertTitle>
+              <AlertDescription>
+                {coverage.overlaps.length > 0 && (
+                  <p>Overlapping active slabs: {coverage.overlaps.length}. Overlapping slabs make checkout fail closed for affected weights.</p>
+                )}
+                {coverage.gaps.length > 0 && (
+                  <p>Uncovered weight gaps above {coverage.gaps.map((g) => `${g.coveredUpTo}g`).join(", ")}g. Carts in a gap cannot be priced.</p>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+
       {!selectedBuId ? (
         <EmptyState icon={Truck} title="Select a business unit" description="Choose a business unit to view its shipping rates." />
       ) : isLoading ? (
         <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">Loading rates...</div>
       ) : rateRecords.length === 0 ? (
-        <EmptyState icon={Truck} title="No shipping rates" description="Create shipping zones first, then add weight-slab rates." action={{ label: "Create rate", onClick: () => { setEditingRecord(undefined); setFormOpen(true); } }} />
+        <EmptyState icon={Truck} title="No shipping rates" description="Create shipping zones first, then add weight-slab rates." action={{ label: "Create rate", onClick: () => dispatchDialog({ type: "openAdd" }) }} />
       ) : (
         <section className="overflow-hidden rounded-xl border">
           <Table>
@@ -288,7 +343,7 @@ export default function ShippingRatesPage() {
                   <TableCell><Badge variant={record.status === "active" ? "default" : "secondary"}>{record.status === "active" ? "Active" : "Inactive"}</Badge></TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => { setEditingRecord(record); setFormOpen(true); }}><Pencil className="size-3.5" /> Edit</Button>
+                      <Button size="sm" variant="outline" onClick={() => dispatchDialog({ type: "openEdit", id: record.id })}><Pencil className="size-3.5" /> Edit</Button>
                       <Button size="sm" variant="outline" onClick={() => setDeleteTarget(record)}><Trash2 className="size-3.5 text-destructive" /> Delete</Button>
                     </div>
                   </TableCell>
@@ -299,7 +354,7 @@ export default function ShippingRatesPage() {
         </section>
       )}
 
-      <RateFormDialog key={editingRecord?.id ?? "new"} open={formOpen} record={editingRecord} zones={zoneList} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditingRecord(undefined); }} onSubmit={saveRate} />
+      <RateFormDialog key={crudDialogKey(dialog)} open={dialog.open} record={editingRecord} zones={zoneList} onOpenChange={(o) => { if (!o) dispatchDialog({ type: "close" }); }} onSubmit={saveRate} />
 
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(undefined)}>
         <DialogContent className="sm:max-w-md">

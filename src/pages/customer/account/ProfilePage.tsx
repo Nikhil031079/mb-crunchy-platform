@@ -92,21 +92,26 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="rounded-3xl glass-tier-1 overflow-hidden">
         <CardHeader>
-          <CardTitle className="text-base">Personal Information</CardTitle>
+          <CardTitle className="font-culinary-heading text-base font-bold tracking-tight">Personal Information</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 p-5 sm:p-6">
           <div className="space-y-2">
             <Label htmlFor="profile-name">Full Name</Label>
             <Input
               id="profile-name"
               placeholder="Your name"
+              glass
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className={cn(errors.name && "border-destructive")}
+              className={cn("h-11", errors.name && "border-destructive")}
             />
-            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+            {errors.name && (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                {errors.name}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -119,7 +124,11 @@ export default function ProfilePage() {
               onChange={setPhone}
               error={!!errors.phone}
             />
-            {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
+            {errors.phone && (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                {errors.phone}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -128,15 +137,25 @@ export default function ProfilePage() {
               id="profile-email"
               type="email"
               placeholder="you@example.com"
+              glass
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={cn(errors.email && "border-destructive")}
+              className={cn("h-11", errors.email && "border-destructive")}
             />
-            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+            {errors.email && (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                {errors.email}
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={isSaving}
+              variant="crunch"
+              className="h-11 gap-2 px-6 font-culinary-heading max-sm:w-full"
+            >
               {isSaving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -148,15 +167,15 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="rounded-3xl glass-tier-1 overflow-hidden">
         <CardHeader>
-          <CardTitle className="text-base">Account Stats</CardTitle>
+          <CardTitle className="font-culinary-heading text-base font-bold tracking-tight">Account Stats</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-5 sm:p-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <p className="text-sm text-muted-foreground">Member Since</p>
-              <p className="text-sm font-medium">
+              <p className="text-sm font-medium tabular-nums">
                 {customer?.createdAt
                   ? new Date(customer.createdAt).toLocaleDateString()
                   : "N/A"}
@@ -164,11 +183,11 @@ export default function ProfilePage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Orders</p>
-              <p className="text-sm font-medium">{customer?.totalOrders ?? 0}</p>
+              <p className="text-sm font-medium tabular-nums">{customer?.totalOrders ?? 0}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Paid</p>
-              <p className="text-sm font-medium">{formatCurrency(totalPaid)}</p>
+              <p className="text-sm font-medium tabular-nums">{formatCurrency(totalPaid)}</p>
             </div>
           </div>
         </CardContent>

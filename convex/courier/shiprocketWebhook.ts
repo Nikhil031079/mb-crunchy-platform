@@ -48,7 +48,10 @@ export const shiprocketWebhook = httpAction(async (ctx, request) => {
     return new Response("Webhook secret not configured", { status: 500 });
   }
 
-  const signatureHeader = request.headers.get("x-shiprocket-signature") 
+  // Shiprocket sends x-api-key; also accept x-shiprocket-signature and
+  // authorization for backwards compatibility with other providers.
+  const signatureHeader = request.headers.get("x-api-key")
+    ?? request.headers.get("x-shiprocket-signature")
     ?? request.headers.get("authorization");
   
   const body = await request.text();

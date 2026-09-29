@@ -200,6 +200,8 @@ interface ResultCardProps {
 
 function ResultCard({ item, query, ratings }: ResultCardProps) {
   const rating = ratings?.[item._id];
+  // Visual-only thumbnail fallback for stored image URLs that fail to load.
+  const [imageError, setImageError] = useState(false);
 
   return (
     <motion.div
@@ -215,16 +217,17 @@ function ResultCard({ item, query, ratings }: ResultCardProps) {
         }
         className="group block"
       >
-        <Card className="overflow-hidden border-border/60 transition-shadow hover:shadow-md">
+        <Card className="rounded-2xl border-border/50 bg-white/50 overflow-hidden transition-shadow hover:shadow-md dark:bg-white/5">
           <div className="flex">
             {/* Image */}
             <div className="relative h-28 w-28 shrink-0 overflow-hidden bg-secondary/50 sm:h-32 sm:w-32">
-              {item.coverImage || item.thumbnail ? (
+              {(item.coverImage || item.thumbnail) && !imageError ? (
                 <img
                   src={item.thumbnail || item.coverImage}
                   alt={item.name}
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   loading="lazy"
+                  onError={() => setImageError(true)}
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
@@ -274,7 +277,7 @@ function ResultCard({ item, query, ratings }: ResultCardProps) {
 
               <div className="mt-2 flex items-end justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-primary">
+                  <span className="font-culinary-heading text-base font-bold tabular-nums text-primary">
                     {formatCurrency(item.price)}
                   </span>
                   {item.compareAtPrice && item.compareAtPrice > item.price && (
@@ -689,9 +692,9 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
   // ==========================================================================
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen culinary-canvas">
       {/* Search Header */}
-      <div className="sticky top-16 z-40 border-b border-border/40 bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
+      <div className="sticky top-16 z-40 border-b border-white/60 bg-white/55 backdrop-blur-lg dark:border-white/10 dark:bg-[#1A1412]/70">
         <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -703,7 +706,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                 if (e.key === "Enter") handleSubmitSearch(searchInput);
               }}
               placeholder={`Search ${SITE_NAME}...`}
-              className="h-11 w-full rounded-xl border border-border/60 bg-secondary/30 pl-10 pr-10 text-sm transition-colors placeholder:text-muted-foreground focus:border-accent/40 focus:bg-background focus:outline-none"
+              className="h-11 w-full rounded-2xl border border-white/60 bg-white/60 pl-10 pr-10 text-sm shadow-sm backdrop-blur-md transition-colors placeholder:text-muted-foreground focus:border-culinary-primary/40 focus:bg-white/80 focus:outline-none dark:border-white/15 dark:bg-white/10 dark:focus:bg-white/15"
               aria-label="Search products"
               autoFocus
             />
@@ -731,7 +734,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SearchSort)}
                   aria-label="Sort results"
-                  className="h-11 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
+                  className="h-11 appearance-none rounded-full border border-white/60 bg-white/60 pl-7 pr-6 text-xs font-medium shadow-sm backdrop-blur-md transition-colors focus:border-culinary-primary/40 focus:outline-none dark:border-white/15 dark:bg-white/10"
                 >
                   {SORT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -748,9 +751,9 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                     value={selectedCategoryOption}
                     onChange={(e) => setSelectedCategory(e.target.value)}
                     aria-label="Filter by category"
-                    className="h-11 appearance-none rounded-full border border-border/60 bg-card pl-7 pr-6 text-xs font-medium transition-colors focus:border-primary/40 focus:outline-none"
-                  >
-                    <option value="all">All Categories</option>
+                  className="h-11 appearance-none rounded-full border border-white/60 bg-white/60 pl-7 pr-6 text-xs font-medium shadow-sm backdrop-blur-md transition-colors focus:border-culinary-primary/40 focus:outline-none dark:border-white/15 dark:bg-white/10"
+                >
+                  <option value="all">All Categories</option>
                     {categoryOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.label}
@@ -762,10 +765,11 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
 
               <button
                 onClick={() => setFeaturedOnly((value) => !value)}
-                className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                aria-pressed={featuredOnly}
+                className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium shadow-sm backdrop-blur-md transition-colors ${
                   featuredOnly
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border/60 bg-card text-muted-foreground hover:text-foreground"
+                    ? "border-culinary-primary/40 bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary"
+                    : "border-white/60 bg-white/60 text-muted-foreground hover:text-foreground dark:border-white/15 dark:bg-white/10"
                 }`}
               >
                 <Zap className="h-3.5 w-3.5" />
@@ -774,10 +778,11 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
 
               <button
                 onClick={() => setInStockOnly((value) => !value)}
-                className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                aria-pressed={inStockOnly}
+                className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium shadow-sm backdrop-blur-md transition-colors ${
                   inStockOnly
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border/60 bg-card text-muted-foreground hover:text-foreground"
+                    ? "border-culinary-primary/40 bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary"
+                    : "border-white/60 bg-white/60 text-muted-foreground hover:text-foreground dark:border-white/15 dark:bg-white/10"
                 }`}
               >
                 <PackageCheck className="h-3.5 w-3.5" />
@@ -814,8 +819,8 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
               {/* Recently Viewed Items */}
               {recentlyViewedSuggestions.length > 0 && (
                 <section>
-                  <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                    <History className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="font-culinary-heading mb-3 flex items-center gap-2 text-sm font-bold tracking-tight">
+                    <History className="h-4 w-4 text-culinary-primary" />
                     Recently Viewed
                   </h2>
                   <div className="flex flex-wrap gap-2">
@@ -823,7 +828,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                       <button
                         key={item.id}
                         onClick={() => handleSubmitSearch(item.name)}
-                        className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm transition-colors hover:border-primary/30 hover:bg-secondary/60"
+                        className="flex items-center gap-1.5 rounded-full border border-white/60 bg-white/60 px-3 py-1.5 text-sm shadow-sm backdrop-blur-md dark:border-white/15 dark:bg-white/10 transition-colors hover:border-primary/30 hover:bg-secondary/60"
                       >
                         <History className="h-3 w-3 text-muted-foreground/60" />
                         <span>{item.name}</span>
@@ -837,8 +842,8 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
               {recentSearches.length > 0 && (
                 <section>
                   <div className="mb-3 flex items-center justify-between">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
+                    <h2 className="font-culinary-heading flex items-center gap-2 text-sm font-bold tracking-tight">
+                      <Clock className="h-4 w-4 text-culinary-primary" />
                       Recent Searches
                     </h2>
                     <button
@@ -852,7 +857,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                     {recentSearches.map((q) => (
                       <div
                         key={q}
-                        className="group flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm transition-colors hover:bg-secondary/60"
+                        className="group flex items-center gap-1.5 rounded-full border border-white/60 bg-white/60 px-3 py-1.5 text-sm shadow-sm backdrop-blur-md dark:border-white/15 dark:bg-white/10 transition-colors hover:bg-secondary/60"
                       >
                         <button
                           onClick={() => handleSubmitSearch(q)}
@@ -880,8 +885,8 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
               {/* Popular Categories */}
               {popularCategories.length > 0 && (
                 <section>
-                  <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                    <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="font-culinary-heading mb-3 flex items-center gap-2 text-sm font-bold tracking-tight">
+                    <LayoutGrid className="h-4 w-4 text-culinary-primary" />
                     Popular Categories
                   </h2>
                   <div className="flex flex-wrap gap-2">
@@ -895,7 +900,7 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
                               ? `/${buSlug}/${category.slug}`
                               : `/search?q=${encodeURIComponent(category.name)}`
                           }
-                          className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm transition-colors hover:border-primary/30 hover:bg-secondary/60"
+                          className="flex items-center gap-1.5 rounded-full border border-white/60 bg-white/60 px-3 py-1.5 text-sm shadow-sm backdrop-blur-md dark:border-white/15 dark:bg-white/10 transition-colors hover:border-primary/30 hover:bg-secondary/60"
                         >
                           <LayoutGrid className="h-3 w-3 text-muted-foreground/60" />
                           <span>{category.name}</span>
@@ -908,16 +913,16 @@ export default function SearchPage({ businessUnitSlug }: SearchPageProps) {
 
               {/* Trending Searches */}
               <section>
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                  <Sparkles className="h-4 w-4 text-muted-foreground" />
-                  Trending Searches
-                </h2>
+                  <h2 className="font-culinary-heading mb-3 flex items-center gap-2 text-sm font-bold tracking-tight">
+                    <Sparkles className="h-4 w-4 text-culinary-primary" />
+                    Trending Searches
+                  </h2>
                 <div className="flex flex-wrap gap-2">
                   {POPULAR_SUGGESTIONS.map((tag) => (
                     <button
                       key={tag}
                       onClick={() => handleSubmitSearch(tag)}
-                      className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm transition-colors hover:border-primary/30 hover:bg-secondary/60"
+                      className="flex items-center gap-1.5 rounded-full border border-white/60 bg-white/60 px-3 py-1.5 text-sm shadow-sm backdrop-blur-md dark:border-white/15 dark:bg-white/10 transition-colors hover:border-primary/30 hover:bg-secondary/60"
                     >
                       <TrendingUp className="h-3 w-3 text-primary/60" />
                       <span>{tag}</span>

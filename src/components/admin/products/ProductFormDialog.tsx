@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Trash2, Plus, GripVertical, ImagePlus, ArrowUp, ArrowDown, Image as ImageIcon } from "lucide-react";
 
 import type { Product, ProductFormValues, ProductStatus, ProductUnit, VegNonVeg, AdminVariant } from "./types";
-import { productUnits, vegNonVegOptions, emptyVariant } from "./types";
+import { productUnits, vegNonVegOptions, emptyVariant, requiresCourierShipping } from "./types";
 
 const emptyValues: ProductFormValues = {
   businessUnitId: "", categoryId: "", name: "", slug: "", description: "", images: [],
@@ -36,10 +36,12 @@ const PRESET_GROUP_NAMES = Object.keys(VARIANT_GROUP_PRESETS);
 interface ProductFormDialogProps {
   open: boolean;
   product?: Product;
-  businessUnits: { id: string; name: string }[];
+  businessUnits: { id: string; name: string; serviceabilityMode?: string }[];
   categories: { id: string; businessUnitId: string; name: string }[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: ProductFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 const toFormValues = (product?: Product): ProductFormValues => {
@@ -77,7 +79,7 @@ const toFormValues = (product?: Product): ProductFormValues => {
 
 const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-export function ProductFormDialog({ open, product, businessUnits, categories, onOpenChange, onSubmit }: ProductFormDialogProps) {
+export function ProductFormDialog({ open, product, businessUnits, categories, onOpenChange, onSubmit, isSaving = false }: ProductFormDialogProps) {
   const dialogKey = `${product?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(product);
 
@@ -96,6 +98,7 @@ export function ProductFormDialog({ open, product, businessUnits, categories, on
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
           isEditing={isEditing}
+          isSaving={isSaving}
         />
       </DialogContent>
     </Dialog>
@@ -104,15 +107,22 @@ export function ProductFormDialog({ open, product, businessUnits, categories, on
 
 interface ProductFormProps {
   product?: Product;
-  businessUnits: { id: string; name: string }[];
+  businessUnits: { id: string; name: string; serviceabilityMode?: string }[];
   categories: { id: string; businessUnitId: string; name: string }[];
   isEditing: boolean;
+  isSaving: boolean;
   onSubmit: (values: ProductFormValues) => void;
   onCancel: () => void;
 }
 
-function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, onCancel }: ProductFormProps) {
+function ProductForm({ product, businessUnits, categories, isEditing, isSaving, onSubmit, onCancel }: ProductFormProps) {
   const [values, setValues] = useState<ProductFormValues>(() => toFormValues(product));
+  // 13D: courier Shipping section applies only to pincode_region (Mart)
+  // business units. Unknown/unselected BU keeps current behavior (shown).
+  const selectedBu = businessUnits.find((bu) => bu.id === values.businessUnitId);
+  const showCourierShipping =
+    values.businessUnitId === "" ||
+    requiresCourierShipping(selectedBu?.serviceabilityMode);
   const [slugEdited, setSlugEdited] = useState(Boolean(product));
   const formId = useId();
   const update = <K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) =>
@@ -365,6 +375,7 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
           </div>
         </FormSection>
 
+        {showCourierShipping ? (
         <FormSection title="Shipping" description="Shipping weight and package dimensions for courier delivery. Required for Mart products shipped via courier.">
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
@@ -394,6 +405,13 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
             </div>
           </div>
         </FormSection>
+        ) : (
+        <FormSection title="Shipping" description="Courier shipping configuration.">
+          <p className="text-sm text-muted-foreground">
+            Courier shipping is not applicable to this business unit (local delivery / pickup only). Existing values, if any, are preserved unchanged.
+          </p>
+        </FormSection>
+        )}
 
         <FormSection title="Organization" description="Status, ordering, and discoverability.">
           {/* Row: Status + Display Order */}
@@ -414,7 +432,7 @@ function ProductForm({ product, businessUnits, categories, isEditing, onSubmit, 
           </div>
         </FormSection>
       </form>
-      <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId}>{isEditing ? "Save changes" : "Create product"}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId} disabled={isSaving}>{isEditing ? "Save changes" : "Create product"}</Button></DialogFooter>
     </>
   );
 }

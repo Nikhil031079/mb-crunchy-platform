@@ -36,6 +36,12 @@ interface ProductCardProps {
   rating?: { average: number; count: number };
   /** Called when the card body is clicked - opens Item Details Modal */
   onOpenItemDetails?: (item: CatalogItem) => void;
+  /**
+   * Contain-fit imagery for packaged goods (Phase 4D) — visual only.
+   * Default "cover" preserves existing behavior; "contain" renders the
+   * image uncropped in a light padded well (Mart grid).
+   */
+  imageFit?: "cover" | "contain";
 }
 
 export const ProductCard = memo(function ProductCard({
@@ -52,6 +58,7 @@ export const ProductCard = memo(function ProductCard({
   stockInfo,
   rating,
   onOpenItemDetails,
+  imageFit = "cover",
 }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
   const [hoverImageError, setHoverImageError] = useState(false);
@@ -170,17 +177,28 @@ export const ProductCard = memo(function ProductCard({
   const inner = (
     <Card
       className={cn(
-        "group relative overflow-hidden transition-all duration-300",
-        "border border-border/50 hover:border-border",
-        "hover:shadow-lg hover:-translate-y-0.5",
+        // Culinary Tier 1 glass, Stitch card composition (Phase 4C):
+        // rounded-3xl shell, explicit compact padding (overrides Card base
+        // py-6/gap-6), Tier 2 hover lift. Desktop spacing grows at sm/lg.
+        // All cart/stock/variant behavior unchanged.
+        "group relative overflow-hidden glass-tier-1 rounded-3xl glass-lift",
+        "border border-border/50 px-2.5 py-2.5 sm:px-4 sm:py-4 gap-3 lg:gap-4",
         onOpenItemDetails && "cursor-pointer",
         isOutOfStock && "opacity-70",
         className
       )}
       onClick={onOpenItemDetails ? cardOnClick : undefined}
     >
-          {/* Image Container */}
-          <div className="relative aspect-[4/3] overflow-hidden bg-secondary/50">
+          {/* Image well — inset rounded container (Phase 4C).
+              Desktop uses a fixed h-52 well; mobile keeps aspect ratio.
+              "contain" renders packaged goods uncropped (Phase 4D Mart).
+              Badges, favorite, and quick-add stay positioned in the well. */}
+          <div
+            className={cn(
+              "relative aspect-[4/3] overflow-hidden rounded-2xl bg-secondary/50 lg:aspect-auto lg:h-52",
+              imageFit === "contain" && "bg-white/70 p-3 lg:h-48",
+            )}
+          >
             {coverSrc && !imageError ? (
               <>
                 {!imageLoaded && (
@@ -190,7 +208,8 @@ export const ProductCard = memo(function ProductCard({
                   src={coverSrc}
                   alt={product.name}
                   className={cn(
-                    "h-full w-full object-cover transition-all duration-500",
+                    "h-full w-full transition-all duration-500",
+                    imageFit === "contain" ? "object-contain" : "object-cover",
                     "group-hover:scale-105",
                     hoverSrc && "group-hover:opacity-0",
                     imageLoaded ? "opacity-100" : "opacity-0"
@@ -205,7 +224,10 @@ export const ProductCard = memo(function ProductCard({
                     alt=""
                     aria-hidden
                     loading="lazy"
-                    className="absolute inset-0 h-full w-full object-cover opacity-0 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100"
+                    className={cn(
+                      "absolute inset-0 h-full w-full opacity-0 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100",
+                      imageFit === "contain" ? "object-contain" : "object-cover",
+                    )}
                     onError={() => setHoverImageError(true)}
                   />
                 )}
@@ -229,8 +251,8 @@ export const ProductCard = memo(function ProductCard({
                 )}
                 {isBestSeller && (
                   <Badge
-                    variant="default"
-                    className="rounded-none rounded-br-lg bg-orange-600 text-white text-[10px] font-bold px-2 py-1 h-auto gap-0.5"
+                    variant="special"
+                    className="rounded-none rounded-br-lg text-[10px] font-bold px-2 py-1 h-auto gap-0.5"
                   >
                     <Star className="h-2.5 w-2.5 fill-current" />
                     Best Seller
@@ -238,8 +260,8 @@ export const ProductCard = memo(function ProductCard({
                 )}
                 {isNewArrival && (
                   <Badge
-                    variant="default"
-                    className="rounded-none rounded-br-lg bg-sky-600 text-white text-[10px] font-bold px-2 py-1 h-auto"
+                    variant="glass"
+                    className="rounded-none rounded-br-lg text-[10px] font-bold px-2 py-1 h-auto"
                   >
                     New Arrival
                   </Badge>
@@ -251,8 +273,8 @@ export const ProductCard = memo(function ProductCard({
             {"featured" in product && product.featured && (
               <div className="absolute right-0 top-0">
                 <Badge
-                  variant="default"
-                  className="rounded-none rounded-bl-lg bg-amber-500 text-white text-[10px] font-bold px-2 py-1 h-auto gap-0.5"
+                  variant="special"
+                  className="rounded-none rounded-bl-lg text-[10px] font-bold px-2 py-1 h-auto gap-0.5"
                 >
                   <Star className="h-2.5 w-2.5 fill-current" />
                   Featured
@@ -300,7 +322,9 @@ export const ProductCard = memo(function ProductCard({
                     onClick={handleAdd}
                     disabled={isAdding}
                     aria-label={isAdding ? `Adding ${product.name} to cart` : `Add ${product.name} to cart`}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md transition-all duration-200 hover:bg-emerald-700 active:scale-95 disabled:pointer-events-none disabled:opacity-70"
+                    // Culinary glass quick-add disk, 44x44 (Phase 4).
+                    // Add/stepper state machine unchanged.
+                    className="btn-glass btn-culinary-icon flex h-11 w-11 items-center justify-center rounded-full shadow-md transition-all duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-70"
                   >
                     {isAdding ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -358,33 +382,48 @@ export const ProductCard = memo(function ProductCard({
               )}
 
               {/* Name */}
-              <h3 className="line-clamp-2 text-[13px] font-medium leading-tight group-hover:text-accent transition-colors">
+              <h3 className="line-clamp-2 text-[13px] lg:text-lg font-semibold leading-tight lg:leading-snug group-hover:text-culinary-primary transition-colors font-culinary-heading">
                 {product.name}
               </h3>
             </div>
 
-            {/* Description */}
+            {/* Description — list mode (existing) */}
             {showDescription && "description" in product && product.description && (
               <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                 {product.description}
               </p>
             )}
 
-            {/* Price + Rating row */}
-            <div className="mt-2 flex items-end justify-between gap-2">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[15px] font-bold tracking-tight text-foreground">
-                  {formatCurrency(minPrice)}
-                </span>
-                {maxPrice > minPrice && (
-                  <span className="text-[11px] text-muted-foreground">
-                    – {formatCurrency(maxPrice)}
+            {/* Description — desktop grid (Phase 4C, data-driven only) */}
+            {!showDescription && "description" in product && product.description && (
+              <p className="mt-1 hidden text-xs leading-relaxed text-muted-foreground lg:line-clamp-2">
+                {product.description}
+              </p>
+            )}
+
+            {/* Price + Rating row — separated Stitch-style price row */}
+            <div className="mt-2.5 flex items-end justify-between gap-2 border-t border-border/40 pt-2.5 lg:mt-3 lg:pt-3">
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[15px] lg:text-xl font-bold tracking-tight text-foreground font-culinary-heading">
+                    {formatCurrency(minPrice)}
                   </span>
-                )}
+                  {maxPrice > minPrice && (
+                    <span className="text-[11px] text-muted-foreground">
+                      – {formatCurrency(maxPrice)}
+                    </span>
+                  )}
+                  {compareAtPrice && compareAtPrice > minPrice && (
+                    <span className="text-[11px] text-muted-foreground line-through">
+                      {formatCurrency(compareAtPrice)}
+                    </span>
+                  )}
+                </div>
+                {/* Savings — derived display from existing price data only */}
                 {compareAtPrice && compareAtPrice > minPrice && (
-                  <span className="text-[11px] text-muted-foreground line-through">
-                    {formatCurrency(compareAtPrice)}
-                  </span>
+                  <p className="mt-0.5 hidden text-[11px] font-bold text-emerald-600 lg:block">
+                    Save {formatCurrency(compareAtPrice - minPrice)}
+                  </p>
                 )}
               </div>
 
@@ -409,11 +448,25 @@ export const ProductCard = memo(function ProductCard({
               </p>
             )}
 
-            {/* Variant hint */}
+            {/* Variant strip — mobile hint (existing) + desktop
+                Stitch-style strip from existing variant data (Phase 4C).
+                No selection logic changed. */}
             {hasVariants && product.variants!.length > 1 && (
-              <p className="mt-1 text-[10px] text-muted-foreground">
+              <p className="mt-1 text-[10px] text-muted-foreground lg:hidden">
                 {product.variants!.length} options available
               </p>
+            )}
+            {hasVariants && product.variants!.length > 1 && (
+              <div className="mt-2 hidden items-center justify-between gap-2 rounded-lg border border-border/50 bg-secondary/30 px-2 py-1 text-[11px] lg:flex">
+                <span className="truncate text-muted-foreground">
+                  {defaultVariantName !== "Default"
+                    ? defaultVariantName
+                    : "Multiple variants"}
+                </span>
+                <span className="shrink-0 font-semibold text-culinary-primary">
+                  {product.variants!.length} options
+                </span>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -435,7 +488,7 @@ export const ProductCard = memo(function ProductCard({
  */
 export function ProductCardSkeleton({ compact = false }: { compact?: boolean }) {
   return (
-    <Card className="overflow-hidden border border-border/50">
+    <Card className="overflow-hidden border border-border/50 rounded-3xl">
       <div className="relative aspect-[4/3] animate-pulse bg-secondary/50">
         <div className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-secondary" />
       </div>

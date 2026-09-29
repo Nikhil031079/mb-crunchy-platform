@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { toast } from "sonner";
 import { Loader2, Save, Globe, Building2, Clock, DollarSign, Mail, Phone, MapPin, Share2, ShieldCheck, Eye, EyeOff, KeyRound, LogOut, CreditCard, Users, UserPlus, UserCheck, UserX, Edit2, Trash2, RefreshCw } from "lucide-react";
@@ -574,6 +574,7 @@ function BusinessUnitSettingsSection() {
 
 function KitchenStaffSection() {
   const { getSessionToken } = useAdminAuth();
+  const convex = useConvex();
   const kitchenStaff = useQuery(api.adminAuth.getKitchenStaff, {
     sessionToken: getSessionToken() ?? "",
   });
@@ -596,6 +597,7 @@ function KitchenStaffSection() {
   const [resetPasswordFor, setResetPasswordFor] = useState<string | null>(null);
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [createdRecoveryKey, setCreatedRecoveryKey] = useState<string | null>(null);
   const [editBusinessUnitIds, setEditBusinessUnitIds] = useState<string[]>([]);
 
   const handleCreateStaff = async (e: React.FormEvent) => {
@@ -610,7 +612,11 @@ function KitchenStaffSection() {
     setIsCreating(true);
     try {
       const { hash: pwHash, salt: pwSalt } = await hashPassword(newPassword);
-      const { hash: rkHash, salt: rkSalt } = await hashPassword(newPassword); // Use same for recovery key
+      // 10M: kitchen recovery credentials are independent server-issued
+      // random keys — never the password or a password-derived value.
+      // Only the hash is persisted; the plaintext is shown once below.
+      const { recoveryKey } = await convex.query(api.adminAuth.issueRecoveryKey, {});
+      const { hash: rkHash, salt: rkSalt } = await hashPassword(recoveryKey);
 
       await createStaff({
         sessionToken: token,
@@ -622,7 +628,7 @@ function KitchenStaffSection() {
         businessUnitIds: newBusinessUnitIds.length > 0 ? newBusinessUnitIds as Id<"businessUnits">[] : undefined,
       });
       toast.success("Kitchen staff account created");
-      setShowCreateDialog(false);
+      setCreatedRecoveryKey(recoveryKey);
       setNewUsername("");
       setNewPassword("");
       setConfirmPassword("");
@@ -801,7 +807,7 @@ function KitchenStaffSection() {
       )}
 
       {/* Create Staff Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog open={showCreateDialog} onOpenChange={(open) => { setShowCreateDialog(open); if (!open) setCreatedRecoveryKey(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Kitchen Staff Account</DialogTitle>
@@ -809,6 +815,35 @@ function KitchenStaffSection() {
               Kitchen staff can log in at /kitchen/login to access the kitchen dashboard.
             </DialogDescription>
           </DialogHeader>
+          {createdRecoveryKey ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Account created. Share this recovery key with the staff member now — it will not be shown again.
+              </p>
+              <p className="rounded-lg border bg-muted px-3 py-2 font-mono text-sm font-semibold tracking-wider">
+                {createdRecoveryKey}
+              </p>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(createdRecoveryKey);
+                      toast.success("Recovery key copied");
+                    } catch {
+                      toast.error("Copy failed — select the key manually");
+                    }
+                  }}
+                >
+                  Copy Key
+                </Button>
+                <Button type="button" onClick={() => { setShowCreateDialog(false); setCreatedRecoveryKey(null); }}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
           <form onSubmit={handleCreateStaff} className="space-y-4">
             <div className="grid gap-2">
               <Label>Username</Label>
@@ -884,6 +919,7 @@ function KitchenStaffSection() {
               </Button>
             </DialogFooter>
           </form>
+          )}
         </DialogContent>
         </Dialog>
 
@@ -997,11 +1033,26 @@ function KitchenStaffSection() {
 // Auth & Security Section
 // ============================================================================
 
+// 19E: change-password enforces the same minimum length as the
+// forgot-password flow (AdminForgotPasswordPage): at least 8 characters.
+// Returns an error message for the first problem found, or null when valid.
+export function validateChangePassword(newPassword: string, confirmPassword: string): string | null {
+  if (newPassword.length < 8) {
+    return "Password must be at least 8 characters";
+  }
+  if (newPassword !== confirmPassword) {
+    return "New passwords do not match";
+  }
+  return null;
+}
+
 function AuthSecuritySection() {
   const { admin, getSessionToken, logout } = useAdminAuth();
+  const convex = useConvex();
   const navigate = useNavigate();
   const changeUsernameMutation = useMutation(api.adminAuth.changeUsername);
   const changePasswordMutation = useMutation(api.adminAuth.changePassword);
+  const regenerateKeyMutation = useMutation(api.adminAuth.regenerateRecoveryKey);
   const logoutAllMutation = useMutation(api.adminAuth.logoutAllSessions);
 
   const [newUsername, setNewUsername] = useState("");
@@ -1016,6 +1067,13 @@ function AuthSecuritySection() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
+
+  // 13E account recovery: plaintext key lives in this state ONLY while the
+  // one-time display is open — never persisted, logged, or placed in a URL.
+  const [recoveryDialogOpen, setRecoveryDialogOpen] = useState(false);
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [issuedRecoveryKey, setIssuedRecoveryKey] = useState<string | null>(null);
 
   const handleChangeUsername = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1042,8 +1100,9 @@ function AuthSecuritySection() {
     e.preventDefault();
     const token = getSessionToken();
     if (!token) return;
-    if (newPassword !== confirmPassword) {
-      toast.error("New passwords do not match");
+    const validationError = validateChangePassword(newPassword, confirmPassword);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     setIsChangingPassword(true);
@@ -1075,6 +1134,38 @@ function AuthSecuritySection() {
       toast.error("Failed to logout sessions", { description: err instanceof Error ? err.message : "Unknown error" });
     } finally {
       setIsLoggingOutAll(false);
+    }
+  };
+
+  const closeRecoveryDialog = () => {
+    setRecoveryDialogOpen(false);
+    setRecoveryPassword("");
+    setIssuedRecoveryKey(null);
+  };
+
+  const handleRegenerateKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = getSessionToken();
+    if (!token || !recoveryPassword) return;
+    setIsRegenerating(true);
+    try {
+      // Server-issued key (WebCrypto); only its hash is persisted.
+      const { recoveryKey } = await convex.query(api.adminAuth.issueRecoveryKey, {});
+      const { hash: rkHash, salt: rkSalt } = await hashPassword(recoveryKey);
+      await regenerateKeyMutation({
+        sessionToken: token,
+        currentPassword: recoveryPassword,
+        newRecoveryKeyHash: rkHash,
+        newRecoveryKeySalt: rkSalt,
+      });
+      setRecoveryPassword("");
+      // Shown once below; cleared on Done/close and never stored elsewhere.
+      setIssuedRecoveryKey(recoveryKey);
+      toast.success("New recovery key generated");
+    } catch (err) {
+      toast.error("Failed to generate recovery key", { description: err instanceof Error ? err.message : "Unknown error" });
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -1186,8 +1277,28 @@ function AuthSecuritySection() {
 
         <Separator />
 
-        {/* Kitchen Staff Management */}
-        <KitchenStaffSection />
+        {/* Account Recovery */}
+        <div>
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-muted-foreground" />
+            Account Recovery
+          </h3>
+          <p className="text-xs text-muted-foreground mb-3 max-w-md">
+            Use a recovery key if you lose access to your admin password. Generating a new key replaces the previous one.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => setRecoveryDialogOpen(true)}>
+            Generate New Recovery Key
+          </Button>
+        </div>
+
+        <Separator />
+
+        {/* Kitchen Staff Management (superadmin only — backend enforces) */}
+        {admin?.role === "superadmin" ? (
+          <KitchenStaffSection />
+        ) : (
+          <p className="text-xs text-muted-foreground">Only Superadmin can manage Kitchen Staff.</p>
+        )}
 
         <Separator />
 
@@ -1221,6 +1332,69 @@ function AuthSecuritySection() {
           </div>
         </div>
       </div>
+
+      {/* Recovery Key Dialog: confirm with password, then one-time display. */}
+      <Dialog open={recoveryDialogOpen} onOpenChange={(open) => { if (!open) closeRecoveryDialog(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate New Recovery Key</DialogTitle>
+            <DialogDescription>
+              {issuedRecoveryKey
+                ? "Save this recovery key somewhere secure. It will not be shown again."
+                : "This replaces your previous recovery key. Confirm with your current password to continue."}
+            </DialogDescription>
+          </DialogHeader>
+          {issuedRecoveryKey ? (
+            <div className="space-y-4">
+              <p className="rounded-lg border bg-muted px-3 py-2 font-mono text-sm font-semibold tracking-wider">
+                {issuedRecoveryKey}
+              </p>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(issuedRecoveryKey);
+                      toast.success("Recovery key copied");
+                    } catch {
+                      toast.error("Copy failed — select the key manually");
+                    }
+                  }}
+                >
+                  Copy Key
+                </Button>
+                <Button type="button" onClick={closeRecoveryDialog}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <form onSubmit={handleRegenerateKey} className="space-y-3">
+              <div className="grid gap-2">
+                <Label>Current Password</Label>
+                <Input
+                  type="password"
+                  value={recoveryPassword}
+                  onChange={(e) => setRecoveryPassword(e.target.value)}
+                  placeholder="Confirm with current password"
+                  disabled={isRegenerating}
+                  autoFocus
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeRecoveryDialog} disabled={isRegenerating}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isRegenerating || !recoveryPassword}>
+                  {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                  Generate Key
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

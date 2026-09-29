@@ -901,11 +901,16 @@ const globalSettings = defineTable({
 
 const adminSessions = defineTable({
   adminId: v.id("admins"),
-  token: v.string(),
+  // 10F: plaintext bearer token retained ONLY for pre-migration legacy rows
+  // during the 24h dual-read window. New rows store tokenHash only.
+  token: v.optional(v.string()),
+  // SHA-256 hex of the presented JWT. Server-side only; never sent to clients.
+  tokenHash: v.optional(v.string()),
   expiresAt: v.number(),
   createdAt: v.number(),
 })
   .index("by_token", ["token"])
+  .index("by_token_hash", ["tokenHash"])
   .index("by_admin", ["adminId"]);
 
 // ============================================================================
@@ -1121,6 +1126,22 @@ const trackingEvents = defineTable({
   .index("by_provider_event_id", ["providerEventId"]);
 
 // ============================================================================
+// WEBHOOK EVENTS (Razorpay webhook delivery idempotency — 10D)
+//
+// Razorpay webhooks carry no unique delivery identifier, so the handler
+// derives a deterministic key (event type + payment/order entity id) and
+// claims it here before processing. One row per delivered event; concurrent
+// duplicate deliveries serialize on the by_event_key lookup inside a single
+// mutation transaction. Minimal fields only — no payload stored.
+// ============================================================================
+
+const webhookEvents = defineTable({
+  eventKey: v.string(),
+  eventType: v.string(),
+  processedAt: v.number(),
+}).index("by_event_key", ["eventKey"]);
+
+// ============================================================================
 // Export Schema (auth tables + business tables merged)
 // ============================================================================
 
@@ -1164,6 +1185,7 @@ export default defineSchema({
   shippingConfig,
   shipments,
   trackingEvents,
+  webhookEvents,
 }, {
   schemaValidation: false,
 });

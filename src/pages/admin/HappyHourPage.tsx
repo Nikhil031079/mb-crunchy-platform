@@ -92,14 +92,20 @@ function toUpdateArgs(id: string, values: BannerFormValues) {
 
 export default function HappyHourPage() {
   const { getSessionToken } = useAdminAuth();
-  const allDocs = useQuery(api.content.getAll);
+  const token = getSessionToken();
+  const allDocs = useQuery(api.content.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const createContent = useMutation(api.content.create);
   const updateContent = useMutation(api.content.update);
   const softDeleteContent = useMutation(api.content.softDelete);
+  const restoreContent = useMutation(api.content.restore);
 
   const isLoading = allDocs === undefined || allBUs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [sortKey, setSortKey] = useState<BannerSortKey>("displayOrder");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -107,6 +113,7 @@ export default function HappyHourPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner>();
   const [deleteTarget, setDeleteTarget] = useState<Banner>();
+  const [restoreTarget, setRestoreTarget] = useState<Banner>();
 
   const buMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -142,6 +149,8 @@ export default function HappyHourPage() {
   const openCreateDialog = () => { setEditingBanner(undefined); setFormOpen(true); };
 
   const saveBanner = async (values: BannerFormValues) => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       if (editingBanner) {
         await updateContent({ ...toUpdateArgs(editingBanner.id, values), sessionToken: getSessionToken()! });
@@ -150,7 +159,9 @@ export default function HappyHourPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save announcement");
+      setActionError({ title: "Could not save announcement", message: err instanceof Error ? err.message : "Failed to save announcement" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -160,7 +171,17 @@ export default function HappyHourPage() {
       await softDeleteContent({ id: deleteTarget.id as Id<"content">, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive announcement");
+      setActionError({ title: "Could not delete announcement", message: err instanceof Error ? err.message : "Failed to archive announcement" });
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreTarget) return;
+    try {
+      await restoreContent({ id: restoreTarget.id as Id<"content">, sessionToken: getSessionToken()! });
+      setRestoreTarget(undefined);
+    } catch (err) {
+      setActionError({ title: "Could not restore announcement", message: err instanceof Error ? err.message : "Failed to restore announcement" });
     }
   };
 
@@ -175,6 +196,17 @@ export default function HappyHourPage() {
           Add announcement
         </Button>
       </PageHeader>
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}><RefreshCw className="size-3.5" />Dismiss</Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -223,7 +255,7 @@ export default function HappyHourPage() {
                 onSort={handleSort}
                 onEdit={(b) => { setEditingBanner(b); setFormOpen(true); }}
                 onDelete={setDeleteTarget}
-                onRestore={() => undefined}
+                onRestore={setRestoreTarget}
               />
               <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedBanners.length)} of {sortedBanners.length}</p>
@@ -247,16 +279,17 @@ export default function HappyHourPage() {
         onOpenChange={setFormOpen}
         onSubmit={saveBanner}
         lockContentType="announcement"
+        isSaving={isSaving}
       />
       <BannerDialogs
         deleteTarget={deleteTarget}
-        restoreTarget={undefined}
+        restoreTarget={restoreTarget}
         previewTarget={undefined}
         onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }}
-        onRestoreOpenChange={() => undefined}
+        onRestoreOpenChange={(open) => { if (!open) setRestoreTarget(undefined); }}
         onPreviewOpenChange={() => undefined}
         onConfirmDelete={archiveBanner}
-        onConfirmRestore={() => undefined}
+        onConfirmRestore={confirmRestore}
       />
     </div>
   );

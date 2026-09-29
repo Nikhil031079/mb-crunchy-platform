@@ -189,18 +189,19 @@ export default function FavouritesPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="rounded-3xl glass-tier-1 overflow-hidden">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Heart className="h-4 w-4" />
+          <CardTitle className="font-culinary-heading text-base font-bold tracking-tight flex items-center gap-2">
+            <Heart className="h-4 w-4 text-culinary-primary" />
             My Collections
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 p-5 sm:p-6">
           {/* Tab Buttons */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Collections">
             {TABS.map((tab) => {
               const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
               const count =
                 tab.id === "favorites"
                   ? favItems?.length
@@ -210,18 +211,20 @@ export default function FavouritesPage() {
               return (
                 <Button
                   key={tab.id}
-                  variant={activeTab === tab.id ? "default" : "outline"}
+                  variant={isActive ? "default" : "outline"}
                   size="sm"
+                  role="tab"
+                  aria-selected={isActive}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "gap-1.5 text-xs",
-                    activeTab === tab.id && "pointer-events-none",
+                    "gap-1.5 rounded-full text-xs",
+                    isActive && "pointer-events-none",
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {tab.label}
                   {count !== undefined && count > 0 && (
-                    <span className="ml-1 text-[10px] opacity-70">
+                    <span className="ml-1 text-[10px] tabular-nums opacity-70">
                       ({count})
                     </span>
                   )}

@@ -1,4 +1,5 @@
-import { httpAction } from "./_generated/server";
+import { v } from "convex/values";
+import { httpAction, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 // ============================================================================
@@ -16,7 +17,7 @@ import { internal } from "./_generated/api";
 // ============================================================================
 
 // Timing-safe string comparison
-function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let result = 0;
   for (let i = 0; i < a.length; i++) {
@@ -26,7 +27,7 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 // Base64 encode
-function base64Encode(buffer: ArrayBuffer): string {
+export function base64Encode(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {
@@ -34,6 +35,75 @@ function base64Encode(buffer: ArrayBuffer): string {
   }
   return btoa(binary);
 }
+
+// ============================================================================
+// Webhook event idempotency (10D — replay hardening).
+//
+// Razorpay webhook deliveries carry no unique delivery identifier, so the
+// dedup key is derived deterministically as
+//   `${eventType}:${razorpayPaymentId ?? razorpayOrderId ?? "unknown"}`.
+// Payment entity ids (`pay_*`) are unique per payment attempt, so redeliveries
+// of the same webhook collide while distinct events (failed-then-captured,
+// two payments on one order) produce distinct keys and both process.
+// ============================================================================
+
+export function buildRazorpayEventKey(args: {
+  eventType: string;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+}): string {
+  const subject =
+    args.razorpayPaymentId ?? args.razorpayOrderId ?? "unknown";
+  return `${args.eventType}:${subject}`;
+}
+
+/**
+ * Atomically claim a webhook event for processing. Single-transaction
+ * check-then-insert on the by_event_key index: concurrent duplicate
+ * deliveries serialize under Convex OCC (loser retries, observes the row,
+ * reports duplicate). Survives restarts/redeploys (durable table).
+ * MUST only be called after HMAC verification — never reserves on failure.
+ */
+export const claimWebhookEvent = internalMutation({
+  args: { eventKey: v.string(), eventType: v.string() },
+  handler: async (ctx, args): Promise<{ duplicate: boolean }> => {
+    const existing = await ctx.db
+      .query("webhookEvents")
+      .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventKey))
+      .first();
+    if (existing) {
+      return { duplicate: true };
+    }
+    await ctx.db.insert("webhookEvents", {
+      eventKey: args.eventKey,
+      eventType: args.eventType,
+      processedAt: Date.now(),
+    });
+    return { duplicate: false };
+  },
+});
+
+/**
+ * Release a claim when downstream processing throws, so a legitimate retry
+ * can establish a fresh claim instead of no-op-ing forever. Best-effort;
+ * safe to call for absent keys.
+ */
+export const releaseWebhookEvent = internalMutation({
+  args: { eventKey: v.string() },
+  handler: async (ctx, args): Promise<{ released: boolean }> => {
+    const existing = await ctx.db
+      .query("webhookEvents")
+      .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventKey))
+      .first();
+    if (!existing) {
+      return { released: false };
+    }
+    await ctx.db.delete(existing._id);
+    return { released: true };
+  },
+});
+
+
 
 export const razorpayWebhook = httpAction(async (ctx, request) => {
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -133,10 +203,34 @@ export const razorpayWebhook = httpAction(async (ctx, request) => {
         return new Response("OK", { status: 200 });
       }
 
-      await ctx.runMutation(internal.orders.finalizePaidOrder, {
-        orderId: order._id as any,
-        razorpayPaymentId: razorpayPaymentId ?? "",
+      // 10D replay hardening: claim this delivery before processing.
+      // Duplicate deliveries return success without repeating side effects.
+      // A downstream throw releases the claim so legitimate retries proceed.
+      const eventKey = buildRazorpayEventKey({
+        eventType,
+        razorpayPaymentId,
+        razorpayOrderId,
       });
+      const claim = await ctx.runMutation(
+        internal.razorpayWebhook.claimWebhookEvent,
+        { eventKey, eventType },
+      );
+      if (claim.duplicate) {
+        return new Response("OK", { status: 200 });
+      }
+
+      try {
+        await ctx.runMutation(internal.orders.finalizePaidOrder, {
+          orderId: order._id as any,
+          razorpayPaymentId: razorpayPaymentId ?? "",
+        });
+      } catch (err) {
+        await ctx.runMutation(
+          internal.razorpayWebhook.releaseWebhookEvent,
+          { eventKey },
+        );
+        throw err;
+      }
 
       console.log("[razorpay-webhook] payment.captured for order", order._id);
       break;
@@ -147,10 +241,32 @@ export const razorpayWebhook = httpAction(async (ctx, request) => {
         return new Response("OK", { status: 200 });
       }
 
-      await ctx.runMutation(internal.orders.failPaymentFromWebhook, {
-        orderId: order._id as any,
-        razorpayPaymentId: razorpayPaymentId ?? undefined,
+      // 10D replay hardening: same claim/release contract as above.
+      const eventKey = buildRazorpayEventKey({
+        eventType,
+        razorpayPaymentId,
+        razorpayOrderId,
       });
+      const claim = await ctx.runMutation(
+        internal.razorpayWebhook.claimWebhookEvent,
+        { eventKey, eventType },
+      );
+      if (claim.duplicate) {
+        return new Response("OK", { status: 200 });
+      }
+
+      try {
+        await ctx.runMutation(internal.orders.failPaymentFromWebhook, {
+          orderId: order._id as any,
+          razorpayPaymentId: razorpayPaymentId ?? undefined,
+        });
+      } catch (err) {
+        await ctx.runMutation(
+          internal.razorpayWebhook.releaseWebhookEvent,
+          { eventKey },
+        );
+        throw err;
+      }
 
       console.log("[razorpay-webhook] payment.failed for order", order._id);
       break;

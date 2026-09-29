@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "convex/react";
-import { Package, ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
+import { Package, ChevronDown, ChevronUp, ShoppingCart, Printer } from
+"lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
@@ -10,6 +11,7 @@ import { getStockStatus } from "@/components/customer/StockBadge";
 import { OrderActivityFeed } from "@/components/shared/OrderActivityFeed";
 import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 import { formatCurrency } from "@/utils";
+import { printOrderReceipt } from "@/utils/orderReceipt";
 import { useCart } from "@/stores/cart";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +72,12 @@ export default function OrderHistoryPage() {
     api.orders.getByCustomer,
     customer ? { customerId: customer._id } : "skip",
   ) as Order[] | undefined;
+  const businessUnits = useQuery(api.businessUnits.getAll) as
+    | Array<{ _id: string; name: string }>
+    | undefined;
+
+  const businessUnitName = (businessUnitId: string): string | undefined =>
+    businessUnits?.find((bu) => bu._id === businessUnitId)?.name;
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [paymentFilter, setPaymentFilter] = useState<string>("all");
@@ -183,23 +191,24 @@ export default function OrderHistoryPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="rounded-3xl glass-tier-1 overflow-hidden">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="font-culinary-heading text-base font-bold tracking-tight flex items-center gap-2">
             <Package className="h-4 w-4" />
             Order History
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 p-5 sm:p-6">
           {/* Status Filters */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by order status">
             {STATUS_FILTERS.map((status) => (
               <Button
                 key={status}
                 variant={statusFilter === status ? "default" : "outline"}
                 size="sm"
                 onClick={() => setStatusFilter(status)}
-                className="capitalize text-xs"
+                aria-pressed={statusFilter === status}
+                className="capitalize rounded-full text-xs"
               >
                 {status === "all" ? "All" : status.replace(/_/g, " ")}
               </Button>
@@ -207,14 +216,15 @@ export default function OrderHistoryPage() {
           </div>
 
           {/* Payment Filters */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by payment status">
             {PAYMENT_FILTERS.map((payment) => (
               <Button
                 key={payment}
                 variant={paymentFilter === payment ? "default" : "outline"}
                 size="sm"
                 onClick={() => setPaymentFilter(payment)}
-                className="capitalize text-xs"
+                aria-pressed={paymentFilter === payment}
+                className="capitalize rounded-full text-xs"
               >
                 {payment === "all" ? "All payments" : payment.replace(/_/g, " ")}
               </Button>
@@ -243,11 +253,11 @@ export default function OrderHistoryPage() {
                 return (
                   <div
                     key={order._id}
-                    className="rounded-lg border border-border/60 overflow-hidden"
+                    className="rounded-2xl border border-border/50 bg-white/50 overflow-hidden dark:bg-white/5"
                   >
                     {/* Order Header */}
                     <div
-                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-secondary/30"
+                      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-3 cursor-pointer hover:bg-secondary/30"
                       role="button"
                       tabIndex={0}
                       aria-expanded={isExpanded}
@@ -259,8 +269,8 @@ export default function OrderHistoryPage() {
                         }
                       }}
                     >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
+                      <div className="min-w-0 flex-1 basis-32">
+                        <p className="font-culinary-heading truncate text-sm font-bold tabular-nums">
                           {order.orderNumber}
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -268,7 +278,7 @@ export default function OrderHistoryPage() {
                           {order.items.length} item(s)
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                         <Badge
                           variant="secondary"
                           className={`${STATUS_COLORS[order.status]} text-xs`}
@@ -284,7 +294,7 @@ export default function OrderHistoryPage() {
                           {PAYMENT_LABELS[order.paymentStatus] ??
                             order.paymentStatus}
                         </span>
-                        <span className="text-sm font-medium">
+                        <span className="text-sm font-medium tabular-nums">
                           {formatCurrency(order.total)}
                         </span>
                         {isExpanded ? (
@@ -305,16 +315,16 @@ export default function OrderHistoryPage() {
                               key={idx}
                               className="flex items-center justify-between text-sm"
                             >
-                              <span className="text-muted-foreground">
+                              <span className="text-muted-foreground break-words min-w-0">
                                 {item.name} ({item.variantName}) × {item.quantity}
                               </span>
-                              <span>{formatCurrency(item.totalPrice)}</span>
+                              <span className="shrink-0 tabular-nums">{formatCurrency(item.totalPrice)}</span>
                             </div>
                           ))}
                         </div>
                         <Separator />
                         {/* Pricing */}
-                        <div className="space-y-1 text-sm">
+                        <div className="space-y-1 text-sm tabular-nums">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Subtotal</span>
                             <span>{formatCurrency(order.subtotal)}</span>
@@ -358,6 +368,18 @@ export default function OrderHistoryPage() {
                             Buy Again
                           </Button>
                         )}
+                        {/* Print Receipt */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() =>
+                            printOrderReceipt(order, businessUnitName(order.businessUnitId))
+                          }
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          Print Receipt
+                        </Button>
 
                         {/* Payment pending / continuation */}
                         {(order.paymentStatus === "failed" ||

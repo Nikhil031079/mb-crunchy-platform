@@ -168,6 +168,89 @@ export const getAllByBusinessUnit = query({
   },
 });
 
+// ============================================================================
+// Shipping Weight Coverage (12D — read-only admin visibility)
+// ----------------------------------------------------------------------------
+// Classification mirrors the engine hierarchy in resolveMartShippingQuote:
+// variant netWeightGrams → product weightGrams → fail closed. Only ACTIVE
+// variants count (inactive ones are not purchasable); only active,
+// non-deleted products are counted. shippable === false is an explicit
+// opt-out, never "missing". Single indexed read; no writes;
+// superadmin/admin only. Returns id+name lists so admins can find records.
+// ============================================================================
+
+export type ProductWeightClass = "usable" | "missing" | "nonShippable";
+
+export function classifyProductWeight(product: {
+  shippable?: boolean;
+  weightGrams?: number;
+  variants?: Array<{
+    active?: boolean;
+    netWeightGrams?: number;
+  }>;
+}): ProductWeightClass {
+  if (product.shippable === false) return "nonShippable";
+  if (typeof product.weightGrams === "number" && product.weightGrams > 0) {
+    return "usable";
+  }
+  const activeVariants = (product.variants ?? []).filter((v) => v.active);
+  if (
+    activeVariants.length > 0 &&
+    activeVariants.every(
+      (v) => typeof v.netWeightGrams === "number" && v.netWeightGrams > 0
+    )
+  ) {
+    return "usable";
+  }
+  return "missing";
+}
+
+export interface ProductWeightCoverage {
+  total: number;
+  usable: number;
+  missingWeight: Array<{ id: string; name: string }>;
+  nonShippable: Array<{ id: string; name: string }>;
+}
+
+export const getShippingWeightCoverage = query({
+  args: {
+    sessionToken: v.string(),
+    businessUnitId: v.id("businessUnits"),
+  },
+  handler: async (ctx, args): Promise<ProductWeightCoverage> => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("deletedAt"), undefined),
+          q.eq(q.field("status"), "active")
+        )
+      )
+      .collect();
+
+    const missingWeight: Array<{ id: string; name: string }> = [];
+    const nonShippable: Array<{ id: string; name: string }> = [];
+    let usable = 0;
+    for (const p of products) {
+      const cls = classifyProductWeight(p);
+      if (cls === "usable") usable++;
+      else if (cls === "missing")
+        missingWeight.push({ id: p._id as string, name: p.name });
+      else nonShippable.push({ id: p._id as string, name: p.name });
+    }
+    return {
+      total: products.length,
+      usable,
+      missingWeight,
+      nonShippable,
+    };
+  },
+});
+
 export const getByIds = query({
   args: { ids: v.array(v.id("products")) },
   handler: async (ctx, args) => {

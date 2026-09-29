@@ -35,7 +35,8 @@ function ImagePreview({ combo }: { combo: Combo }) {
 }
 
 export function ComboTable({ combos, isLoading = false, sortKey, sortDirection, onSort, onEdit, onDelete, onRestore }: ComboTableProps) {
-  return <Table>
+  // 19D: horizontal scroll on narrow screens (Banner/MealDeal table pattern).
+  return <div className="overflow-x-auto"><Table>
     <TableHeader><TableRow>
       <TableHead>Image</TableHead><TableHead><SortButton column="name" label="Name" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="slug" label="Slug" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="businessUnitName" label="Business Unit" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead>Items</TableHead><TableHead><SortButton column="price" label="Price" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead>Featured</TableHead><TableHead><SortButton column="status" label="Status" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><SortButton column="displayOrder" label="Order" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} /></TableHead><TableHead><span className="sr-only">Actions</span></TableHead>
     </TableRow></TableHeader>
@@ -45,5 +46,5 @@ export function ComboTable({ combos, isLoading = false, sortKey, sortDirection, 
         <TableCell><ImagePreview combo={combo} /></TableCell><TableCell className="font-medium"><div className="min-w-0"><p className="truncate">{combo.name}</p>{highlightBadge ? <Badge variant="outline" className="mt-0.5 border-amber-200 bg-amber-500/10 px-1 py-0 text-[10px] font-medium text-amber-600">{highlightBadge}</Badge> : null}</div></TableCell><TableCell className="text-muted-foreground">/{combo.slug}</TableCell><TableCell className="text-muted-foreground">{combo.businessUnitName}</TableCell><TableCell className="text-muted-foreground">{combo.items.length} item{combo.items.length !== 1 ? "s" : ""}</TableCell><TableCell className="text-muted-foreground">{combo.compareAtPrice ? <span><span className="line-through">{combo.compareAtPrice}</span> ₹{combo.price}</span> : <span>₹{combo.price}</span>}</TableCell><TableCell>{combo.featured ? <span className="inline-flex items-center gap-1 text-sm text-emerald-700"><Check aria-hidden="true" className="size-4" />Featured</span> : <span className="text-sm text-muted-foreground">—</span>}</TableCell><TableCell><Badge variant="outline" className={cn("capitalize", statusClassNames[combo.status])}>{combo.status}</Badge></TableCell><TableCell>{combo.displayOrder}</TableCell><TableCell><ComboRowActions combo={combo} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} /></TableCell>
       </TableRow>); })}
     </TableBody>
-  </Table>;
+  </Table></div>;
 }

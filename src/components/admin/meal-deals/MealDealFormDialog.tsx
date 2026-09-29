@@ -57,6 +57,8 @@ interface MealDealFormDialogProps {
   catalogItems: CatalogItemOption[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: MealDealFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 const emptyValues: MealDealFormValues = {
@@ -96,6 +98,7 @@ export function MealDealFormDialog({
   catalogItems,
   onOpenChange,
   onSubmit,
+  isSaving = false,
 }: MealDealFormDialogProps) {
   const formId = useId();
   const isEditing = Boolean(mealDeal?.id);
@@ -270,7 +273,7 @@ export function MealDealFormDialog({
 
   return (
     <Dialog key={dialogKey} open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Meal Deal" : "Create Meal Deal"}</DialogTitle>
           <DialogDescription>
@@ -313,7 +316,7 @@ export function MealDealFormDialog({
           </div>
 
           {/* Status + Deal Price */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
@@ -634,7 +637,7 @@ export function MealDealFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!values.businessUnitId || !values.name.trim() || values.dealPrice <= 0}>
+            <Button type="submit" disabled={isSaving || !values.businessUnitId || !values.name.trim() || values.dealPrice <= 0}>
               {isEditing ? "Save Changes" : "Create Meal Deal"}
             </Button>
           </DialogFooter>

@@ -75,7 +75,11 @@ export default function CategoriesPage() {
   const restoreCat = useMutation(api.categories.restore);
 
   const isLoading = allDocs === undefined || allBUs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [filters, setFilters] = useState<CategoryFilters>({ query: "", status: "all", businessUnitId: "all" });
   const [sortKey, setSortKey] = useState<CategorySortKey>("displayOrder");
@@ -120,6 +124,8 @@ export default function CategoriesPage() {
   const openCreateDialog = () => { setEditingCategory(undefined); setFormOpen(true); };
 
   const saveCategory = async (values: CategoryFormValues) => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       const token = getSessionToken();
       if (editingCategory) {
@@ -129,7 +135,9 @@ export default function CategoriesPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save category");
+      setActionError({ title: "Could not save category", message: err instanceof Error ? err.message : "Failed to save category" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -139,7 +147,7 @@ export default function CategoriesPage() {
       await softDeleteCat({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive category");
+      setActionError({ title: "Could not delete category", message: err instanceof Error ? err.message : "Failed to archive category" });
     }
   };
 
@@ -149,7 +157,7 @@ export default function CategoriesPage() {
       await restoreCat({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to restore category");
+      setActionError({ title: "Could not restore category", message: err instanceof Error ? err.message : "Failed to restore category" });
     }
   };
 
@@ -158,6 +166,7 @@ export default function CategoriesPage() {
       <Button size="sm" onClick={openCreateDialog}><Plus className="mr-1.5 size-4" />Add category</Button>
     </PageHeader>
 
+    {actionError ? <Alert variant="destructive" className="mb-4"><AlertCircle className="size-4" /><AlertTitle>{actionError.title}</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{actionError.message}<Button size="sm" variant="outline" onClick={() => setActionError(null)}><RefreshCw className="size-3.5" />Dismiss</Button></AlertDescription></Alert> : null}
     {error ? <Alert variant="destructive"><AlertCircle className="size-4" /><AlertTitle>Could not load categories</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{error}<Button size="sm" variant="outline" onClick={() => setError(null)}><RefreshCw className="size-4" />Try again</Button></AlertDescription></Alert> : <section className="overflow-hidden rounded-xl border" aria-label="Category management">
       <CategoryToolbar filters={filters} businessUnits={businessUnitOptions} onFiltersChange={resetPageAndSetFilters} onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all" })} />
       {isLoading ? <CategoryTable categories={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={() => undefined} onDelete={() => undefined} onRestore={() => undefined} /> : visibleCategories.length === 0 ? <EmptyState icon={FolderTree} title="No categories found" description={filteredCategories.length === 0 && categories.length > 0 ? "Try adjusting your search or filters." : EMPTY_MESSAGES.CATEGORIES} action={categories.length === 0 ? { label: "Create category", onClick: openCreateDialog } : undefined} /> : <>
@@ -165,7 +174,7 @@ export default function CategoriesPage() {
         <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedCategories.length)} of {sortedCategories.length}</p><Pagination className="mx-0 w-auto"><PaginationContent><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2" aria-live="polite">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination></div>
       </>}
     </section>}
-    <CategoryFormDialog open={formOpen} category={editingCategory} businessUnits={businessUnitOptions} onOpenChange={setFormOpen} onSubmit={saveCategory} />
+    <CategoryFormDialog open={formOpen} category={editingCategory} businessUnits={businessUnitOptions} onOpenChange={setFormOpen} onSubmit={saveCategory} isSaving={isSaving} />
     <CategoryDialogs deleteTarget={deleteTarget} restoreTarget={restoreTarget} onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }} onRestoreOpenChange={(open) => { if (!open) setRestoreTarget(undefined); }} onConfirmDelete={archiveCategory} onConfirmRestore={confirmRestore} />
   </div>;
 }

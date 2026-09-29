@@ -356,6 +356,7 @@ export async function trackShipment(
 
 /**
  * Verify a Shiprocket webhook signature.
+ * Uses timing-safe comparison to prevent timing attacks.
  */
 export function verifyWebhookSignature(
   config: ShiprocketConfig,
@@ -363,7 +364,14 @@ export function verifyWebhookSignature(
   signatureHeader: string | null,
 ): boolean {
   if (!config.webhookSecret || !signatureHeader) return false;
-  return signatureHeader === config.webhookSecret;
+  const a = config.webhookSecret;
+  const b = signatureHeader;
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }
 
 /**

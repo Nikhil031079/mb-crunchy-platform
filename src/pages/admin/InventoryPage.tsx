@@ -99,7 +99,11 @@ export default function InventoryPage() {
   const softDeleteInventory = useMutation(api.inventory.softDelete);
 
   const isLoading = allInventory === undefined || allCatalogItems === undefined || allBUs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [filters, setFilters] = useState<InventoryFilters>({ query: "", status: "all", businessUnitId: "all" });
   const [sortKey, setSortKey] = useState<InventorySortKey>("itemName");
@@ -201,6 +205,8 @@ export default function InventoryPage() {
   const openCreateDialog = () => { setEditingItem(undefined); setFormOpen(true); };
 
   const saveInventory = async (values: InventoryFormValues) => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       await upsertInventory({
         catalogItemId: values.catalogItemId as any,
@@ -218,7 +224,9 @@ export default function InventoryPage() {
       });
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save inventory item");
+      setActionError({ title: "Could not save inventory item", message: err instanceof Error ? err.message : "Failed to save inventory item" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -227,7 +235,7 @@ export default function InventoryPage() {
       await adjustStock({ id: inventoryId as any, adjustment, reason: reason || undefined, sessionToken: getSessionToken()! });
       setAdjustTarget(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to adjust stock");
+      setActionError({ title: "Could not adjust stock", message: err instanceof Error ? err.message : "Failed to adjust stock" });
     }
   };
 
@@ -240,7 +248,7 @@ export default function InventoryPage() {
       });
       setBulkOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to bulk update stock");
+      setActionError({ title: "Could not update stock", message: err instanceof Error ? err.message : "Failed to bulk update stock" });
     }
   };
 
@@ -250,7 +258,7 @@ export default function InventoryPage() {
       await softDeleteInventory({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete inventory item");
+      setActionError({ title: "Could not delete inventory item", message: err instanceof Error ? err.message : "Failed to delete inventory item" });
     }
   };
 
@@ -287,6 +295,19 @@ export default function InventoryPage() {
           Total inventory value: <span className="font-medium">₹{summary.inventoryValue.toLocaleString()}</span>
         </p>
       )}
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}>
+              <RefreshCw className="size-3.5" /> Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -350,6 +371,7 @@ export default function InventoryPage() {
         businessUnits={buOptions}
         onOpenChange={setFormOpen}
         onSubmit={saveInventory}
+        isSaving={isSaving}
       />
       <StockAdjustmentDialog
         open={Boolean(adjustTarget)}

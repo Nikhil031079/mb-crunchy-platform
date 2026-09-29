@@ -11,9 +11,11 @@ interface OfferToolbarProps {
   businessUnits: { id: string; name: string }[];
   onFiltersChange: (filters: OfferFilters) => void;
   onClear: () => void;
+  /** Hide the flash-sale/regular type filter on pages that are inherently single-type (e.g. Flash Sales). */
+  showTypeFilter?: boolean;
 }
 
-export function OfferToolbar({ filters, businessUnits, onFiltersChange, onClear }: OfferToolbarProps) {
+export function OfferToolbar({ filters, businessUnits, onFiltersChange, onClear, showTypeFilter = true }: OfferToolbarProps) {
   const hasFilters = filters.query.length > 0 || filters.status !== "all" || filters.businessUnitId !== "all" || filters.flashSale !== "all";
 
   return (
@@ -44,6 +46,7 @@ export function OfferToolbar({ filters, businessUnits, onFiltersChange, onClear 
             <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
+        {showTypeFilter && (
         <Select value={filters.flashSale} onValueChange={(value) => onFiltersChange({ ...filters, flashSale: value as OfferFilters["flashSale"] })}>
           <SelectTrigger aria-label="Filter by type" className="w-full sm:w-40">
             <SelectValue placeholder="All types" />
@@ -54,6 +57,7 @@ export function OfferToolbar({ filters, businessUnits, onFiltersChange, onClear 
             <SelectItem value="regular">Regular Offers</SelectItem>
           </SelectContent>
         </Select>
+        )}
         {hasFilters && <Button type="button" variant="ghost" size="icon" onClick={onClear} aria-label="Clear search and filters"><X className="size-4" /></Button>}
       </div>
     </div>

@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ==========================================================================
-   MB CRUNCHY — Modern Theme
+   MB CRUNCHY — Modern Theme + Culinary Glassmorphism Design Tokens
    Black · White · Red · Crisp Typography · Soft Layered Cards
    ========================================================================== */
 
@@ -49,6 +49,25 @@
   /* Modern accent red */
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+
+  /* Culinary Glassmorphism Colors
+     Additive only — existing semantic tokens above are untouched. */
+  --color-culinary-primary: var(--culinary-primary);
+  --color-culinary-primary-dark: var(--culinary-primary-dark);
+  --color-culinary-primary-deep: var(--culinary-primary-deep);
+  --color-culinary-secondary: var(--culinary-secondary);
+  --color-culinary-tertiary: var(--culinary-tertiary);
+  --color-culinary-neutral: var(--culinary-neutral);
+  --color-culinary-background: var(--culinary-background);
+  --color-culinary-surface: var(--culinary-surface);
+  --color-culinary-on-surface: var(--culinary-on-surface);
+  --color-culinary-on-surface-variant: var(--culinary-on-surface-variant);
+  --color-culinary-outline: var(--culinary-outline);
+  --color-culinary-outline-variant: var(--culinary-outline-variant);
+
+  /* Culinary Glassmorphism Fonts */
+  --font-culinary-heading: "Outfit", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-culinary-body: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
@@ -110,6 +129,76 @@
   --sidebar-accent-foreground: oklch(0.11 0 0);
   --sidebar-border: oklch(0.91 0 0);
   --sidebar-ring: oklch(0.6 0.18 25);
+
+  /* ==========================================================================
+     CULINARY GLASSMORPHISM — Light Mode Tokens
+     ========================================================================== */
+
+  /* Core Colors */
+  --culinary-primary: #F76707;
+  --culinary-primary-dark: #E8590C;
+  --culinary-primary-deep: #A14000;
+  --culinary-secondary: #FAB005;
+  --culinary-tertiary: #2B8A3E;
+  --culinary-neutral: #1A1412;
+  --culinary-background: #FFF8F6;
+  --culinary-surface: #FFF8F6;
+  --culinary-on-surface: #201A18;
+  --culinary-on-surface-variant: #594137;
+  --culinary-outline: #8D7165;
+  --culinary-outline-variant: #E2BFB1;
+
+  /* Glass Tier 1 — Resting Glass */
+  --glass-tier-1-bg: rgba(255, 255, 255, 0.72);
+  --glass-tier-1-border: rgba(255, 255, 255, 0.45);
+  --glass-tier-1-shadow: 0 8px 32px -4px rgba(26, 20, 18, 0.06);
+
+  /* Glass Tier 2 — Elevated Glass */
+  --glass-tier-2-bg: rgba(255, 255, 255, 0.85);
+  --glass-tier-2-border: rgba(255, 255, 255, 0.65);
+  --glass-tier-2-shadow: 0 16px 40px -6px rgba(247, 103, 7, 0.12), 0 6px 16px -2px rgba(26, 20, 18, 0.04);
+
+  /* Glass Tier 3 — Floating Glass */
+  --glass-tier-3-bg: rgba(255, 255, 255, 0.88);
+  --glass-tier-3-border: rgba(255, 255, 255, 0.8);
+  --glass-tier-3-shadow: 0 24px 48px -8px rgba(26, 20, 18, 0.14);
+
+  /* Specular Highlight */
+  --glass-specular: inset 0 1px 1px 0 rgba(255, 255, 255, 0.9);
+
+  /* Typography Scale — explicit size/weight/leading tokens.
+     Consumed by the opt-in .type-* utilities below; nothing global. */
+  --type-display-lg-size: 3.5rem;      /* 56px */
+  --type-display-lg-weight: 800;
+  --type-display-lg-leading: 4rem;     /* 64px */
+  --type-headline-xl-size: 2.5rem;     /* 40px */
+  --type-headline-xl-weight: 700;
+  --type-headline-xl-leading: 3rem;    /* 48px */
+  --type-headline-lg-size: 2rem;       /* 32px */
+  --type-headline-lg-weight: 700;
+  --type-headline-lg-leading: 2.5rem;  /* 40px */
+  --type-headline-md-size: 1.5rem;     /* 24px */
+  --type-headline-md-weight: 600;
+  --type-headline-md-leading: 2rem;    /* 32px */
+  --type-body-lg-size: 1.125rem;       /* 18px */
+  --type-body-lg-weight: 400;
+  --type-body-lg-leading: 1.75rem;     /* 28px */
+  --type-body-md-size: 0.9375rem;      /* 15px */
+  --type-body-md-weight: 400;
+  --type-body-md-leading: 1.5rem;      /* 24px */
+  --type-label-lg-size: 0.9375rem;     /* 15px */
+  --type-label-lg-weight: 600;
+  --type-label-lg-leading: 1.25rem;    /* 20px */
+  --type-price-display-size: 1.75rem;  /* 28px */
+  --type-price-display-weight: 800;
+  --type-price-display-leading: 2rem;  /* 32px */
+
+  /* Spacing Scale (8pt base) */
+  --space-xs: 0.375rem;   /* 6px */
+  --space-sm: 0.75rem;    /* 12px */
+  --space-md: 1.25rem;    /* 20px */
+  --space-lg: 2rem;       /* 32px */
+  --space-xl: 3rem;       /* 48px */
 }
 
 .dark {
@@ -157,6 +246,76 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.5 0.18 25);
+
+  /* ==========================================================================
+     CULINARY GLASSMORPHISM — Dark Mode Tokens (Placeholder — refined in Polish phase)
+     These preserve existing dark mode while providing glass token architecture.
+     ========================================================================== */
+
+  /* Core Colors — kept close to existing dark mode for compatibility */
+  --culinary-primary: #FFB694;
+  --culinary-primary-dark: #FF8F65;
+  --culinary-primary-deep: #E8590C;
+  --culinary-secondary: #FFD77A;
+  --culinary-tertiary: #7DDB84;
+  --culinary-neutral: #F0F1F2;
+  --culinary-background: #1A1412;
+  --culinary-surface: #1A1412;
+  --culinary-on-surface: #F0F1F2;
+  --culinary-on-surface-variant: #D9C8C0;
+  --culinary-outline: #8D7165;
+  --culinary-outline-variant: #5C403F;
+
+  /* Glass Tier 1 — Resting Glass (Dark) */
+  --glass-tier-1-bg: rgba(30, 25, 22, 0.72);
+  --glass-tier-1-border: rgba(255, 255, 255, 0.12);
+  --glass-tier-1-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.24);
+
+  /* Glass Tier 2 — Elevated Glass (Dark) */
+  --glass-tier-2-bg: rgba(30, 25, 22, 0.85);
+  --glass-tier-2-border: rgba(255, 255, 255, 0.18);
+  --glass-tier-2-shadow: 0 16px 40px -6px rgba(247, 103, 7, 0.18), 0 6px 16px -2px rgba(0, 0, 0, 0.16);
+
+  /* Glass Tier 3 — Floating Glass (Dark) */
+  --glass-tier-3-bg: rgba(30, 25, 22, 0.88);
+  --glass-tier-3-border: rgba(255, 255, 255, 0.22);
+  --glass-tier-3-shadow: 0 24px 48px -8px rgba(0, 0, 0, 0.28);
+
+  /* Specular Highlight (Dark) — subtle */
+  --glass-specular: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+
+  /* Typography Scale — same as light (shared opt-in utilities). */
+  --type-display-lg-size: 3.5rem;
+  --type-display-lg-weight: 800;
+  --type-display-lg-leading: 4rem;
+  --type-headline-xl-size: 2.5rem;
+  --type-headline-xl-weight: 700;
+  --type-headline-xl-leading: 3rem;
+  --type-headline-lg-size: 2rem;
+  --type-headline-lg-weight: 700;
+  --type-headline-lg-leading: 2.5rem;
+  --type-headline-md-size: 1.5rem;
+  --type-headline-md-weight: 600;
+  --type-headline-md-leading: 2rem;
+  --type-body-lg-size: 1.125rem;
+  --type-body-lg-weight: 400;
+  --type-body-lg-leading: 1.75rem;
+  --type-body-md-size: 0.9375rem;
+  --type-body-md-weight: 400;
+  --type-body-md-leading: 1.5rem;
+  --type-label-lg-size: 0.9375rem;
+  --type-label-lg-weight: 600;
+  --type-label-lg-leading: 1.25rem;
+  --type-price-display-size: 1.75rem;
+  --type-price-display-weight: 800;
+  --type-price-display-leading: 2rem;
+
+  /* Spacing Scale — same as light */
+  --space-xs: 0.375rem;
+  --space-sm: 0.75rem;
+  --space-md: 1.25rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
 }
 
 @layer base {
@@ -167,6 +326,7 @@
   body {
     @apply bg-background text-foreground;
     font-family:
+      "Plus Jakarta Sans",
       "Inter",
       "SF Pro Display",
       "SF Pro Text",
@@ -177,6 +337,21 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Heading font — Outfit for display/headlines */
+  h1, h2, h3, h4, h5, h6 {
+    font-family:
+      "Outfit",
+      "Plus Jakarta Sans",
+      "Inter",
+      "SF Pro Display",
+      "SF Pro Text",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
   }
 
   button:not([disabled]),
@@ -230,6 +405,518 @@
       linear-gradient(to right, oklch(1 1 1 / 4%) 1px, transparent 1px),
       linear-gradient(to bottom, oklch(1 1 1 / 4%) 1px, transparent 1px);
   }
+
+  /* ==========================================================================
+     CULINARY GLASSMORPHISM — Type Scale (opt-in only)
+     .font-culinary-heading / .font-culinary-body are generated from the
+     @theme --font-culinary-* tokens above; the .type-* classes below pair
+     those families with the Stitch size/weight/leading hierarchy.
+     Nothing here is applied globally — pages adopt these per-component.
+     ========================================================================== */
+
+  .type-display-lg {
+    font-family: "Outfit", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-display-lg-size);
+    font-weight: var(--type-display-lg-weight);
+    line-height: var(--type-display-lg-leading);
+    letter-spacing: -0.03em;
+  }
+
+  .type-headline-xl {
+    font-family: "Outfit", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-headline-xl-size);
+    font-weight: var(--type-headline-xl-weight);
+    line-height: var(--type-headline-xl-leading);
+    letter-spacing: -0.02em;
+  }
+
+  .type-headline-lg {
+    font-family: "Outfit", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-headline-lg-size);
+    font-weight: var(--type-headline-lg-weight);
+    line-height: var(--type-headline-lg-leading);
+    letter-spacing: -0.015em;
+  }
+
+  .type-headline-md {
+    font-family: "Outfit", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-headline-md-size);
+    font-weight: var(--type-headline-md-weight);
+    line-height: var(--type-headline-md-leading);
+    letter-spacing: -0.01em;
+  }
+
+  .type-body-lg {
+    font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-body-lg-size);
+    font-weight: var(--type-body-lg-weight);
+    line-height: var(--type-body-lg-leading);
+    letter-spacing: -0.005em;
+  }
+
+  .type-body-md {
+    font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-body-md-size);
+    font-weight: var(--type-body-md-weight);
+    line-height: var(--type-body-md-leading);
+  }
+
+  .type-label-lg {
+    font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-label-lg-size);
+    font-weight: var(--type-label-lg-weight);
+    line-height: var(--type-label-lg-leading);
+    letter-spacing: 0.01em;
+  }
+
+  .type-price-display {
+    font-family: "Outfit", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--type-price-display-size);
+    font-weight: var(--type-price-display-weight);
+    line-height: var(--type-price-display-leading);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ==========================================================================
+     CULINARY GLASSMORPHISM — Glass Tiers (opt-in only)
+     Tier 0 is the page canvas; Tiers 1–3 are frosted surfaces.
+     Text placed on glass must use a solid on-surface color
+     (e.g. text-culinary-on-surface) so contrast never depends on
+     whatever is blurred underneath.
+     ========================================================================== */
+
+  /* Phase 4E ambient — whisper-light STATIC orbs only (no blur filters,
+     no animation, no extra DOM). Background gradients sit behind content
+     by definition and never intercept clicks. All stops stay at or below
+     8% opacity so text contrast is unaffected. */
+  .culinary-canvas {
+    background:
+      radial-gradient(34rem 30rem at 8% -8%, rgba(251, 191, 36, 0.07), transparent 65%),
+      radial-gradient(60rem 30rem at 85% -10%, rgba(247, 103, 7, 0.08), transparent 60%),
+      radial-gradient(40rem 34rem at 50% 108%, rgba(253, 186, 116, 0.06), transparent 65%),
+      linear-gradient(180deg, #FCF9F5 0%, #FFF4EB 100%);
+  }
+
+  .dark .culinary-canvas {
+    background:
+      radial-gradient(34rem 30rem at 8% -8%, rgba(251, 191, 36, 0.06), transparent 65%),
+      radial-gradient(60rem 30rem at 85% -10%, rgba(247, 103, 7, 0.1), transparent 60%),
+      radial-gradient(40rem 34rem at 50% 108%, rgba(253, 186, 116, 0.05), transparent 65%),
+      linear-gradient(180deg, #1A1412 0%, #241A14 100%);
+  }
+
+  .glass-tier-1 {
+    background: var(--glass-tier-1-bg);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-tier-1-border);
+    box-shadow: var(--glass-tier-1-shadow), var(--glass-specular);
+  }
+
+  .glass-tier-2 {
+    background: var(--glass-tier-2-bg);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    backdrop-filter: blur(24px) saturate(190%);
+    border: 1px solid var(--glass-tier-2-border);
+    box-shadow: var(--glass-tier-2-shadow), var(--glass-specular);
+  }
+
+  .glass-tier-3 {
+    background: var(--glass-tier-3-bg);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    backdrop-filter: blur(32px) saturate(180%);
+    border: 1px solid var(--glass-tier-3-border);
+    box-shadow: var(--glass-tier-3-shadow), var(--glass-specular);
+  }
+}
+
+/* ==========================================================================
+   CULINARY GLASSMORPHISM — Responsive glass behavior
+   Desktop (>=1200px): full treatment (defaults above).
+   Tablet (768–1199px): moderately reduced blur/elevation.
+   Mobile (<768px): lighter blur, simpler canvas — performance first.
+   Only filter/shadow/canvas change here; background and border COLORS
+   stay on theme vars so dark mode is unaffected.
+   ========================================================================== */
+
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .glass-tier-1 {
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    backdrop-filter: blur(14px) saturate(160%);
+    box-shadow: 0 6px 20px -4px rgba(26, 20, 18, 0.05), var(--glass-specular);
+  }
+
+  .glass-tier-2 {
+    -webkit-backdrop-filter: blur(16px) saturate(170%);
+    backdrop-filter: blur(16px) saturate(170%);
+    box-shadow: 0 10px 28px -6px rgba(247, 103, 7, 0.1), var(--glass-specular);
+  }
+
+  .glass-tier-3 {
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 0 16px 32px -8px rgba(26, 20, 18, 0.12), var(--glass-specular);
+  }
+
+  .dark .glass-tier-1 {
+    box-shadow: 0 6px 20px -4px rgba(0, 0, 0, 0.2), var(--glass-specular);
+  }
+
+  .dark .glass-tier-2 {
+    box-shadow: 0 10px 28px -6px rgba(247, 103, 7, 0.14), var(--glass-specular);
+  }
+
+  .dark .glass-tier-3 {
+    box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.24), var(--glass-specular);
+  }
+}
+
+@media (max-width: 767.98px) {
+  .glass-tier-1 {
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    backdrop-filter: blur(10px) saturate(140%);
+    box-shadow: 0 4px 16px -4px rgba(26, 20, 18, 0.05), var(--glass-specular);
+  }
+
+  .glass-tier-2 {
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    backdrop-filter: blur(12px) saturate(150%);
+    box-shadow: 0 8px 20px -6px rgba(247, 103, 7, 0.1), var(--glass-specular);
+  }
+
+  .glass-tier-3 {
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    backdrop-filter: blur(14px) saturate(160%);
+    box-shadow: 0 12px 24px -8px rgba(26, 20, 18, 0.12), var(--glass-specular);
+  }
+
+  .dark .glass-tier-1 {
+    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.2), var(--glass-specular);
+  }
+
+  .dark .glass-tier-2 {
+    box-shadow: 0 8px 20px -6px rgba(247, 103, 7, 0.14), var(--glass-specular);
+  }
+
+  .dark .glass-tier-3 {
+    box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.24), var(--glass-specular);
+  }
+
+  /* Simpler canvas on mobile — one faint static glow, no extra layers. */
+  .culinary-canvas {
+    background:
+      radial-gradient(24rem 20rem at 50% -6%, rgba(247, 103, 7, 0.05), transparent 65%),
+      linear-gradient(180deg, #FCF9F5 0%, #FFF4EB 100%);
+  }
+
+  .dark .culinary-canvas {
+    background: linear-gradient(180deg, #1A1412 0%, #241A14 100%);
+  }
+}
+
+/* ==========================================================================
+   CULINARY GLASSMORPHISM — backdrop-filter fallback
+   Browsers without backdrop-filter get opaque surfaces so text contrast
+   never depends on blurred content underneath.
+   ========================================================================== */
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-tier-1,
+  .glass-tier-2 {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #FFFFFF;
+    border-color: var(--culinary-outline-variant);
+    box-shadow: 0 8px 24px -6px rgba(26, 20, 18, 0.1);
+  }
+
+  .glass-tier-3 {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #FFF8F6;
+    border-color: var(--culinary-outline-variant);
+    box-shadow: 0 12px 28px -8px rgba(26, 20, 18, 0.12);
+  }
+
+  .dark .glass-tier-1,
+  .dark .glass-tier-2 {
+    background: #241C18;
+    box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.4);
+  }
+
+  .dark .glass-tier-3 {
+    background: #2A201B;
+    box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ==========================================================================
+   PHASE 2 — CORE UI VARIANTS (opt-in only)
+   Consumed via Button variant="crunch" | "glass", size="culinary-icon";
+   Card glass="tier-1" | "tier-2" | "tier-3"; Input/Textarea glass;
+   Badge variant="glass" | "glass-selected" | "basil" | "special".
+   All classes below are plain (unlayered) CSS so they reliably compose with
+   the existing Tailwind-based primitive styles without tailwind-merge
+   conflicts. Primitive defaults are untouched.
+   ========================================================================== */
+
+/* --- Button: crunch (primary saffron CTA) --- */
+.btn-crunch {
+  background: linear-gradient(135deg, #F76707 0%, #E8590C 100%);
+  color: #FFFFFF;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  box-shadow: 0 8px 20px -2px rgba(247, 103, 7, 0.38);
+  transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease;
+}
+
+.btn-crunch:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px -2px rgba(247, 103, 7, 0.48);
+  filter: brightness(1.03);
+}
+
+.btn-crunch:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.btn-crunch:disabled {
+  transform: none;
+  filter: none;
+}
+
+.btn-crunch:focus-visible {
+  --tw-ring-color: rgb(247 103 7 / 0.5);
+}
+
+.btn-crunch svg {
+  color: #FFFFFF;
+}
+
+.dark .btn-crunch {
+  box-shadow: 0 8px 22px -2px rgba(247, 103, 7, 0.5);
+}
+
+/* --- Button: glass (secondary frosted action) --- */
+.btn-glass {
+  background: rgba(255, 255, 255, 0.65);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: #1A1412;
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.9),
+    0 4px 16px -4px rgba(26, 20, 18, 0.08);
+  transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.btn-glass:active {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.dark .btn-glass {
+  background: rgba(30, 25, 22, 0.65);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #F0F1F2;
+  box-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.15),
+    0 4px 16px -4px rgba(0, 0, 0, 0.4);
+}
+
+.dark .btn-glass:hover {
+  background: rgba(30, 25, 22, 0.8);
+}
+
+/* --- Button: culinary icon disk (44x44, composes with any variant) --- */
+.btn-culinary-icon svg {
+  color: var(--culinary-primary);
+}
+
+.btn-culinary-icon:not(.btn-crunch):active {
+  background: var(--culinary-primary);
+  border-color: var(--culinary-primary);
+}
+
+.btn-culinary-icon:not(.btn-crunch):active svg {
+  color: #FFFFFF;
+}
+
+.btn-crunch.btn-culinary-icon svg {
+  color: #FFFFFF;
+}
+
+.dark .btn-culinary-icon svg {
+  color: #FFB694;
+}
+
+.dark .btn-culinary-icon:not(.btn-crunch):active {
+  background: var(--culinary-primary);
+}
+
+.dark .btn-culinary-icon:not(.btn-crunch):active svg {
+  color: #1A1412;
+}
+
+/* --- Input / Textarea: glass --- */
+.input-glass {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.45);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+  box-shadow: 0 2px 12px -2px rgba(26, 20, 18, 0.06);
+}
+
+.input-glass::placeholder {
+  color: var(--culinary-on-surface-variant);
+  opacity: 0.75;
+}
+
+.input-glass:focus-visible {
+  border-color: rgba(247, 103, 7, 0.4);
+  box-shadow: 0 0 0 3px rgba(247, 103, 7, 0.18);
+}
+
+.input-glass[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+
+.input-glass[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px rgba(186, 26, 26, 0.15);
+}
+
+.dark .input-glass {
+  background: rgba(30, 25, 22, 0.5);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .input-glass[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px rgba(220, 60, 60, 0.25);
+}
+
+/* --- Badge: culinary / glass chips --- */
+.badge-glass {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.8);
+  color: #1A1412;
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+}
+
+.dark .badge-glass {
+  background: rgba(30, 25, 22, 0.6);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #F0F1F2;
+}
+
+.badge-glass-selected {
+  background: rgba(247, 103, 7, 0.12);
+  border-color: #F76707;
+  color: #F76707;
+  box-shadow: 0 0 12px rgba(247, 103, 7, 0.25);
+}
+
+.badge-glass-selected::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: #F76707;
+  box-shadow: 0 0 8px rgba(247, 103, 7, 0.8);
+}
+
+.dark .badge-glass-selected {
+  background: rgba(247, 103, 7, 0.18);
+  border-color: #FF8F65;
+  color: #FFB694;
+}
+
+.dark .badge-glass-selected::before {
+  background: #FFB694;
+}
+
+.badge-basil {
+  background: rgba(43, 138, 62, 0.12);
+  border-color: rgba(43, 138, 62, 0.3);
+  color: #2B8A3E;
+}
+
+.dark .badge-basil {
+  background: rgba(125, 219, 132, 0.14);
+  border-color: rgba(125, 219, 132, 0.35);
+  color: #7DDB84;
+}
+
+.badge-special {
+  background: linear-gradient(135deg, rgba(250, 176, 5, 0.18) 0%, rgba(247, 103, 7, 0.18) 100%);
+  border-color: rgba(247, 103, 7, 0.35);
+  color: #A14000;
+  box-shadow: 0 0 12px rgba(250, 176, 5, 0.35);
+}
+
+.dark .badge-special {
+  border-color: rgba(250, 176, 5, 0.4);
+  color: #FFD77A;
+}
+
+/* --- Phase 2 backdrop-filter fallback (opaque surfaces, no blur) --- */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .btn-glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #FFFFFF;
+  }
+
+  .dark .btn-glass {
+    background: #241C18;
+  }
+
+  .input-glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #FFFFFF;
+  }
+
+  .dark .input-glass {
+    background: #241C18;
+  }
+
+  .badge-glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #FFFFFF;
+  }
+
+  .dark .badge-glass {
+    background: #241C18;
+  }
+}
+
+/* ==========================================================================
+   PHASE 4 — HOMEPAGE HELPERS (opt-in only)
+   ========================================================================== */
+
+/* Tier-2 hover lift for glass cards: resting Tier 1 surface rises to
+   Tier 2 elevation on hover. Presentation only; no layout change. */
+.glass-lift {
+  transition:
+    transform 300ms ease,
+    box-shadow 300ms ease,
+    background-color 300ms ease,
+    border-color 300ms ease;
+}
+
+.glass-lift:hover {
+  background: var(--glass-tier-2-bg);
+  border-color: var(--glass-tier-2-border);
+  box-shadow: var(--glass-tier-2-shadow), var(--glass-specular);
+  transform: translateY(-4px);
 }
 
 /* Reduced motion — disable non-essential animations for users who prefer it */

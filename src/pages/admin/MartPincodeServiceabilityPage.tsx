@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { AlertCircle, MapPin, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -13,6 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  crudDialogKey,
+  crudDialogReducer,
+  initialCrudDialogState,
+} from "@/components/admin/crudDialogState";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 
@@ -26,6 +31,7 @@ interface PincodeRecord {
   deliveryDays?: number;
   shippingZoneId?: string;
   shippingZoneName?: string;
+  shippingZoneStatus?: "active" | "inactive";
 }
 
 interface PincodeFormValues {
@@ -46,7 +52,7 @@ const EMPTY_FORM: PincodeFormValues = {
   shippingZoneId: "none",
 };
 
-const toFormValues = (record?: PincodeRecord): PincodeFormValues =>
+export const toPincodeFormValues = (record?: PincodeRecord): PincodeFormValues =>
   record
     ? {
         pincode: record.pincode,
@@ -58,7 +64,10 @@ const toFormValues = (record?: PincodeRecord): PincodeFormValues =>
       }
     : EMPTY_FORM;
 
-const fromConvex = (doc: Doc<"martPincodeServiceability">, zoneName?: string): PincodeRecord => ({
+const fromConvex = (
+  doc: Doc<"martPincodeServiceability">,
+  zone?: { name: string; status: "active" | "inactive" },
+): PincodeRecord => ({
   id: doc._id,
   businessUnitId: doc.businessUnitId,
   pincode: doc.pincode,
@@ -67,7 +76,8 @@ const fromConvex = (doc: Doc<"martPincodeServiceability">, zoneName?: string): P
   status: doc.status,
   deliveryDays: doc.deliveryDays,
   shippingZoneId: doc.shippingZoneId,
-  shippingZoneName: zoneName,
+  shippingZoneName: zone?.name,
+  shippingZoneStatus: zone?.status,
 });
 
 // ============================================================================
@@ -83,9 +93,18 @@ interface PincodeFormDialogProps {
 }
 
 function PincodeFormDialog({ open, record, zones, onOpenChange, onSubmit }: PincodeFormDialogProps) {
-  const [values, setValues] = useState<PincodeFormValues>(() => toFormValues(record));
-  const dialogKey = `${record?.id ?? "new"}-${open ? "open" : "closed"}`;
+  // 13C: no local remount key — the parent keys this dialog by record id +
+  // open session, so every open mounts fresh from the current record prop.
+  // 19B: `zones` contains only non-deleted ACTIVE zones. An existing record
+  // may still reference an inactive/unavailable zone — its id is preserved
+  // verbatim in `values` (never silently replaced) and surfaced as a
+  // disabled unavailable option below.
+  const [values, setValues] = useState<PincodeFormValues>(() => toPincodeFormValues(record));
   const isEditing = Boolean(record);
+  const staleZoneId =
+    isEditing && record?.shippingZoneId && record.shippingZoneId !== "none" && !zones.some((z) => z._id === record.shippingZoneId)
+      ? record.shippingZoneId
+      : undefined;
 
   const update = <K extends keyof PincodeFormValues>(key: K, value: PincodeFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }));
@@ -102,7 +121,7 @@ function PincodeFormDialog({ open, record, zones, onOpenChange, onSubmit }: Pinc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent key={dialogKey} className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit pincode" : "Add pincode"}</DialogTitle>
           <DialogDescription>
@@ -143,9 +162,17 @@ function PincodeFormDialog({ open, record, zones, onOpenChange, onSubmit }: Pinc
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   {zones.map((z) => <SelectItem key={z._id} value={z._id}>{z.name}</SelectItem>)}
+                  {staleZoneId && (
+                    <SelectItem value={staleZoneId} disabled>
+                      {record?.shippingZoneName ?? "Unknown zone"} (inactive — unavailable)
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Required for courier-based delivery.</p>
+              <p className="text-xs text-muted-foreground">Only active zones can be assigned. Required for courier-based delivery.</p>
+              {staleZoneId && (
+                <p className="text-xs text-destructive">This pincode currently references an inactive or unavailable zone. Choose an active zone or None before saving.</p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="pin-status">Status</Label>
@@ -174,11 +201,19 @@ function PincodeFormDialog({ open, record, zones, onOpenChange, onSubmit }: Pinc
 
 export default function MartPincodeServiceabilityPage() {
   const { getSessionToken } = useAdminAuth();
+  const token = getSessionToken();
   const allBUs = useQuery(api.businessUnits.getAll);
   const [selectedBuId, setSelectedBuId] = useState<string | null>(null);
   const pincodes = useQuery(
     api.martPincodeServiceability.getByBusinessUnit,
     selectedBuId ? { businessUnitId: selectedBuId as Id<"businessUnits"> } : "skip",
+  );
+  // 12D coverage summary (read-only aggregate; superadmin/admin only).
+  const coverage = useQuery(
+    api.martPincodeServiceability.getCoverage,
+    token && selectedBuId
+      ? { sessionToken: token, businessUnitId: selectedBuId as Id<"businessUnits"> }
+      : "skip",
   );
   const zones = useQuery(
     api.shippingZones.getAll,
@@ -189,8 +224,9 @@ export default function MartPincodeServiceabilityPage() {
   const softDeletePincode = useMutation(api.martPincodeServiceability.softDelete);
 
   const [error, setError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<PincodeRecord | undefined>(undefined);
+  // 13C: dialog lifecycle via shared state machine — every open mounts
+  // fresh (record id + open session in key), save success clears selection.
+  const [dialog, dispatchDialog] = useReducer(crudDialogReducer, initialCrudDialogState);
   const [deleteTarget, setDeleteTarget] = useState<PincodeRecord | undefined>(undefined);
   const [saving, setSaving] = useState(false);
 
@@ -204,18 +240,25 @@ export default function MartPincodeServiceabilityPage() {
 
   const selectedBuName = businessUnits.find((bu) => bu._id === selectedBuId)?.name ?? "";
   const zoneList = (zones ?? []).filter((z) => !z.deletedAt);
-  const zoneMap = new Map(zoneList.map((z) => [z._id, z.name]));
-  const pincodeRecords = (pincodes ?? []).map((doc) => fromConvex(doc, doc.shippingZoneId ? zoneMap.get(doc.shippingZoneId) : undefined));
+  // 19B: dropdown offers only non-deleted ACTIVE zones. Inactive assignments
+  // already stored are preserved on the record and surfaced honestly.
+  const activeZoneList = zoneList.filter((z) => z.status === "active");
+  const zoneMap = new Map(zoneList.map((z) => [z._id, z]));
+  const pincodeRecords = (pincodes ?? []).map((doc) => {
+    const zone = doc.shippingZoneId ? zoneMap.get(doc.shippingZoneId) : undefined;
+    return fromConvex(doc, zone ? { name: zone.name, status: zone.status } : undefined);
+  });
+  const editingRecord = dialog.editingId
+    ? pincodeRecords.find((r) => r.id === dialog.editingId)
+    : undefined;
   const isLoading = pincodes === undefined && Boolean(selectedBuId);
 
   const openCreate = () => {
-    setEditingRecord(undefined);
-    setFormOpen(true);
+    dispatchDialog({ type: "openAdd" });
   };
 
   const openEdit = (record: PincodeRecord) => {
-    setEditingRecord(record);
-    setFormOpen(true);
+    dispatchDialog({ type: "openEdit", id: record.id });
   };
 
   const savePincode = async (values: PincodeFormValues) => {
@@ -250,7 +293,7 @@ export default function MartPincodeServiceabilityPage() {
           ...payload,
         });
       }
-      setFormOpen(false);
+      dispatchDialog({ type: "saveSuccess" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save pincode");
     } finally {
@@ -316,6 +359,24 @@ export default function MartPincodeServiceabilityPage() {
         </Select>
       </div>
 
+      {/* 12D coverage summary — read-only aggregates, no data changes. */}
+      {coverage && (
+        <div className="mb-4 flex flex-wrap gap-2" aria-label="Pincode coverage summary">
+          <Badge variant="outline">{coverage.total} total pincodes</Badge>
+          <Badge variant="default">{coverage.active} active</Badge>
+          <Badge variant="secondary">{coverage.inactive} inactive</Badge>
+          <Badge variant="outline" title={coverage.zones.map((id) => zoneMap.get(id)?.name ?? id).join(", ") || "None"}>
+            {coverage.zones.length} {coverage.zones.length === 1 ? "zone" : "zones"}
+          </Badge>
+          <Badge variant="outline" title={coverage.cities.join(", ") || "None"}>
+            {coverage.cities.length} {coverage.cities.length === 1 ? "city" : "cities"}
+          </Badge>
+          <Badge variant="outline" title={coverage.states.join(", ") || "None"}>
+            {coverage.states.length} {coverage.states.length === 1 ? "state" : "states"}
+          </Badge>
+        </div>
+      )}
+
       {!selectedBuId ? (
         <EmptyState icon={MapPin} title="Select a business unit" description="Choose a business unit to view its serviceable pincodes." />
       ) : isLoading ? (
@@ -348,9 +409,13 @@ export default function MartPincodeServiceabilityPage() {
                   <TableCell>{record.city || "\u2014"}</TableCell>
                   <TableCell>{record.state || "\u2014"}</TableCell>
                   <TableCell>
-                    {record.shippingZoneName
-                      ? <Badge variant="outline">{record.shippingZoneName}</Badge>
-                      : <span className="text-muted-foreground">None</span>}
+                    {record.shippingZoneId && !record.shippingZoneName
+                      ? <Badge variant="destructive">Unavailable zone</Badge>
+                      : record.shippingZoneName && record.shippingZoneStatus !== "active"
+                        ? <Badge variant="secondary">{record.shippingZoneName} (inactive)</Badge>
+                        : record.shippingZoneName
+                          ? <Badge variant="outline">{record.shippingZoneName}</Badge>
+                          : <span className="text-muted-foreground">None</span>}
                   </TableCell>
                   <TableCell>{record.deliveryDays ? `${record.deliveryDays} days` : "\u2014"}</TableCell>
                   <TableCell>
@@ -376,12 +441,12 @@ export default function MartPincodeServiceabilityPage() {
       )}
 
       <PincodeFormDialog
-        open={formOpen}
+        key={crudDialogKey(dialog)}
+        open={dialog.open}
         record={editingRecord}
-        zones={zoneList}
+        zones={activeZoneList}
         onOpenChange={(open) => {
-          setFormOpen(open);
-          if (!open) setEditingRecord(undefined);
+          if (!open) dispatchDialog({ type: "close" });
         }}
         onSubmit={savePincode}
       />

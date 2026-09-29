@@ -52,7 +52,7 @@ export function BulkUpdateDialog({ open, items, onOpenChange, onConfirm }: BulkU
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setEntries(toEntries(items)); setReason(""); } onOpenChange(o); }}>
-      <DialogContent className="max-h-[calc(100vh-2rem)] sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Bulk stock update</DialogTitle>
           <DialogDescription>

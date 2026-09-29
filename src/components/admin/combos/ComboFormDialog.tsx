@@ -72,6 +72,8 @@ interface ComboFormDialogProps {
   catalogItems: CatalogItem[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: ComboFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 export function ComboFormDialog({
@@ -81,6 +83,7 @@ export function ComboFormDialog({
   catalogItems,
   onOpenChange,
   onSubmit,
+  isSaving = false,
 }: ComboFormDialogProps) {
   const dialogKey = `${combo?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(combo);
@@ -104,6 +107,7 @@ export function ComboFormDialog({
           businessUnits={businessUnits}
           catalogItems={catalogItems}
           isEditing={isEditing}
+          isSaving={isSaving}
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
         />
@@ -117,6 +121,7 @@ interface ComboFormProps {
   businessUnits: { id: string; name: string }[];
   catalogItems: CatalogItem[];
   isEditing: boolean;
+  isSaving: boolean;
   onSubmit: (values: ComboFormValues) => void;
   onCancel: () => void;
 }
@@ -126,6 +131,7 @@ function ComboForm({
   businessUnits,
   catalogItems,
   isEditing,
+  isSaving,
   onSubmit,
   onCancel,
 }: ComboFormProps) {
@@ -546,7 +552,7 @@ const removeItem = (index: number) => {
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" form={formId}>
+        <Button type="submit" form={formId} disabled={isSaving}>
           {isEditing ? "Save changes" : "Create combo"}
         </Button>
       </DialogFooter>

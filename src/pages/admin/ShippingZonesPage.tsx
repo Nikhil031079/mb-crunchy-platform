@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { AlertCircle, Pencil, Plus, RefreshCw, Trash2, MapPin } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -13,6 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  crudDialogKey,
+  crudDialogReducer,
+  initialCrudDialogState,
+} from "@/components/admin/crudDialogState";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 
@@ -32,7 +37,7 @@ interface ZoneFormValues {
 
 const EMPTY_FORM: ZoneFormValues = { name: "", code: "", status: "active" };
 
-const toFormValues = (record?: ZoneRecord): ZoneFormValues =>
+export const toZoneFormValues = (record?: ZoneRecord): ZoneFormValues =>
   record
     ? { name: record.name, code: record.code ?? "", status: record.status }
     : EMPTY_FORM;
@@ -56,7 +61,7 @@ function ZoneFormDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: ZoneFormValues) => void;
 }) {
-  const [values, setValues] = useState<ZoneFormValues>(() => toFormValues(record));
+  const [values, setValues] = useState<ZoneFormValues>(() => toZoneFormValues(record));
   const isEditing = Boolean(record);
 
   const update = <K extends keyof ZoneFormValues>(key: K, value: ZoneFormValues[K]) =>
@@ -105,19 +110,28 @@ function ZoneFormDialog({
 
 export default function ShippingZonesPage() {
   const { getSessionToken } = useAdminAuth();
+  const token = getSessionToken();
   const allBUs = useQuery(api.businessUnits.getAll);
   const [selectedBuId, setSelectedBuId] = useState<string | null>(null);
   const zones = useQuery(
     api.shippingZones.getAll,
     selectedBuId ? { businessUnitId: selectedBuId as Id<"businessUnits"> } : "skip",
   );
+  // 12D coverage summary (read-only aggregate; superadmin/admin only).
+  const coverage = useQuery(
+    api.shippingZones.getCoverage,
+    token && selectedBuId
+      ? { sessionToken: token, businessUnitId: selectedBuId as Id<"businessUnits"> }
+      : "skip",
+  );
   const createZone = useMutation(api.shippingZones.create);
   const updateZone = useMutation(api.shippingZones.update);
   const softDeleteZone = useMutation(api.shippingZones.softDelete);
 
   const [error, setError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<ZoneRecord | undefined>(undefined);
+  // 13C: dialog lifecycle via shared state machine — every open mounts
+  // fresh (record id + open session in key), save success clears selection.
+  const [dialog, dispatchDialog] = useReducer(crudDialogReducer, initialCrudDialogState);
   const [deleteTarget, setDeleteTarget] = useState<ZoneRecord | undefined>(undefined);
   const [saving, setSaving] = useState(false);
 
@@ -131,6 +145,9 @@ export default function ShippingZonesPage() {
 
   const selectedBuName = businessUnits.find((bu) => bu._id === selectedBuId)?.name ?? "";
   const zoneRecords = (zones ?? []).map(fromConvex);
+  const editingRecord = dialog.editingId
+    ? zoneRecords.find((r) => r.id === dialog.editingId)
+    : undefined;
   const isLoading = zones === undefined && Boolean(selectedBuId);
 
   const saveZone = async (values: ZoneFormValues) => {
@@ -138,10 +155,10 @@ export default function ShippingZonesPage() {
     setSaving(true);
     setError(null);
     try {
-      if (editingRecord) {
+      if (dialog.editingId) {
         await updateZone({
           sessionToken: getSessionToken()!,
-          id: editingRecord.id as Id<"shippingZones">,
+          id: dialog.editingId as Id<"shippingZones">,
           name: values.name,
           code: values.code || undefined,
           status: values.status,
@@ -155,7 +172,7 @@ export default function ShippingZonesPage() {
           status: values.status,
         });
       }
-      setFormOpen(false);
+      dispatchDialog({ type: "saveSuccess" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save zone");
     } finally {
@@ -183,7 +200,7 @@ export default function ShippingZonesPage() {
   return (
     <div>
       <PageHeader title="Shipping Pricing" description="Configure shipping zones and rates for courier-based delivery per business unit.">
-        <Button size="sm" onClick={() => { setEditingRecord(undefined); setFormOpen(true); }} disabled={!selectedBuId}>
+        <Button size="sm" onClick={() => dispatchDialog({ type: "openAdd" })} disabled={!selectedBuId}>
           <Plus className="mr-1.5 size-4" />Add zone
         </Button>
       </PageHeader>
@@ -209,12 +226,21 @@ export default function ShippingZonesPage() {
         </Select>
       </div>
 
+      {/* 12D coverage summary — read-only aggregates, no data changes. */}
+      {coverage && (
+        <div className="mb-4 flex flex-wrap gap-2" aria-label="Zone coverage summary">
+          <Badge variant="outline">{coverage.total} total zones</Badge>
+          <Badge variant="default">{coverage.active} active</Badge>
+          <Badge variant="secondary">{coverage.inactive} inactive</Badge>
+        </div>
+      )}
+
       {!selectedBuId ? (
         <EmptyState icon={MapPin} title="Select a business unit" description="Choose a business unit to view its shipping zones." />
       ) : isLoading ? (
         <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">Loading zones...</div>
       ) : zoneRecords.length === 0 ? (
-        <EmptyState icon={MapPin} title="No shipping zones" description={`No shipping zones configured for ${selectedBuName}.`} action={{ label: "Create zone", onClick: () => { setEditingRecord(undefined); setFormOpen(true); } }} />
+        <EmptyState icon={MapPin} title="No shipping zones" description={`No shipping zones configured for ${selectedBuName}.`} action={{ label: "Create zone", onClick: () => dispatchDialog({ type: "openAdd" }) }} />
       ) : (
         <section className="overflow-hidden rounded-xl border">
           <Table>
@@ -234,7 +260,7 @@ export default function ShippingZonesPage() {
                   <TableCell><Badge variant={record.status === "active" ? "default" : "secondary"}>{record.status === "active" ? "Active" : "Inactive"}</Badge></TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => { setEditingRecord(record); setFormOpen(true); }}><Pencil className="size-3.5" /> Edit</Button>
+                      <Button size="sm" variant="outline" onClick={() => dispatchDialog({ type: "openEdit", id: record.id })}><Pencil className="size-3.5" /> Edit</Button>
                       <Button size="sm" variant="outline" onClick={() => setDeleteTarget(record)}><Trash2 className="size-3.5 text-destructive" /> Delete</Button>
                     </div>
                   </TableCell>
@@ -245,7 +271,7 @@ export default function ShippingZonesPage() {
         </section>
       )}
 
-      <ZoneFormDialog key={editingRecord?.id ?? "new"} open={formOpen} record={editingRecord} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditingRecord(undefined); }} onSubmit={saveZone} />
+      <ZoneFormDialog key={crudDialogKey(dialog)} open={dialog.open} record={editingRecord} onOpenChange={(o) => { if (!o) dispatchDialog({ type: "close" }); }} onSubmit={saveZone} />
 
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(undefined)}>
         <DialogContent className="sm:max-w-md">

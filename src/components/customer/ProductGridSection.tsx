@@ -66,7 +66,8 @@ export function ProductGridSection({
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-2 h-1 w-8 animate-pulse rounded-full bg-secondary" />
           <div className="mb-6 h-7 w-44 animate-pulse rounded bg-secondary" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {/* Stitch 4-column desktop grid (Phase 4C); mobile grid unchanged */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
             {Array.from({ length: skeletonCount }, (_, i) => (
               <ProductCardSkeleton key={i} compact />
             ))}
@@ -82,7 +83,7 @@ export function ProductGridSection({
     <section
       id={id}
       className={cn(
-        "py-12 sm:py-16",
+        "py-12 sm:py-16 scroll-mt-24",
         variant === "secondary" && "bg-secondary/20"
       )}
     >
@@ -96,7 +97,7 @@ export function ProductGridSection({
           </div>
         )}
         <SectionHeader title={title} subtitle={subtitle} action={action} size="sm" />
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
           {items.map((item, index) => (
             <ProductCard
               key={item._id}

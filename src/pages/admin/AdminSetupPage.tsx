@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useMutation } from "convex/react";
+import { useConvex, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { hashPassword } from "@/utils/crypto";
 import { escapeHtml } from "@/lib/html-sanitizer";
@@ -16,6 +16,7 @@ type Step = "credentials" | "recovery";
 
 export default function AdminSetupPage() {
   const navigate = useNavigate();
+  const convex = useConvex();
   const setupMutation = useMutation(api.adminAuth.setup);
   const { siteName } = useBranding();
 
@@ -47,7 +48,9 @@ export default function AdminSetupPage() {
     setIsLoading(true);
     try {
       const { hash: pwHash, salt: pwSalt } = await hashPassword(password);
-      const key = generateRecoveryKey();
+      // 10M: recovery keys are issued by the server-side WebCrypto
+      // generator (never Math.random()); only the hash is persisted.
+      const { recoveryKey: key } = await convex.query(api.adminAuth.issueRecoveryKey, {});
       const { hash: rkHash, salt: rkSalt } = await hashPassword(key);
 
       await setupMutation({
@@ -313,19 +316,6 @@ export default function AdminSetupPage() {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function generateRecoveryKey(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const segments: string[] = ["MBCR"];
-  for (let s = 0; s < 4; s++) {
-    let segment = "";
-    for (let i = 0; i < 4; i++) {
-      segment += chars[Math.floor(Math.random() * chars.length)];
-    }
-    segments.push(segment);
-  }
-  return segments.join("-");
-}
 
 function getPasswordStrength(password: string): { score: number; label: string } {
   let score = 0;

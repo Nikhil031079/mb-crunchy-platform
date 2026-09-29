@@ -28,6 +28,24 @@ async function slugExists(
   return true;
 }
 
+/**
+ * Reject blank/invalid component rows before any catalog lookups.
+ * Quantity must be a whole number of at least 1.
+ */
+function assertValidItems(items: Array<{ catalogItemId: unknown; quantity: unknown }>): void {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error("Add at least one item to the combo.");
+  }
+  items.forEach((item, index) => {
+    if (!item || !item.catalogItemId) {
+      throw new Error(`Item ${index + 1} must reference a valid product.`);
+    }
+    if (!Number.isInteger(item.quantity) || (item.quantity as number) < 1) {
+      throw new Error(`Item ${index + 1} must have a whole quantity of at least 1.`);
+    }
+  });
+}
+
 // ============================================================================
 // Queries
 // ============================================================================
@@ -121,6 +139,9 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
+
+    if (!args.businessUnitId) throw new Error("Select a business unit.");
+    assertValidItems(args.items);
 
     // Enforce unique slug
     if (await slugExists(ctx, args.businessUnitId, args.slug)) {
@@ -239,6 +260,8 @@ export const update = mutation({
     // If items are being updated, validate and recalculate pricing
     const patchFields: Record<string, unknown> = { ...fields, updatedAt: Date.now() };
     if (fields.items) {
+      assertValidItems(fields.items);
+
       const existingDoc = await ctx.db.get(id);
       const businessUnitId = existingDoc?.businessUnitId;
       if (!businessUnitId) throw new Error("Combo not found");
@@ -328,7 +351,7 @@ export const getByIds = query({
     const results = await Promise.all(
       args.ids.map(async (id) => {
         const doc = await ctx.db.get(id);
-        if (!doc || doc.deletedAt) return null;
+        if (!doc || doc.deletedAt || doc.status !== "active") return null;
         return doc;
       }),
     );
@@ -336,8 +359,17 @@ export const getByIds = query({
   },
 });
 
+/**
+ * Admin-only full combo listing. Previously public; the only caller is the
+ * admin Combos page, which passes its session token. Returns the complete
+ * unfiltered documents (including inactive/archived) for admin management;
+ * customer surfaces use getByBusinessUnit/getFeatured/
+ * getAllFeaturedAcrossBusinessUnits/getByIds.
+ */
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("combos")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))

@@ -210,6 +210,31 @@ export default function CartPage() {
     return totalSaved;
   }, [cart.items]);
 
+  // ── 6C: Presentational dispatch-origin grouping ──
+  // Derived view-only grouping by item.businessUnitId (stable, first-seen
+  // order). No state, ordering, quantity, or checkout logic is affected.
+  const buInfoById = useMemo(() => {
+    const map = new Map<string, BusinessUnit>();
+    for (const bu of activeBUs ?? []) map.set(bu._id, bu);
+    return map;
+  }, [activeBUs]);
+
+  const groupedItems = useMemo(() => {
+    const groups: { businessUnitId: string; items: typeof cart.items }[] = [];
+    const index = new Map<string, number>();
+    for (const item of cart.items) {
+      const key = item.businessUnitId || "__unknown__";
+      const existing = index.get(key);
+      if (existing === undefined) {
+        index.set(key, groups.length);
+        groups.push({ businessUnitId: item.businessUnitId, items: [item] });
+      } else {
+        groups[existing].items.push(item);
+      }
+    }
+    return groups;
+  }, [cart.items]);
+
   // Kitchen serviceability for cart warning
   const customerLocation = useLocationStore();
   const activeBUsForSvc = useQuery(api.businessUnits.getActive) as BusinessUnit[] | undefined;
@@ -234,8 +259,8 @@ export default function CartPage() {
 
   if (cart.items.length === 0) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="min-h-screen culinary-canvas">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <EmptyState
             title="Your cart is empty"
             description="Browse our stores and add some delicious items to your cart."
@@ -259,8 +284,25 @@ export default function CartPage() {
   // ==========================================================================
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-screen culinary-canvas">
+      {/* Frosted breadcrumb strip — real cart info only */}
+      <div className="border-b border-white/60 bg-white/40 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-label="Breadcrumb">
+            <Link to="/" className="transition-colors hover:text-foreground">
+              Home
+            </Link>
+            <span aria-hidden="true">/</span>
+            <span className="font-medium text-foreground">Cart</span>
+            {itemCount > 0 && (
+              <span className="ml-1 rounded-full border border-culinary-outline-variant/60 bg-white/60 px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md">
+                {itemCount} item{itemCount !== 1 ? "s" : ""}
+              </span>
+            )}
+          </nav>
+        </div>
+      </div>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -269,7 +311,7 @@ export default function CartPage() {
           className="mb-6 flex items-center justify-between"
         >
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Shopping Cart</h1>
+            <h1 className="font-culinary-heading text-2xl font-bold tracking-tight sm:text-3xl">Shopping Cart</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {itemCount} item{itemCount !== 1 ? "s" : ""} in your cart
             </p>
@@ -316,10 +358,10 @@ export default function CartPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
             className={cn(
-              "mb-6 rounded-xl border p-4",
+              "mb-6 rounded-2xl glass-tier-1 border p-4 sm:p-5",
               freeDeliveryProgress.reached
                 ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
-                : "border-border/60 bg-card"
+                : "border-border/60"
             )}
           >
             <div className="flex items-center gap-3 mb-2.5">
@@ -337,24 +379,32 @@ export default function CartPage() {
                   <Truck className="h-4 w-4" />
                 )}
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
+                <p className="font-culinary-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Free delivery milestone
+                </p>
                 {freeDeliveryProgress.reached ? (
-                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  <p className="mt-0.5 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
                     You&apos;ve unlocked free delivery!
                   </p>
                 ) : (
-                  <p className="text-sm font-medium">
+                  <p className="mt-0.5 text-sm font-medium">
                     Add{" "}
-                    <span className="inline-flex items-center gap-1 rounded border border-primary/20 bg-primary/10 text-primary px-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 text-primary px-2 py-0.5 text-xs font-bold">
                       {formatCurrency(freeDeliveryProgress.remaining)}
                     </span>{" "}
                     more for free delivery
                   </p>
                 )}
               </div>
-              <span className="text-xs text-muted-foreground">
-                {formatCurrency(freeDeliveryThreshold!)}
-              </span>
+              <div className="shrink-0 text-right">
+                <p className="font-culinary-heading text-sm font-bold tabular-nums">
+                  {Math.round(freeDeliveryProgress.progress)}%
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  of {formatCurrency(freeDeliveryThreshold!)}
+                </p>
+              </div>
             </div>
             <Progress
               value={freeDeliveryProgress.progress}
@@ -410,7 +460,7 @@ export default function CartPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
-              className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4"
+              className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5"
             >
               <div className="flex items-start gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -419,7 +469,7 @@ export default function CartPage() {
                 <div className="flex-1">
                   {isPartial ? (
                     <>
-                      <p className="text-sm font-semibold">
+                      <p className="font-culinary-heading text-sm font-bold">
                         Complete Your Meal
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
@@ -430,7 +480,7 @@ export default function CartPage() {
                     </>
                   ) : (
                     <>
-                      <p className="text-sm font-semibold">
+                      <p className="font-culinary-heading text-sm font-bold">
                         Better Value Available!
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
@@ -480,9 +530,39 @@ export default function CartPage() {
           {/* CART ITEMS                                                      */}
           {/* ================================================================ */}
 
-          <div className="space-y-3">
+          <div className="space-y-4">
+            {groupedItems.map((group) => {
+              const bu = buInfoById.get(group.businessUnitId);
+              const buName = bu?.name ?? "Store";
+              const groupCount = group.items.reduce((sum, item) => sum + item.quantity, 0);
+              const groupSubtotal = group.items.reduce((sum, item) => sum + item.totalPrice, 0);
+              const groupUnserviceable = !!bu && kitchenServiceability?.buName === bu.name;
+              return (
+                <section
+                  key={group.businessUnitId || "store"}
+                  aria-label={`${buName} items`}
+                  className="space-y-3 rounded-3xl glass-tier-1 p-3 sm:p-4"
+                >
+                  <div className="flex min-w-0 items-center gap-3 px-1 pt-1">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-culinary-heading text-base font-bold text-primary">
+                      {buName.charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h2 className="truncate font-culinary-heading text-base font-bold tracking-tight">
+                        {buName}
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {groupCount} item{groupCount !== 1 ? "s" : ""} · {formatCurrency(groupSubtotal)}
+                      </p>
+                    </div>
+                  </div>
+                  {groupUnserviceable && (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                      Items from this store are not available for delivery to your current location.
+                    </p>
+                  )}
             <AnimatePresence mode="popLayout">
-              {cart.items.map((item) => {
+              {group.items.map((item) => {
                 return (
                   <motion.div
                     key={item.cartItemId}
@@ -490,10 +570,10 @@ export default function CartPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }}
-                    className="flex gap-4 rounded-xl border border-border/60 bg-card p-4"
+                    className="flex gap-3 sm:gap-4 rounded-2xl border border-border/50 bg-white/60 p-3 sm:p-4 dark:bg-white/5"
                   >
-                    {/* Image */}
-                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-secondary">
+                    {/* Image well */}
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-secondary sm:h-24 sm:w-24">
                       {item.image ? (
                         <img
                           src={item.image}
@@ -514,7 +594,7 @@ export default function CartPage() {
                     {/* Details */}
                     <div className="flex flex-1 min-w-0">
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium truncate">
+                        <h3 className="truncate font-culinary-heading text-sm font-semibold">
                           {item.name}
                         </h3>
                         {item.bundleItems && item.bundleItems.length > 0 ? (
@@ -530,8 +610,8 @@ export default function CartPage() {
                             {item.variantName}
                           </p>
                         )}
-                        <div className="flex items-center gap-2 mt-2">
-                          <p className="text-sm font-semibold">
+                        <div className="flex items-baseline gap-2 mt-2">
+                          <p className="font-culinary-heading text-base font-bold tracking-tight">
                             {formatCurrency(item.unitPrice)}
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -566,7 +646,12 @@ export default function CartPage() {
                 );
               })}
             </AnimatePresence>
+              </section>
+            );
+            })}
+          </div>
 
+          <div className="space-y-3">
             {/* Applied Meal Deals */}
             {cart.appliedMealDeals && cart.appliedMealDeals.length > 0 && (
               <div className="mt-4 space-y-2">
@@ -619,8 +704,16 @@ export default function CartPage() {
           {/* ================================================================ */}
 
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <div className="rounded-xl border border-border/60 bg-card p-6 space-y-4">
-              <h2 className="font-semibold">Order Summary</h2>
+            {/* Culinary Glass Tier 3 (Phase 3, receipt treatment in 6B) —
+                sticky summary surface. Contents, calculations, and
+                behavior unchanged. */}
+            <div className="rounded-3xl glass-tier-3 border border-border/60 p-5 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-culinary-heading text-lg font-bold tracking-tight">Order Summary</h2>
+                <span className="rounded-full border border-culinary-outline-variant/60 bg-white/60 px-2 py-0.5 text-[10px] font-semibold text-culinary-on-surface-variant backdrop-blur-md">
+                  {itemCount} item{itemCount !== 1 ? "s" : ""}
+                </span>
+              </div>
 
               <Separator />
 
@@ -659,7 +752,7 @@ export default function CartPage() {
                       <div className="flex-1 min-w-0">
                         {isPartial ? (
                           <>
-                            <p className="text-xs font-semibold">Complete Your Meal</p>
+                            <p className="font-culinary-heading text-xs font-bold">Complete Your Meal</p>
                             <p className="text-[10px] text-muted-foreground mt-0.5">
                               Add {match.missingItems.map((m) =>
                                 m.quantity > 1 ? `${m.quantity}× ${m.name}` : m.name
@@ -668,7 +761,7 @@ export default function CartPage() {
                           </>
                         ) : (
                           <>
-                            <p className="text-xs font-semibold">Make it a Meal</p>
+                            <p className="font-culinary-heading text-xs font-bold">Make it a Meal</p>
                             <p className="text-[10px] text-muted-foreground mt-0.5">
                               {match.deal.qualifyingItems.map((qi) => qi.name).join(" + ")}
                             </p>
@@ -784,15 +877,16 @@ export default function CartPage() {
 
               <Separator />
 
-              <div className="flex justify-between text-base font-bold">
-                <span>Total</span>
-                <span>{formatCurrency(cart.total)}</span>
+              <div className="flex items-baseline justify-between">
+                <span className="font-culinary-heading text-base font-bold">Total</span>
+                <span className="font-culinary-heading text-2xl font-extrabold tracking-tight">{formatCurrency(cart.total)}</span>
               </div>
 
               {/* Checkout CTA */}
               <Button
                 size="lg"
-                className="w-full gap-2"
+                variant="crunch"
+                className="h-12 w-full gap-2 font-culinary-heading"
                 onClick={() => navigate(ROUTES.CHECKOUT)}
               >
                 Proceed to Checkout
@@ -836,7 +930,7 @@ export default function CartPage() {
           >
             <div className="mb-4 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              <h2 className="text-lg font-semibold">You might also like</h2>
+              <h2 className="font-culinary-heading text-lg font-bold tracking-tight">You might also like</h2>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {recommendedItems.slice(0, 6).map((item) => (

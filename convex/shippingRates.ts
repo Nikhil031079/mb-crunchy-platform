@@ -45,6 +45,165 @@ export const getByBusinessUnit = query({
 });
 
 // ============================================================================
+// Coverage Reporting (12D — read-only admin visibility)
+// ----------------------------------------------------------------------------
+// Pure slab analysis using the SAME inclusive semantics as the shipping
+// engine (minWeightGrams <= weight <= maxWeightGrams). Inactive or deleted
+// rates never count toward coverage. Overlaps/gaps are admin warnings only.
+// ============================================================================
+
+export interface SlabOverlap {
+  rateA: string;
+  rateB: string;
+  overlapFrom: number;
+  overlapTo: number;
+}
+
+export interface SlabGap {
+  /** Highest contiguously covered weight below the gap. */
+  coveredUpTo: number;
+  /** Lowest covered weight above the gap. */
+  resumesAt: number;
+}
+
+export interface SlabCoverage {
+  activeRates: number;
+  lowestActiveMin: number | null;
+  highestActiveMax: number | null;
+  overlaps: SlabOverlap[];
+  gaps: SlabGap[];
+}
+
+export function analyzeSlabs(
+  rates: Array<{
+    _id: string;
+    minWeightGrams: number;
+    maxWeightGrams: number;
+    status: string;
+    deletedAt?: number;
+  }>,
+): SlabCoverage {
+  const active = rates
+    .filter((r) => r.status === "active" && r.deletedAt === undefined)
+    .map((r) => ({ id: r._id, min: r.minWeightGrams, max: r.maxWeightGrams }))
+    .filter((r) => r.min <= r.max)
+    .sort((a, b) => a.min - b.min || a.max - b.max);
+
+  const overlaps: SlabOverlap[] = [];
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      const a = active[i];
+      const b = active[j];
+      if (b.min > a.max) break;
+      overlaps.push({
+        rateA: a.id,
+        rateB: b.id,
+        overlapFrom: Math.max(a.min, b.min),
+        overlapTo: Math.min(a.max, b.max),
+      });
+    }
+  }
+
+  const gaps: SlabGap[] = [];
+  let coveredUpTo: number | null = null;
+  for (const slab of active) {
+    if (coveredUpTo === null) {
+      coveredUpTo = slab.max;
+    } else if (slab.min > coveredUpTo + 1) {
+      gaps.push({ coveredUpTo, resumesAt: slab.min });
+      coveredUpTo = slab.max;
+    } else if (slab.max > coveredUpTo) {
+      coveredUpTo = slab.max;
+    }
+  }
+
+  return {
+    activeRates: active.length,
+    lowestActiveMin: active.length > 0 ? active[0].min : null,
+    highestActiveMax: coveredUpTo,
+    overlaps,
+    gaps,
+  };
+}
+
+export interface RateCoverageZone {
+  shippingZoneId: string;
+  activeRates: number;
+  ceiling: number | null;
+  overlaps: SlabOverlap[];
+  gaps: SlabGap[];
+}
+
+export interface RateCoverage {
+  total: number;
+  active: number;
+  inactive: number;
+  lowestActiveMin: number | null;
+  highestActiveMax: number | null;
+  overlaps: SlabOverlap[];
+  gaps: SlabGap[];
+  zones: RateCoverageZone[];
+}
+
+/**
+ * Read-only coverage summary for one business unit (12D). Single indexed
+ * read; no writes; superadmin/admin only.
+ */
+export const getCoverage = query({
+  args: {
+    sessionToken: v.string(),
+    businessUnitId: v.id("businessUnits"),
+  },
+  handler: async (ctx, args): Promise<RateCoverage> => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
+    const rates = await ctx.db
+      .query("shippingRates")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    const overall = analyzeSlabs(rates);
+    const byZone = new Map<string, typeof rates>();
+    for (const r of rates) {
+      const list = byZone.get(r.shippingZoneId as string) ?? [];
+      list.push(r);
+      byZone.set(r.shippingZoneId as string, list);
+    }
+    // Overlaps/gaps are only meaningful WITHIN a zone (the engine matches
+    // slabs per zone), so top-level lists flatten the per-zone findings.
+    const zones: RateCoverageZone[] = [...byZone.entries()].map(
+      ([shippingZoneId, zoneRates]) => {
+        const z = analyzeSlabs(zoneRates);
+        return {
+          shippingZoneId,
+          activeRates: z.activeRates,
+          ceiling: z.highestActiveMax,
+          overlaps: z.overlaps,
+          gaps: z.gaps,
+        };
+      },
+    );
+
+    return {
+      total: rates.length,
+      active: rates.filter(
+        (r) => r.status === "active" && r.deletedAt === undefined
+      ).length,
+      inactive: rates.filter(
+        (r) => !(r.status === "active" && r.deletedAt === undefined)
+      ).length,
+      lowestActiveMin: overall.lowestActiveMin,
+      highestActiveMax: overall.highestActiveMax,
+      overlaps: zones.flatMap((z) => z.overlaps),
+      gaps: zones.flatMap((z) => z.gaps),
+      zones,
+    };
+  },
+});
+
+// ============================================================================
 // Canonical Mart Shipping Quote
 // ============================================================================
 

@@ -164,8 +164,10 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = [
     children: [
       { label: "Offers", href: ROUTES.ADMIN.OFFERS, icon: "Tag" },
       { label: "Orders", href: ROUTES.ADMIN.ORDERS, icon: "ShoppingCart" },
+      { label: "Delivery Zones", href: ROUTES.ADMIN.DELIVERY_ZONES, icon: "Truck" },
       { label: "Serviceable Areas", href: ROUTES.ADMIN.MART_PINCODES, icon: "MapPin" },
       { label: "Shipping Pricing", href: ROUTES.ADMIN.SHIPPING_ZONES, icon: "Truck" },
+      { label: "Shipping Rates", href: ROUTES.ADMIN.SHIPPING_RATES, icon: "Truck" },
       { label: "Shipping Settings", href: ROUTES.ADMIN.SHIPPING_CONFIG, icon: "Settings" },
       { label: "Shiprocket", href: ROUTES.ADMIN.SHIPROCKET, icon: "Truck" },
       { label: "Reports", href: ROUTES.ADMIN.REPORTS, icon: "BarChart3" },
@@ -178,6 +180,7 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = [
     children: [
       { label: "Homepage Sections", href: ROUTES.ADMIN.HOMEPAGE_SECTIONS, icon: "LayoutTemplate" },
       { label: "Banners", href: ROUTES.ADMIN.BANNERS, icon: "Image" },
+      { label: "Flash Sales", href: ROUTES.ADMIN.FLASH_SALES, icon: "Zap" },
       { label: "Announcements", href: ROUTES.ADMIN.HAPPY_HOUR, icon: "Clock3" },
       { label: "Settings", href: ROUTES.ADMIN.SETTINGS, icon: "Settings" },
     ],

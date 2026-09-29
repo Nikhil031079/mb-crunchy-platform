@@ -58,11 +58,11 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
 
   if (isLoading) {
     return (
-      <section className="py-12 sm:py-16">
+      <section className="py-10 sm:py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-2 h-1 w-8 animate-pulse rounded-full bg-secondary" />
           <div className="mb-6 h-7 w-44 animate-pulse rounded bg-secondary" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
             {Array.from({ length: 5 }, (_, i) => (
               <ProductCardSkeleton key={i} compact />
             ))}
@@ -75,11 +75,11 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
   if (bestSellers.length === 0) return null;
 
   return (
-    <section id="best-sellers" className="py-12 sm:py-16">
+    <section id="best-sellers" className="py-10 sm:py-12 scroll-mt-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-2 flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-accent" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-accent">
+          <TrendingUp className="h-4 w-4 text-culinary-primary" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-culinary-primary">
             Top Picks
           </span>
         </div>
@@ -96,7 +96,8 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
           }
           size="sm"
         />
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {/* Stitch 4-column desktop grid (Phase 4C); mobile grid unchanged */}
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
           {bestSellers.map((item, index) => (
             <ProductCard
               key={item._id}

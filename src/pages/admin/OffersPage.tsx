@@ -28,6 +28,27 @@ import { EMPTY_MESSAGES } from "@/constants";
 
 const PAGE_SIZE = 8;
 
+/**
+ * Client-side validation for offer create/edit. Returns an error message
+ * for the first problem found, or null when the values are valid.
+ * Server checks in convex/offers.ts remain authoritative. Coupon-code
+ * uniqueness is server-side only (it needs a database lookup).
+ */
+export function validateOfferValues(values: OfferFormValues): string | null {
+  if (!values.businessUnitId) return "Select a business unit.";
+  const startsAt = new Date(values.startsAt).getTime();
+  const endsAt = new Date(values.endsAt).getTime();
+  if (Number.isNaN(startsAt) || Number.isNaN(endsAt)) return "Select a valid start and end date.";
+  if (endsAt <= startsAt) return "End date must be after the start date.";
+  if (values.discountType === "percentage" && (values.discountValue <= 0 || values.discountValue > 100)) {
+    return "Percentage discount must be between 1 and 100.";
+  }
+  if (values.discountType === "fixed" && values.discountValue < 0) {
+    return "Fixed discount must not be negative.";
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Mapping helpers — keep Convex document shapes out of the UI layer
 // ---------------------------------------------------------------------------
@@ -118,7 +139,8 @@ function toUpdateArgs(id: string, values: OfferFormValues) {
 
 export default function OffersPage() {
   const { getSessionToken } = useAdminAuth();
-  const allDocs = useQuery(api.offers.getAll);
+  const token = getSessionToken();
+  const allDocs = useQuery(api.offers.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const createOffer = useMutation(api.offers.create);
   const updateOffer = useMutation(api.offers.update);
@@ -126,7 +148,10 @@ export default function OffersPage() {
   const restoreOffer = useMutation(api.offers.restore);
 
   const isLoading = allDocs === undefined || allBUs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
 
   const [filters, setFilters] = useState<OfferFilters>({
     query: "",
@@ -141,6 +166,7 @@ export default function OffersPage() {
   const [editingOffer, setEditingOffer] = useState<Offer>();
   const [deleteTarget, setDeleteTarget] = useState<Offer>();
   const [restoreTarget, setRestoreTarget] = useState<Offer>();
+  const [isSaving, setIsSaving] = useState(false);
 
   const buMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -215,6 +241,13 @@ export default function OffersPage() {
   };
 
   const saveOffer = async (values: OfferFormValues) => {
+    if (isSaving) return;
+    const validationError = validateOfferValues(values);
+    if (validationError) {
+      setActionError({ title: "Could not save offer", message: validationError });
+      return;
+    }
+    setIsSaving(true);
     try {
       if (editingOffer) {
         await updateOffer({ ...toUpdateArgs(editingOffer.id, values), sessionToken: getSessionToken()! });
@@ -223,9 +256,9 @@ export default function OffersPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save offer"
-      );
+      setActionError({ title: "Could not save offer", message: err instanceof Error ? err.message : "Failed to save offer" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -235,9 +268,7 @@ export default function OffersPage() {
       await softDeleteOffer({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to archive offer"
-      );
+      setActionError({ title: "Could not delete offer", message: err instanceof Error ? err.message : "Failed to archive offer" });
     }
   };
 
@@ -247,9 +278,7 @@ export default function OffersPage() {
       await restoreOffer({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to restore offer"
-      );
+      setActionError({ title: "Could not restore offer", message: err instanceof Error ? err.message : "Failed to restore offer" });
     }
   };
 
@@ -264,6 +293,19 @@ export default function OffersPage() {
           Add offer
         </Button>
       </PageHeader>
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}>
+              <RefreshCw className="size-3.5" /> Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -386,6 +428,7 @@ export default function OffersPage() {
         businessUnits={businessUnitOptions}
         onOpenChange={setFormOpen}
         onSubmit={saveOffer}
+        isSaving={isSaving}
       />
       <OfferDialogs
         deleteTarget={deleteTarget}

@@ -17,6 +17,103 @@ function availableStock(doc: { stockQuantity: number; reservedStock?: number }) 
   return doc.stockQuantity - (doc.reservedStock ?? 0);
 }
 
+/** One inventory row plus the quantity an order line requires from it. */
+export interface InventoryReservationExpansion {
+  inventory: any;
+  quantity: number;
+}
+
+/**
+ * Resolve the inventory rows an order line reserves against.
+ *
+ * Established model: every reservation site works per order line against the
+ * inventory row keyed by (catalogItemId, variantName). Combo and Party Pack
+ * lines additionally carry server-side component references
+ * (combos.items / partyPacks.items), which this helper expands so bundle
+ * components participate in the same authoritative mechanism:
+ *
+ * 1. If a bundle-level inventory row exists for the line, it alone is
+ *    reserved (existing behavior preserved — never double-reserve).
+ * 2. Otherwise, for combo/partyPack lines, each component consumes its own
+ *    row ONLY when exactly one non-deleted inventory row exists for that
+ *    component catalog item. Zero rows (untracked/made-to-order) or multiple
+ *    rows (variant ambiguity) resolve to nothing — identical to today.
+ * 3. Required quantity is always ordered bundle quantity x component
+ *    required quantity (integers only; anything else resolves to nothing).
+ * 4. Identical rows are aggregated within the line.
+ *
+ * Returns an empty list when nothing is resolvable; callers keep the legacy
+ * `continue` (skip) behavior in that case. No client data is trusted: the
+ * bundle definition comes from the combos/partyPacks tables.
+ */
+export async function resolveInventoryReservations(
+  ctx: any,
+  line: {
+    catalogItemId: string;
+    variantName: string;
+    itemType?: string;
+    quantity: number;
+  },
+): Promise<InventoryReservationExpansion[]> {
+  const liveRows = await ctx.db
+    .query("inventory")
+    .withIndex("by_catalog_item", (q: any) =>
+      q.eq("catalogItemId", line.catalogItemId),
+    )
+    .filter((q: any) =>
+      q.and(
+        q.eq(q.field("variantName"), line.variantName),
+        q.eq(q.field("deletedAt"), undefined),
+      ),
+    )
+    .collect();
+  const bundleRow = liveRows[0] ?? null;
+  if (bundleRow) return [{ inventory: bundleRow, quantity: line.quantity }];
+
+  if (line.itemType !== "combo" && line.itemType !== "partyPack") return [];
+  if (!Number.isInteger(line.quantity) || line.quantity < 1) return [];
+
+  const catalogItem = await ctx.db.get(line.catalogItemId);
+  if (!catalogItem) return [];
+  const sourceTable =
+    line.itemType === "combo" ? "combos" : "partyPacks";
+  if (catalogItem.itemType && catalogItem.itemType !== line.itemType) return [];
+  if (typeof catalogItem.sourceId !== "string") return [];
+  const source = await ctx.db.get(catalogItem.sourceId);
+  if (!source || !Array.isArray(source.items) || source.items.length === 0) {
+    return [];
+  }
+
+  const aggregated = new Map<string, InventoryReservationExpansion>();
+  for (const component of source.items) {
+    if (!component || !component.catalogItemId) continue;
+    if (!Number.isInteger(component.quantity) || component.quantity < 1) {
+      continue;
+    }
+    const componentRows = await ctx.db
+      .query("inventory")
+      .withIndex("by_catalog_item", (q: any) =>
+        q.eq("catalogItemId", component.catalogItemId),
+      )
+      .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+    // Exactly one row: unambiguous. Zero (untracked) or multiple (variant
+    // ambiguity) resolve to nothing, preserving current behavior.
+    if (componentRows.length !== 1) continue;
+    const required = component.quantity * line.quantity;
+    const existing = aggregated.get(componentRows[0]._id);
+    if (existing) {
+      existing.quantity += required;
+    } else {
+      aggregated.set(componentRows[0]._id, {
+        inventory: componentRows[0],
+        quantity: required,
+      });
+    }
+  }
+  return [...aggregated.values()];
+}
+
 /** Log a stock movement to the audit trail. */
 export async function logMovement(
   ctx: any,

@@ -28,6 +28,8 @@ interface InventoryFormDialogProps {
   businessUnits: { id: string; name: string }[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: InventoryFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 function toFormValues(item?: InventoryRecord): InventoryFormValues {
@@ -46,7 +48,7 @@ function toFormValues(item?: InventoryRecord): InventoryFormValues {
   };
 }
 
-export function InventoryFormDialog({ open, item, catalogItems, businessUnits, onOpenChange, onSubmit }: InventoryFormDialogProps) {
+export function InventoryFormDialog({ open, item, catalogItems, businessUnits, onOpenChange, onSubmit, isSaving = false }: InventoryFormDialogProps) {
   const dialogKey = `${item?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(item);
 
@@ -65,6 +67,7 @@ export function InventoryFormDialog({ open, item, catalogItems, businessUnits, o
           catalogItems={catalogItems}
           businessUnits={businessUnits}
           isEditing={isEditing}
+          isSaving={isSaving}
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
         />
@@ -78,11 +81,12 @@ interface InventoryFormProps {
   catalogItems: { id: string; name: string; businessUnitId: string }[];
   businessUnits: { id: string; name: string }[];
   isEditing: boolean;
+  isSaving: boolean;
   onSubmit: (values: InventoryFormValues) => void;
   onCancel: () => void;
 }
 
-function InventoryForm({ item, catalogItems, businessUnits, isEditing, onSubmit, onCancel }: InventoryFormProps) {
+function InventoryForm({ item, catalogItems, businessUnits, isEditing, isSaving, onSubmit, onCancel }: InventoryFormProps) {
   const [values, setValues] = useState<InventoryFormValues>(() => toFormValues(item));
   const formId = useId();
   const update = <K extends keyof InventoryFormValues>(key: K, val: InventoryFormValues[K]) =>
@@ -177,7 +181,7 @@ function InventoryForm({ item, catalogItems, businessUnits, isEditing, onSubmit,
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" form={formId}>{isEditing ? "Save changes" : "Add item"}</Button>
+        <Button type="submit" form={formId} disabled={isSaving}>{isEditing ? "Save changes" : "Add item"}</Button>
       </DialogFooter>
     </>
   );

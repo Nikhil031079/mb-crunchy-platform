@@ -180,7 +180,9 @@ export const getActiveForCustomer = query({
 });
 
 export const getAll = query({
-  handler: async (ctx) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
     return await ctx.db
       .query("mealDeals")
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
@@ -391,6 +393,8 @@ export const create = mutation({
   handler: async (ctx, args) => {
     await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
+    if (!args.businessUnitId) throw new Error("Select a business unit.");
+
     for (const item of args.qualifyingItems) {
       const catalogItem = await ctx.db.get(item.catalogItemId);
       if (!catalogItem) {
@@ -401,8 +405,8 @@ export const create = mutation({
           `Catalog item "${catalogItem.name}" belongs to a different business unit`
         );
       }
-      if (item.quantity < 1) {
-        throw new Error("Qualifying item quantity must be at least 1");
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        throw new Error("Qualifying item quantity must be a whole number of at least 1");
       }
 
       if (item.alternatives && item.alternatives.length > 0) {
@@ -530,8 +534,8 @@ export const update = mutation({
             `Catalog item "${catalogItem.name}" belongs to a different business unit`
           );
         }
-        if (item.quantity < 1) {
-          throw new Error("Qualifying item quantity must be at least 1");
+        if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+          throw new Error("Qualifying item quantity must be a whole number of at least 1");
         }
 
         if (item.alternatives && item.alternatives.length > 0) {
@@ -630,54 +634,5 @@ export const restore = mutation({
       deletedAt: undefined,
       updatedAt: now,
     });
-  },
-});
-
-// ============================================================================
-// Server-side meal deal validation for order creation
-// ============================================================================
-
-export const validateMealDealForOrder = query({
-  args: {
-    mealDealId: v.id("mealDeals"),
-    cartItems: v.array(
-      v.object({
-        catalogItemId: v.id("catalogItems"),
-        quantity: v.number(),
-      })
-    ),
-  },
-  handler: async (ctx, args) => {
-    const deal = await ctx.db.get(args.mealDealId);
-    if (!deal || deal.status !== "active" || deal.deletedAt) {
-      return { valid: false, error: "Meal deal is no longer active" };
-    }
-
-    for (const qi of deal.qualifyingItems) {
-      const allowedIds = [qi.catalogItemId, ...((qi as any).alternatives ?? [])];
-      const cartItem = args.cartItems.find(
-        (ci) => allowedIds.includes(ci.catalogItemId)
-      );
-      if (!cartItem || cartItem.quantity < qi.quantity) {
-        return { valid: false, error: "Insufficient qualifying items" };
-      }
-    }
-
-    const individualTotal = deal.qualifyingItems.reduce(
-      (sum, qi) => {
-        const allowedIds = [qi.catalogItemId, ...((qi as any).alternatives ?? [])];
-        const cartItem = args.cartItems.find(
-          (ci) => allowedIds.includes(ci.catalogItemId)
-        );
-        return sum + (cartItem?.quantity ?? 0) * qi.quantity;
-      },
-      0
-    );
-
-    return {
-      valid: true,
-      dealPrice: deal.dealPrice,
-      individualTotal,
-    };
   },
 });

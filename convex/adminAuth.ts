@@ -6,7 +6,9 @@ import {
   createSessionToken,
   verifySessionToken,
   generateRecoveryKey,
+  sha256Hex,
 } from "./utils/crypto";
+import { findSessionByToken } from "./utils/adminAuth";
 
 // ============================================================================
 // Helpers
@@ -14,14 +16,15 @@ import {
 
 const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
-async function verifyAdminSession(ctx: any, sessionToken: string) {
+async function verifyAdminSession(
+  ctx: any,
+  sessionToken: string,
+  opts?: { upgradeLegacy?: boolean },
+) {
   const payload = await verifySessionToken(sessionToken);
   if (!payload) return null;
 
-  const session = await ctx.db
-    .query("adminSessions")
-    .withIndex("by_token", (q: any) => q.eq("token", sessionToken))
-    .first();
+  const session = await findSessionByToken(ctx, sessionToken, opts);
 
   if (!session) return null;
   if (session.expiresAt < Date.now()) {
@@ -52,7 +55,11 @@ export const hasAdmins = query({
 export const verifySession = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
-    const result = await verifyAdminSession(ctx, args.sessionToken);
+    // Queries cannot write: authenticate legacy rows without upgrading them
+    // (the upgrade happens on the next mutating call).
+    const result = await verifyAdminSession(ctx, args.sessionToken, {
+      upgradeLegacy: false,
+    });
     if (!result) return null;
     return {
       adminId: result.admin._id,
@@ -131,11 +138,11 @@ export const setup = mutation({
       updatedAt: now,
     });
 
-    // Create session
+    // Create session — 10F: persist tokenHash only, never the plaintext JWT.
     const token = await createSessionToken(adminId, args.username, args.role);
     await ctx.db.insert("adminSessions", {
       adminId,
-      token,
+      tokenHash: await sha256Hex(token),
       expiresAt: now + SESSION_EXPIRY_MS,
       createdAt: now,
     });
@@ -242,7 +249,7 @@ export const login = mutation({
     const token = await createSessionToken(admin._id, admin.username, admin.role);
     await ctx.db.insert("adminSessions", {
       adminId: admin._id,
-      token,
+      tokenHash: await sha256Hex(token),
       expiresAt: now + SESSION_EXPIRY_MS,
       createdAt: now,
     });
@@ -266,10 +273,7 @@ export const login = mutation({
 export const logout = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("adminSessions")
-      .withIndex("by_token", (q) => q.eq("token", args.sessionToken))
-      .first();
+    const session = await findSessionByToken(ctx, args.sessionToken);
     if (session) {
       await ctx.db.delete(session._id);
     }
@@ -292,8 +296,11 @@ export const logoutAllSessions = mutation({
       .withIndex("by_admin", (q) => q.eq("adminId", args.adminId))
       .collect();
 
+    // Identify the current session row directly: new rows carry no plaintext
+    // token, so comparison must be by row id, not by token value.
+    const current = await findSessionByToken(ctx, args.sessionToken);
     for (const session of sessions) {
-      if (session.token !== args.sessionToken) {
+      if (!current || session._id !== current._id) {
         await ctx.db.delete(session._id);
       }
     }
@@ -350,7 +357,7 @@ export const changeUsername = mutation({
     const token = await createSessionToken(result.admin._id, args.newUsername, result.admin.role);
     await ctx.db.insert("adminSessions", {
       adminId: result.admin._id,
-      token,
+      tokenHash: await sha256Hex(token),
       expiresAt: Date.now() + SESSION_EXPIRY_MS,
       createdAt: Date.now(),
     });
@@ -368,6 +375,12 @@ export const changePassword = mutation({
   handler: async (ctx, args) => {
     const result = await verifyAdminSession(ctx, args.sessionToken);
     if (!result) throw new Error("Unauthorized");
+
+    // 19E: same minimum length as the forgot-password flow (client in
+    // AdminForgotPasswordPage). Rejected before password verification.
+    if (args.newPassword.length < 8) {
+      throw new Error("Password must be at least 8 characters");
+    }
 
     const valid = await verifyPassword(
       args.currentPassword,
@@ -388,6 +401,29 @@ export const changePassword = mutation({
 });
 
 // ============================================================================
+// Queries — Recovery Key Issuance
+// ============================================================================
+
+/**
+ * Issue one cryptographically secure recovery key (10M).
+ *
+ * Uses the server-side WebCrypto generator — never Math.random(), never
+ * browser randomness, never a password-derived value. Read-only: nothing
+ * is persisted and nothing is logged; the plaintext is returned once so
+ * the caller can display it and submit only its hash via setup /
+ * createAdmin / createKitchenStaff / regenerateRecoveryKey. An unbound key
+ * is useless on its own (it becomes valid only when its hash is stored
+ * for an account), so this stays callable from the unauthenticated setup
+ * page like the rest of the onboarding flow.
+ */
+export const issueRecoveryKey = query({
+  args: {},
+  handler: async () => {
+    return { recoveryKey: generateRecoveryKey() };
+  },
+});
+
+// ============================================================================
 // Mutations — Password Reset (Recovery Key)
 // ============================================================================
 
@@ -404,8 +440,26 @@ export const resetPassword = mutation({
       .first();
 
     if (!admin) throw new Error("Admin not found");
+
+    // 10M: deactivated accounts cannot recover — enforced server-side for
+    // every role (including kitchen staff, which share this mutation).
+    // Rejected before key verification, password change, session churn,
+    // and before recording any brute-force attempt.
+    if (!admin.active) {
+      throw new Error("This account has been disabled.");
+    }
+
     if (!admin.recoveryKeyHash || !admin.recoveryKeySalt) {
       throw new Error("No recovery key configured for this account");
+    }
+
+    // 10M: same persisted 5-attempt / 15-minute protection as normal login.
+    // Recovery guesses share the login counters (fail-closed): excessive
+    // recovery guessing also locks password login for the window, and a
+    // successful recovery clears the state. Checked before the expensive
+    // PBKDF2 verification.
+    if (await checkBruteForce(ctx, args.username)) {
+      throw new Error("Account temporarily locked due to too many failed attempts. Try again in 15 minutes.");
     }
 
     const valid = await verifyPassword(
@@ -413,14 +467,26 @@ export const resetPassword = mutation({
       admin.recoveryKeyHash,
       admin.recoveryKeySalt,
     );
-    if (!valid) throw new Error("Invalid recovery key");
+    if (!valid) {
+      await recordFailedAttempt(ctx, args.username);
+      throw new Error("Invalid recovery key");
+    }
+
+    await clearAttempts(ctx, args.username);
 
     const now = Date.now();
     const { hash: pwHash, salt: pwSalt } = await hashPassword(args.newPassword);
 
+    // 10M: recovery credentials are single-use. The used key hash/salt are
+    // cleared (Convex patch undefined deletes the fields) so the same key
+    // can never perform a second reset. Rotation remains available via the
+    // session-gated regenerateRecoveryKey mutation. Password login is
+    // unaffected; only the recovery credential is consumed.
     await ctx.db.patch(admin._id, {
       passwordHash: pwHash,
       passwordSalt: pwSalt,
+      recoveryKeyHash: undefined,
+      recoveryKeySalt: undefined,
       updatedAt: now,
     });
 
@@ -433,11 +499,11 @@ export const resetPassword = mutation({
       await ctx.db.delete(session._id);
     }
 
-    // Create new session
+    // Create new session — 10F: tokenHash only, never the plaintext JWT.
     const token = await createSessionToken(admin._id, admin.username, admin.role);
     await ctx.db.insert("adminSessions", {
       adminId: admin._id,
-      token,
+      tokenHash: await sha256Hex(token),
       expiresAt: now + SESSION_EXPIRY_MS,
       createdAt: now,
     });

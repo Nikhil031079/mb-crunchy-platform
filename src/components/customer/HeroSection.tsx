@@ -111,7 +111,7 @@ function DefaultHeroContent({
         transition={{ duration: 0.5, delay: 0.2 }}
         className={cn(
           "text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl",
-          "drop-shadow-lg"
+          "drop-shadow-lg font-culinary-heading"
         )}
       >
         {title ?? `Welcome to ${SITE_NAME}`}
@@ -152,14 +152,9 @@ function DefaultHeroContent({
           action.href ? (
             <Link key={action.label} to={action.href}>
               <Button
-                variant={action.variant === "outline" ? "outline" : "default"}
+                variant={action.variant === "outline" ? "glass" : "crunch"}
                 size="lg"
-                className={cn(
-                  "rounded-full px-6 text-sm font-semibold shadow-lg",
-                  action.variant === "outline"
-                    ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-                    : "bg-white text-foreground hover:bg-white/90"
-                )}
+                className="rounded-full px-6 text-sm font-semibold"
               >
                 {action.label}
               </Button>
@@ -167,15 +162,10 @@ function DefaultHeroContent({
           ) : (
             <Button
               key={action.label}
-              variant={action.variant === "outline" ? "outline" : "default"}
+              variant={action.variant === "outline" ? "glass" : "crunch"}
               size="lg"
               onClick={action.onClick}
-              className={cn(
-                "rounded-full px-6 text-sm font-semibold shadow-lg",
-                action.variant === "outline"
-                  ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-                  : "bg-white text-foreground hover:bg-white/90"
-              )}
+              className="rounded-full px-6 text-sm font-semibold"
             >
               {action.label}
             </Button>
@@ -293,7 +283,7 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.25 }}
-            className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl drop-shadow-lg text-balance"
+            className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl drop-shadow-lg text-balance font-culinary-heading"
           >
             {banner.title}
           </motion.h2>
@@ -331,14 +321,9 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
                 action.href ? (
                   <Link key={action.label} to={action.href}>
                     <Button
-                      variant={action.variant === "outline" ? "outline" : "default"}
+                      variant={action.variant === "outline" ? "glass" : "crunch"}
                       size="lg"
-                      className={cn(
-                        "rounded-full px-6 text-sm font-semibold shadow-lg",
-                        action.variant === "outline"
-                          ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-                          : "bg-white text-foreground hover:bg-white/90"
-                      )}
+                      className="rounded-full px-6 text-sm font-semibold"
                     >
                       {action.label}
                     </Button>
@@ -346,15 +331,10 @@ function BannerSlide({ banner }: { banner: HeroBanner }) {
                 ) : (
                   <Button
                     key={action.label}
-                    variant={action.variant === "outline" ? "outline" : "default"}
+                    variant={action.variant === "outline" ? "glass" : "crunch"}
                     size="lg"
                     onClick={action.onClick}
-                    className={cn(
-                      "rounded-full px-6 text-sm font-semibold shadow-lg",
-                      action.variant === "outline"
-                        ? "border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-                        : "bg-white text-foreground hover:bg-white/90"
-                    )}
+                    className="rounded-full px-6 text-sm font-semibold"
                   >
                     {action.label}
                   </Button>
@@ -418,7 +398,10 @@ export const HeroSection = memo(function HeroSection({
       className={cn(
         "relative w-full overflow-hidden",
         heightClass,
-        !hasBanners && "bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600"
+        // Culinary dark hearth (Phase 4) — deep espresso + saffron glow,
+        // matching the Stitch Kitchen hero panel. Carousel/photo banners
+        // keep their own imagery.
+        !hasBanners && "bg-gradient-to-br from-[#27130a] via-[#381e0e] to-[#1e1008]"
       )}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
@@ -485,10 +468,12 @@ export const HeroSection = memo(function HeroSection({
           )}
         </>
       ) : (
-        /* Default Hero — decorative background */
+        /* Default Hero — culinary decorative background */
         <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-600" />
-          <div className="absolute inset-0 opacity-20 bg-grid" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#27130a] via-[#381e0e] to-[#1e1008]" />
+          {/* Static ember glow accents (presentation only, no animation) */}
+          <div className="absolute -right-20 -top-24 h-96 w-96 rounded-full bg-amber-500/20 blur-3xl" />
+          <div className="absolute -bottom-24 -left-20 h-80 w-80 rounded-full bg-orange-700/20 blur-3xl" />
           {/* Decorative circles */}
           <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/5" />
           <div className="absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-white/5" />

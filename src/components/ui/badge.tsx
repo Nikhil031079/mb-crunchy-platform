@@ -17,6 +17,12 @@ const badgeVariants = cva(
           "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
           "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+        // Culinary Glassmorphism opt-in chips (Phase 2) — visual only.
+        // Presentation lives in .badge-* classes (src/index.css).
+        glass: "badge-glass",
+        "glass-selected": "badge-glass-selected",
+        basil: "badge-basil",
+        special: "badge-special",
       },
     },
     defaultVariants: {

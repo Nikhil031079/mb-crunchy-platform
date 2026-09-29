@@ -122,4 +122,54 @@ export interface ProductFilters {
   query: string;
   status: ProductStatus | "all";
   businessUnitId: string | "all";
+  shipping: "all" | "needs-weight" | "non-shippable";
+}
+
+// ---------------------------------------------------------------------------
+// Courier-shipping applicability (13D UI clarity)
+// ---------------------------------------------------------------------------
+// Mirrors the backend engine switch (orders.create §4a): only
+// serviceabilityMode === "pincode_region" (MB Mart courier model) uses
+// courier shipping weights. Kitchen (coordinate_radius / legacy undefined)
+// uses local delivery/pickup and never needs them. UI-only decision helper;
+// backend behavior is unchanged.
+// ---------------------------------------------------------------------------
+
+export function requiresCourierShipping(
+  serviceabilityMode?: string,
+): boolean {
+  return serviceabilityMode === "pincode_region";
+}
+
+// ---------------------------------------------------------------------------
+// Shipping weight status (12D admin visibility)
+// ---------------------------------------------------------------------------
+// Client-side mirror of the backend classifyProductWeight rule
+// (convex/products.ts): product weightGrams wins; otherwise every ACTIVE
+// variant must carry netWeightGrams; shippable === false is explicit
+// opt-out. Backend aggregates remain authoritative for the summary counts.
+// ---------------------------------------------------------------------------
+
+export type ProductShippingState = "ok" | "needs-weight" | "non-shippable";
+
+export function productShippingState(product: {
+  shippable?: boolean;
+  weightGrams?: number;
+  variants?: Array<{ active?: boolean; netWeightGrams?: string | number }>;
+}): ProductShippingState {
+  if (product.shippable === false) return "non-shippable";
+  if (typeof product.weightGrams === "number" && product.weightGrams > 0) {
+    return "ok";
+  }
+  const active = (product.variants ?? []).filter((v) => v.active);
+  if (
+    active.length > 0 &&
+    active.every((v) => {
+      const grams = typeof v.netWeightGrams === "number" ? v.netWeightGrams : Number(v.netWeightGrams);
+      return Number.isFinite(grams) && grams > 0;
+    })
+  ) {
+    return "ok";
+  }
+  return "needs-weight";
 }

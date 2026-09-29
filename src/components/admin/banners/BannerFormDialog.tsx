@@ -71,9 +71,11 @@ interface BannerFormDialogProps {
   onSubmit: (values: BannerFormValues) => void;
   /** When set, the content type is locked to this value (e.g. Happy Hour). */
   lockContentType?: ContentType;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
-export function BannerFormDialog({ open, banner, businessUnits, onOpenChange, onSubmit, lockContentType }: BannerFormDialogProps) {
+export function BannerFormDialog({ open, banner, businessUnits, onOpenChange, onSubmit, lockContentType, isSaving = false }: BannerFormDialogProps) {
   const isEditing = Boolean(banner);
   const dialogKey = `${banner?.id ?? "new"}-${open ? "open" : "closed"}`;
 
@@ -92,6 +94,7 @@ export function BannerFormDialog({ open, banner, businessUnits, onOpenChange, on
           onCancel={() => onOpenChange(false)}
           isEditing={isEditing}
           lockContentType={lockContentType}
+          isSaving={isSaving}
         />
       </DialogContent>
     </Dialog>
@@ -105,9 +108,10 @@ interface BannerFormProps {
   onSubmit: (values: BannerFormValues) => void;
   onCancel: () => void;
   lockContentType?: ContentType;
+  isSaving: boolean;
 }
 
-function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel, lockContentType }: BannerFormProps) {
+function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel, lockContentType, isSaving }: BannerFormProps) {
   const [values, setValues] = useState<BannerFormValues>(() => toFormValues(banner));
   const formId = useId();
   const update = <K extends keyof BannerFormValues>(key: K, value: BannerFormValues[K]) =>
@@ -136,11 +140,11 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel, lock
   return (
     <>
       <form id={formId} className="grid gap-4" onSubmit={handleSubmit}>
-        {/* Store + Type */}
+        {/* Store + Type — BU and Type are immutable after creation (19B). */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor={`${formId}-bu`}>Business Unit (optional)</Label>
-            <Select value={values.businessUnitId || "__global__"} onValueChange={(v) => update("businessUnitId", v === "__global__" ? "" : v)}>
+            <Select value={values.businessUnitId || "__global__"} onValueChange={(v) => update("businessUnitId", v === "__global__" ? "" : v)} disabled={isEditing}>
               <SelectTrigger id={`${formId}-bu`}><SelectValue placeholder="Global (all stores)" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__global__">Global (all stores)</SelectItem>
@@ -149,13 +153,16 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel, lock
                 ))}
               </SelectContent>
             </Select>
+            {isEditing && (
+              <p className="text-xs text-muted-foreground">Business unit is fixed after creation and cannot be changed.</p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor={`${formId}-type`}>Content Type</Label>
             <Select
               value={lockContentType ?? values.contentType}
               onValueChange={(v) => update("contentType", v as ContentType)}
-              disabled={Boolean(lockContentType)}
+              disabled={Boolean(lockContentType) || isEditing}
             >
               <SelectTrigger id={`${formId}-type`}><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -166,6 +173,9 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel, lock
             </Select>
             {lockContentType && (
               <p className="text-xs text-muted-foreground">Type is fixed to {contentTypeLabels[lockContentType]}.</p>
+            )}
+            {isEditing && (
+              <p className="text-xs text-muted-foreground">Content type is fixed after creation and cannot be changed.</p>
             )}
           </div>
         </div>
@@ -333,7 +343,7 @@ function BannerForm({ banner, businessUnits, isEditing, onSubmit, onCancel, lock
       </form>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" form={formId}>{isEditing ? "Save changes" : "Create banner"}</Button>
+        <Button type="submit" form={formId} disabled={isSaving}>{isEditing ? "Save changes" : "Create banner"}</Button>
       </DialogFooter>
     </>
   );

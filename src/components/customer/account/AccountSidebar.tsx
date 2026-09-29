@@ -41,23 +41,34 @@ export function AccountSidebar() {
   };
 
   const navContent = (
-    <nav className="space-y-1">
+    <nav className="space-y-1" aria-label="Account">
+      <p className="font-culinary-heading px-3 pb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        Account
+      </p>
       {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
+        const active = isActive(item.href);
         return (
           <Link
             key={item.href}
             to={item.href}
             onClick={() => setMobileOpen(false)}
+            aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              isActive(item.href)
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
+              active
+                ? "bg-culinary-primary/10 font-semibold text-culinary-primary-deep dark:text-culinary-primary"
+                : "font-medium text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10",
             )}
           >
-            <Icon className="h-4 w-4 shrink-0" />
-            {item.label}
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {active && (
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-culinary-primary"
+                aria-hidden="true"
+              />
+            )}
           </Link>
         );
       })}
@@ -73,6 +84,7 @@ export function AccountSidebar() {
           size="sm"
           onClick={() => setMobileOpen(!mobileOpen)}
           className="gap-2"
+          aria-expanded={mobileOpen}
         >
           {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           Menu
@@ -81,13 +93,13 @@ export function AccountSidebar() {
 
       {/* Mobile sidebar */}
       {mobileOpen && (
-        <div className="lg:hidden mb-6 rounded-xl border border-border/60 bg-card p-4">
+        <div className="lg:hidden mb-6 rounded-2xl glass-tier-1 p-2 sm:p-3">
           {navContent}
         </div>
       )}
 
       {/* Desktop sidebar */}
-      <aside className="hidden lg:block rounded-xl border border-border/60 bg-card p-4">
+      <aside className="hidden lg:block rounded-2xl glass-tier-1 p-2 sm:p-3">
         {navContent}
       </aside>
     </>

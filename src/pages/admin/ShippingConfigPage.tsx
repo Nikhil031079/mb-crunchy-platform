@@ -117,6 +117,10 @@ export default function ShippingConfigPage() {
               <p className="text-xs text-muted-foreground">
                 Orders with total product weight below this value will be billed at this minimum weight.
               </p>
+              {/* 12D: static explainer only — no behavior change. */}
+              <p className="text-xs text-muted-foreground">
+                Coverage at a glance lives on the Shipping Rates page (active slab range, overlaps, gaps).
+              </p>
             </div>
             <Button onClick={handleSave} disabled={saving} className="w-fit">
               {saving ? "Saving..." : config ? "Update configuration" : "Create configuration"}

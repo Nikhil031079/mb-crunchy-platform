@@ -57,7 +57,7 @@ export function CategoryEmptyState({
         <div className="absolute -right-4 -bottom-2 h-5 w-5 rounded-full bg-accent/10" />
       </div>
 
-      <h3 className="text-base font-semibold">{name} is on its way</h3>
+      <h3 className="font-culinary-heading text-base font-bold tracking-tight">{name} is on its way</h3>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">
         We&apos;re busy stocking this category with fresh products. Check back
         soon or explore what else we have in store.

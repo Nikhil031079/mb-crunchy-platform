@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   MessageCircle,
   BadgeCheck,
+  Printer,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ import { api } from "@convex/_generated/api";
 import { SITE_NAME, ROUTES, FALLBACK_WHATSAPP_NUMBER, DEFAULT_PICKUP_ESTIMATE } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency, checkKitchenServiceability, checkMartPincodeFormat } from "@/utils";
+import { printOrderReceipt } from "@/utils/orderReceipt";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 
@@ -58,6 +60,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import type {
   BusinessUnitSettings,
+  CartAppliedMealDeal,
   Customer,
   CustomerAddress,
   LoyaltySettings,
@@ -109,6 +112,7 @@ interface OrderConfirmationCardProps {
   orderNumber: string;
   title: string;
   subtitle: string;
+  businessName?: string;
   order?: {
     subtotal: number;
     discount: number;
@@ -119,6 +123,24 @@ interface OrderConfirmationCardProps {
     deliveryType?: string;
     paymentStatus: string;
     status: string;
+    orderNumber: string;
+    createdAt: number;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    deliveryAddress?: string;
+    destinationPincode?: string;
+    destinationCity?: string;
+    destinationState?: string;
+    items: Array<{
+      name: string;
+      variantName: string;
+      quantity: number;
+      unitPrice: number;
+      totalPrice: number;
+    }>;
+    offerCode?: string;
+    paymentMethod?: string;
   } | null;
 }
 
@@ -126,6 +148,7 @@ function OrderConfirmationCard({
   orderNumber,
   title,
   subtitle,
+  businessName,
   order,
 }: OrderConfirmationCardProps) {
   const orderSubtotal = order ? order.subtotal - order.discount : 0;
@@ -169,7 +192,7 @@ function OrderConfirmationCard({
         : "text-amber-600";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen culinary-canvas">
       <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -272,6 +295,17 @@ function OrderConfirmationCard({
                   Track Order
                 </Button>
               </Link>
+              {order && order.items ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => printOrderReceipt(order, businessName)}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print Receipt
+                </Button>
+              ) : null}
               <Link to="/">
                 <Button size="sm" className="gap-2">
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -338,6 +372,26 @@ function getOrCreateIdempotencyKey(): string {
 
 function clearIdempotencyKey() {
   sessionStorage.removeItem(IDEMPOTENCY_KEY_STORAGE);
+}
+
+// ============================================================================
+// Checkout meal-deal scoping — the cart may hold deals from another BU
+// (mixed cart). Only deals owned by the selected checkout BU may contribute
+// to displayed savings and submitted mealDealIds; anything else (including
+// legacy entries without a BU) is filtered out. Displayed savings and
+// submitted IDs always derive from this same set. Server-side 17F BU
+// validation in orders.create remains the final authority.
+// ============================================================================
+
+export function selectCheckoutMealDeals(
+  appliedMealDeals: CartAppliedMealDeal[] | undefined,
+  selectedCheckoutBU: string | null,
+): { deals: CartAppliedMealDeal[]; savings: number } {
+  const deals = (appliedMealDeals ?? []).filter(
+    (d) => d.businessUnitId === selectedCheckoutBU,
+  );
+  const savings = deals.reduce((sum, d) => sum + d.savings * d.quantity, 0);
+  return { deals, savings };
 }
 
 // ============================================================================
@@ -422,7 +476,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
   // Loading state
   if (tracked === undefined) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Loading your order...</p>
@@ -434,7 +488,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
   // Order not found
   if (!order) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
           <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
           <h1 className="text-2xl font-bold">Order not found</h1>
@@ -464,7 +518,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
   if (order.deliveryType !== "outside_area") {
     clearPersistedOrderConfirmation();
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
           <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
           <h1 className="text-2xl font-bold">Order Placed</h1>
@@ -491,7 +545,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
   // ── QUOTE PENDING ────────────────────────────────────────────────────────
   if (quoteStatus === "pending") {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen culinary-canvas">
         <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -575,20 +629,20 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
                   Chat with {SITE_NAME} on WhatsApp
                 </a>
               )}
-              <div className="flex gap-3 justify-center">
-                <Link to={ROUTES.TRACK_ORDER}>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Package className="h-3.5 w-3.5" />
-                    Track Order
-                  </Button>
-                </Link>
-                <Link to="/">
-                  <Button size="sm" className="gap-2">
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    Back to Home
-                  </Button>
-                </Link>
-              </div>
+            <div className="flex gap-3 justify-center">
+              <Link to={ROUTES.TRACK_ORDER}>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Package className="h-3.5 w-3.5" />
+                  Track Order
+                </Button>
+              </Link>
+              <Link to="/">
+                <Button size="sm" className="gap-2">
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back to Home
+                </Button>
+              </Link>
+            </div>
             </motion.div>
           </motion.div>
         </div>
@@ -602,7 +656,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
   const settings = (buSettings ?? null) as { paymentConfig?: { whatsappNumber?: string } } | null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen culinary-canvas">
       <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -744,6 +798,18 @@ export default function CheckoutPage() {
     if (!selectedCheckoutBU) return [];
     return cart.items.filter((item) => item.businessUnitId === selectedCheckoutBU);
   }, [cart.items, selectedCheckoutBU]);
+
+  // Meal deals scoped to the selected checkout BU. The cart may hold deals
+  // from another BU (mixed cart); those must neither display nor submit here.
+  // The server 17F BU guard remains the final authority.
+  const checkoutMealDeals = useMemo(
+    () => selectCheckoutMealDeals(cart.appliedMealDeals, selectedCheckoutBU).deals,
+    [cart.appliedMealDeals, selectedCheckoutBU],
+  );
+  const checkoutMealDealSavings = useMemo(
+    () => selectCheckoutMealDeals(cart.appliedMealDeals, selectedCheckoutBU).savings,
+    [cart.appliedMealDeals, selectedCheckoutBU],
+  );
 
   // Order confirmation lookup — after order creation, we subscribe to the
   // authoritative order record from Convex so the confirmation screen always
@@ -956,7 +1022,7 @@ export default function CheckoutPage() {
   const pricing = useMemo(() => {
     const subtotal = checkoutSubtotal;
     const couponDiscount = couponApplied?.valid ? (couponApplied.discount ?? 0) : 0;
-    const mealDealDiscount = cart.mealDealSavings ?? 0;
+    const mealDealDiscount = checkoutMealDealSavings;
     const discount = cart.discount + couponDiscount + loyaltyDiscount + mealDealDiscount;
     const afterDiscount = Math.max(0, subtotal - discount);
 
@@ -992,7 +1058,7 @@ export default function CheckoutPage() {
     const total = afterDiscount + deliveryFee + tax;
 
     return { subtotal, discount, afterDiscount, tax, taxRate, deliveryFee, freeDelivery, estimatedMinutes, total };
-  }, [checkoutSubtotal, cart.discount, cart.mealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount, isMartPincodeMode, martDelivery]);
+  }, [checkoutSubtotal, cart.discount, checkoutMealDealSavings, form.orderType, form.deliveryType, buSettings, deliveryPolicy, couponApplied, loyaltyDiscount, isMartPincodeMode, martDelivery]);
 
   // ==========================================================================
   // Defensive normalization — deliveryType is only meaningful for delivery orders.
@@ -1200,8 +1266,8 @@ export default function CheckoutPage() {
           paymentMethod: "razorpay",
           idempotencyKey: getOrCreateIdempotencyKey(),
           loyaltyPointsToRedeem: redeemPoints > 0 ? redeemPoints : undefined,
-          mealDealIds: cart.appliedMealDeals?.map((d) => d.mealDealId),
-          mealDealDiscount: (cart.mealDealSavings ?? 0) > 0 ? cart.mealDealSavings : undefined,
+          mealDealIds: checkoutMealDeals.map((d) => d.mealDealId),
+          mealDealDiscount: checkoutMealDealSavings > 0 ? checkoutMealDealSavings : undefined,
           customerLatitude: customerLocation.location?.latitude,
           customerLongitude: customerLocation.location?.longitude,
         });
@@ -1290,17 +1356,22 @@ export default function CheckoutPage() {
           message.includes("stock") ||
           message.includes("catalogItems") ||
           message.includes("does not match the expected Convex");
+        // 14D: surface server-side minimum-order rejections verbatim so the
+        // configured amount reaches the customer instead of a generic error.
+        const isMinOrderError = message.toLowerCase().includes("minimum order");
         toast.error("Checkout failed", {
           description: isAvailabilityError
             ? "Some items in your cart are no longer available. Please review your cart."
-            : "Please try again or contact support.",
+            : isMinOrderError
+              ? message
+              : "Please try again or contact support.",
         });
       } finally {
         setIsSubmitting(false);
         setPaymentStatus("idle");
       }
     },
-    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, checkoutItems, selectedCheckoutBU, effectiveDeliveryType]
+    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, checkoutItems, checkoutMealDeals, checkoutMealDealSavings, selectedCheckoutBU, effectiveDeliveryType]
   );
 
   // ==========================================================================
@@ -1377,7 +1448,7 @@ export default function CheckoutPage() {
     // Loading state while Convex query resolves
     if (confirmedOrder === undefined) {
       return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen culinary-canvas">
           <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Loading your order...</p>
@@ -1391,6 +1462,7 @@ export default function CheckoutPage() {
         orderNumber={orderSuccess.orderNumber ?? "Processing..."}
         title="Payment Submitted for Verification"
         subtitle="Your payment has been recorded. We'll start preparing your order shortly."
+        businessName={selectedBU?.name}
         order={confirmedOrder?.order}
       />
     );
@@ -1415,6 +1487,7 @@ export default function CheckoutPage() {
               ? "Your payment has been verified. We're preparing your order."
               : "Your payment has been recorded. We'll start preparing your order shortly."
           }
+          businessName={selectedBU?.name}
           order={order}
         />
       );
@@ -1423,7 +1496,7 @@ export default function CheckoutPage() {
     // Persisted order exists but Convex query is still loading
     if (persistedOrder) {
       return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen culinary-canvas">
           <div className="mx-auto max-w-lg px-4 py-16 sm:px-6 lg:px-8 text-center space-y-4">
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Loading your order...</p>
@@ -1434,7 +1507,7 @@ export default function CheckoutPage() {
 
     // Genuinely empty cart
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen culinary-canvas flex items-center justify-center">
         <EmptyState
           title="Your cart is empty"
           description="Add some items before checking out."
@@ -1454,8 +1527,30 @@ export default function CheckoutPage() {
   // ==========================================================================
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="min-h-screen culinary-canvas">
+      {/* Frosted breadcrumb strip — real checkout info only */}
+      <div className="border-b border-white/60 bg-white/40 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-label="Breadcrumb">
+            <Link
+              to={ROUTES.CART}
+              className="transition-colors hover:text-foreground"
+            >
+              Cart
+            </Link>
+            <span aria-hidden="true">/</span>
+            <span className="font-medium text-foreground">Checkout</span>
+            {selectedBU && (
+              <span className="ml-1 max-w-[160px] truncate rounded-full border border-culinary-outline-variant/60 bg-white/60 px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md">
+                {selectedBU.name}
+              </span>
+            )}
+          </nav>
+        </div>
+      </div>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Inner frame preserves the established form/summary layout */}
+        <div className="mx-auto w-full max-w-4xl">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -1474,7 +1569,7 @@ export default function CheckoutPage() {
             <span className="text-muted-foreground">/</span>
             <span className="text-sm font-medium">Checkout</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Checkout</h1>
+          <h1 className="font-culinary-heading text-2xl font-bold tracking-tight sm:text-3xl">Checkout</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Complete your order details below
           </p>
@@ -1600,10 +1695,10 @@ export default function CheckoutPage() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="rounded-xl border border-border/60 p-6 space-y-4"
+                  className="rounded-3xl glass-tier-1 border border-border/60 p-5 sm:p-6 space-y-4"
                 >
                   <div>
-                    <h2 className="font-semibold text-lg">Choose Store to Checkout</h2>
+                    <h2 className="font-culinary-heading text-lg font-bold tracking-tight">Choose Store to Checkout</h2>
                     <p className="text-sm text-muted-foreground mt-1">
                       Your cart contains items from different stores. Please checkout each store separately.
                     </p>
@@ -1623,7 +1718,7 @@ export default function CheckoutPage() {
                           key={buId}
                           type="button"
                           onClick={() => setSelectedCheckoutBU(buId)}
-                          className="flex items-start gap-4 rounded-xl border border-border/60 bg-card p-5 text-left transition-all hover:border-primary hover:bg-primary/5 hover:ring-1 hover:ring-primary cursor-pointer"
+                          className="flex items-start gap-4 rounded-2xl glass-tier-1 border border-border/60 p-5 text-left transition-all hover:border-primary hover:bg-primary/5 hover:ring-1 hover:ring-primary cursor-pointer"
                         >
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                             {bu?.serviceabilityMode === "pincode_region" ? (
@@ -1633,9 +1728,9 @@ export default function CheckoutPage() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold">{bu?.name ?? "Store"}</p>
+                            <p className="truncate font-culinary-heading font-bold">{bu?.name ?? "Store"}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {buItemCount} item{buItemCount !== 1 ? "s" : ""} · {formatCurrency(buSubtotal)}
+                              {buItemCount} item{buItemCount !== 1 ? "s" : ""} · <span className="font-semibold text-foreground">{formatCurrency(buSubtotal)}</span>
                             </p>
                           </div>
                           <ArrowLeft className="h-4 w-4 text-muted-foreground rotate-180 shrink-0 mt-1" />
@@ -1666,9 +1761,9 @@ export default function CheckoutPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.05 }}
-                className="rounded-xl border border-border/60 p-6"
+                className="rounded-2xl glass-tier-1 border border-border/60 p-5 sm:p-6"
               >
-                <h2 className="font-semibold mb-4">Contact Information</h2>
+                <h2 className="font-culinary-heading font-bold mb-4">Contact Information</h2>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -1722,9 +1817,9 @@ export default function CheckoutPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.1 }}
-                className="rounded-xl border border-border/60 p-6"
+                className="rounded-2xl glass-tier-1 border border-border/60 p-5 sm:p-6"
               >
-                <h2 className="font-semibold mb-4">Order Type</h2>
+                <h2 className="font-culinary-heading font-bold mb-4">Order Type</h2>
 
                 <RadioGroup
                   value={form.orderType}
@@ -1735,16 +1830,16 @@ export default function CheckoutPage() {
                 >
                   <label
                     className={cn(
-                      "flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition-all",
+                      "flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition-all",
                       form.orderType === "delivery"
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary"
                         : "border-border/60 bg-card hover:border-border"
                     )}
                   >
                     <RadioGroupItem value="delivery" className="sr-only" />
                     <div
                       className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-lg",
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                         form.orderType === "delivery"
                           ? "bg-primary/10 text-primary"
                           : "bg-secondary text-muted-foreground"
@@ -1752,8 +1847,8 @@ export default function CheckoutPage() {
                     >
                       <Truck className="h-5 w-5" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">Delivery</p>
+                    <div className="min-w-0">
+                      <p className="font-culinary-heading text-sm font-bold">Delivery</p>
                       <p className="text-xs text-muted-foreground">
                         Delivered to your door
                       </p>
@@ -1762,16 +1857,16 @@ export default function CheckoutPage() {
 
                   <label
                     className={cn(
-                      "flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition-all",
+                      "flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition-all",
                       form.orderType === "pickup"
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary"
                         : "border-border/60 bg-card hover:border-border"
                     )}
                   >
                     <RadioGroupItem value="pickup" className="sr-only" />
                     <div
                       className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-lg",
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                         form.orderType === "pickup"
                           ? "bg-primary/10 text-primary"
                           : "bg-secondary text-muted-foreground"
@@ -1779,8 +1874,8 @@ export default function CheckoutPage() {
                     >
                       <Store className="h-5 w-5" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">Pickup</p>
+                    <div className="min-w-0">
+                      <p className="font-culinary-heading text-sm font-bold">Pickup</p>
                       <p className="text-xs text-muted-foreground">
                         Collect from store
                       </p>
@@ -1799,8 +1894,8 @@ export default function CheckoutPage() {
                     transition={{ duration: 0.3 }}
                     className="overflow-hidden"
                   >
-                    <div className="rounded-xl border border-border/60 p-6 space-y-4">
-                      <h2 className="font-semibold">Delivery Details</h2>
+                    <div className="rounded-2xl glass-tier-1 border border-border/60 p-5 sm:p-6 space-y-4">
+                      <h2 className="font-culinary-heading font-bold">Delivery Details</h2>
 
                       {/* Mart Pincode Delivery — when BU uses pincode_region mode */}
                       {isMartPincodeMode ? (
@@ -1877,11 +1972,11 @@ export default function CheckoutPage() {
                            {/* Local Delivery */}
                             <label
                               className={cn(
-                                "flex items-center gap-3 rounded-lg border p-3 transition-all",
+                                "flex items-center gap-3 rounded-xl border p-3 transition-all sm:p-4",
                                 localDeliveryUnavailable
                                   ? "border-border/40 bg-secondary/30 opacity-60 cursor-not-allowed"
                                   : effectiveDeliveryType === "local"
-                                    ? "cursor-pointer border-primary bg-primary/5 ring-1 ring-primary"
+                                    ? "cursor-pointer border-primary bg-primary/5 shadow-sm ring-1 ring-primary"
                                     : "cursor-pointer border-border/60 bg-card hover:border-border"
                               )}
                             >
@@ -1932,14 +2027,14 @@ export default function CheckoutPage() {
                           </label>
 
                            {/* Outside Local Area */}
-                          <label
-                            className={cn(
-                              "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-all",
-                              effectiveDeliveryType === "outside_area"
-                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                                : "border-border/60 bg-card hover:border-border"
-                            )}
-                          >
+                           <label
+                             className={cn(
+                               "flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all sm:p-4",
+                               effectiveDeliveryType === "outside_area"
+                                 ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary"
+                                 : "border-border/60 bg-card hover:border-border"
+                             )}
+                           >
                             <RadioGroupItem value="outside_area" className="sr-only" />
                             <div
                               className={cn(
@@ -2035,9 +2130,9 @@ export default function CheckoutPage() {
                               <label
                                 key={addr._id}
                                 className={cn(
-                                  "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-all",
+                                  "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all sm:p-4",
                                   selectedAddressId === addr._id
-                                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                    ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary"
                                     : "border-border/60 bg-card hover:border-border"
                                 )}
                                 onClick={() => {
@@ -2131,9 +2226,9 @@ export default function CheckoutPage() {
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="rounded-xl border border-border/60 bg-secondary/30 p-6"
+                  className="rounded-2xl glass-tier-1 border border-border/60 bg-secondary/30 p-5 sm:p-6"
                 >
-                  <h2 className="font-semibold mb-2">Pickup Information</h2>
+                  <h2 className="font-culinary-heading font-bold mb-2">Pickup Information</h2>
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
                       Your order will be ready for pickup at the store. We&apos;ll
@@ -2165,10 +2260,12 @@ export default function CheckoutPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.15 }}
-                className="rounded-xl border border-border/60 bg-card p-6 space-y-4"
+                // Culinary Glass Tier 3 (Phase 3, receipt treatment in 6B).
+                // Contents, pricing, and behavior unchanged.
+                className="rounded-3xl glass-tier-3 border border-border/60 p-5 sm:p-6 space-y-4"
               >
                 <div className="flex items-center justify-between">
-                  <h2 className="font-semibold">Order Summary</h2>
+                  <h2 className="font-culinary-heading text-lg font-bold tracking-tight">Order Summary</h2>
                   <span className="text-xs text-muted-foreground">
                     {checkoutItems.reduce((sum, item) => sum + item.quantity, 0)} item{checkoutItems.reduce((sum, item) => sum + item.quantity, 0) !== 1 ? "s" : ""}
                   </span>
@@ -2246,8 +2343,8 @@ export default function CheckoutPage() {
                 <Separator />
 
                 {/* Coupon Code */}
-                <div className="space-y-2">
-                  <Label htmlFor="couponCode" className="text-sm font-medium">
+                <div className="space-y-2 rounded-2xl border border-border/50 bg-white/50 p-3 dark:bg-white/5">
+                  <Label htmlFor="couponCode" className="font-culinary-heading text-sm font-bold">
                     Coupon Code
                   </Label>
                   <div className="flex gap-2">
@@ -2289,7 +2386,8 @@ export default function CheckoutPage() {
                     )}
                   </div>
                   {couponApplied?.valid && couponApplied.discount && (
-                    <p className="text-xs text-emerald-600">
+                    <p className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
                       {couponApplied.title} — {formatCurrency(couponApplied.discount)} off
                     </p>
                   )}
@@ -2361,7 +2459,7 @@ export default function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium">
+                    <span className="font-medium tabular-nums">
                       {formatCurrency(pricing.subtotal)}
                     </span>
                   </div>
@@ -2456,9 +2554,9 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-lg font-bold">
-                  <span>{effectiveDeliveryType === "outside_area" ? "Amount Due Now" : "Total"}</span>
-                  <span>{effectiveDeliveryType === "outside_area" ? formatCurrency(pricing.subtotal - pricing.discount + pricing.tax) : formatCurrency(pricing.total)}</span>
+                <div className="flex items-baseline justify-between">
+                  <span className="font-culinary-heading text-lg font-bold">{effectiveDeliveryType === "outside_area" ? "Amount Due Now" : "Total"}</span>
+                  <span className="font-culinary-heading text-xl font-extrabold tracking-tight tabular-nums">{effectiveDeliveryType === "outside_area" ? formatCurrency(pricing.subtotal - pricing.discount + pricing.tax) : formatCurrency(pricing.total)}</span>
                 </div>
                 {effectiveDeliveryType === "outside_area" && (
                   <p className="text-[11px] text-muted-foreground text-center">
@@ -2470,8 +2568,9 @@ export default function CheckoutPage() {
                 <Button
                   type="submit"
                   size="lg"
+                  variant="crunch"
                   className={cn(
-                    "w-full text-base font-semibold h-12 transition-all",
+                    "h-12 w-full font-culinary-heading text-base transition-all",
                     isSubmitting && "opacity-80"
                   )}
                   disabled={
@@ -2554,6 +2653,7 @@ export default function CheckoutPage() {
             )}
           </div>
         </form>
+        </div>
       </div>
 
     </div>

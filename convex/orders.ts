@@ -11,14 +11,15 @@ import { requireAdminSession, requireAdminRole } from "./utils/adminAuth";
 import { canReadCustomerData, sanitizeOrderForCustomer } from "./utils/customerAccess";
 import { logActivity } from "./orderActivities";
 import type { ActivityAction } from "./orderActivities";
-import { logMovement } from "./inventory";
+import { logMovement, resolveInventoryReservations } from "./inventory";
 import { ensureCustomerByPhone } from "./customers";
-import { validateCouponInternal } from "./offers";
-import { getMaxRedeemableInternal, redeemLoyaltyInternal } from "./loyalty";
+import { validateCouponInternal, consumeCouponUsage } from "./offers";
+import { getMaxRedeemableInternal, redeemLoyaltyInternal, authorizeLoyaltySpend } from "./loyalty";
 import { notify } from "./notificationService";
 import { getAllowedTransitions } from "./orderWorkflow";
 import { isStoreCurrentlyOpen } from "./utils/storeHours";
 import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
+import { generateSecureBase36String } from "./utils/crypto";
 import { resolveMartShippingQuote } from "./shippingRates";
 import { executeBookingWorkflow } from "./courier/bookingWorkflow";
 
@@ -142,58 +143,61 @@ export const finalizePaidOrder = internalMutation({
           customerName: order.customerName,
         });
 
-        // Reserve stock
+        // Reserve stock (bundle lines expand to components; see inventory helper).
         for (const item of order.items) {
-          const inventory = await findInventoryForOrderItem(
-            ctx,
-            item.catalogItemId,
-            item.variantName,
-          );
+          const expansions = await resolveInventoryReservations(ctx, item);
+          for (const expansion of expansions) {
+            const inventory = expansion.inventory;
+            const quantity = expansion.quantity;
 
-          if (!inventory) continue;
+            if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+              throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+            }
 
-          if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-            throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+            const reserved = inventory.reservedStock ?? 0;
+            const avail = inventory.stockQuantity - reserved;
+            if (avail < quantity) {
+              throw new Error(
+                `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${quantity}`,
+              );
+            }
+
+            const newReserved = reserved + quantity;
+            await ctx.db.patch(inventory._id, {
+              reservedStock: newReserved,
+              available: (inventory.stockQuantity - newReserved) > 0,
+              updatedAt: now,
+            });
+
+            await logMovement(ctx, {
+              inventoryId: inventory._id,
+              businessUnitId: inventory.businessUnitId,
+              type: "reservation",
+              quantity,
+              previousStock: inventory.stockQuantity,
+              newStock: inventory.stockQuantity,
+              orderId: order._id,
+            });
+
+            await logActivity(ctx, {
+              orderId: order._id,
+              businessUnitId: inventory.businessUnitId,
+              action: "inventory_reserved",
+              newValue: `${quantity} × ${inventory.variantName}`,
+              actor: "system",
+              visibleToCustomer: true,
+            });
           }
-
-          const reserved = inventory.reservedStock ?? 0;
-          const avail = inventory.stockQuantity - reserved;
-          if (avail < item.quantity) {
-            throw new Error(
-              `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
-            );
-          }
-
-          const newReserved = reserved + item.quantity;
-          await ctx.db.patch(inventory._id, {
-            reservedStock: newReserved,
-            available: (inventory.stockQuantity - newReserved) > 0,
-            updatedAt: now,
-          });
-
-          await logMovement(ctx, {
-            inventoryId: inventory._id,
-            businessUnitId: inventory.businessUnitId,
-            type: "reservation",
-            quantity: item.quantity,
-            previousStock: inventory.stockQuantity,
-            newStock: inventory.stockQuantity,
-            orderId: order._id,
-          });
-
-          await logActivity(ctx, {
-            orderId: order._id,
-            businessUnitId: inventory.businessUnitId,
-            action: "inventory_reserved",
-            newValue: `${item.quantity} × ${inventory.variantName}`,
-            actor: "system",
-            visibleToCustomer: true,
-          });
         }
 
-        // Coupon usage
+        // Coupon usage — authoritative atomic consume (10C): throws if the
+        // limit was reached after order-time validation, rolling back the
+        // whole finalization instead of silently overshooting the limit.
         if (order.offerId) {
-          await ctx.runMutation(internal.offers.incrementUsage, { id: order.offerId });
+          const consumption = await consumeCouponUsage(ctx, order.offerId);
+          if (!consumption.consumed) {
+            throw new Error("This coupon has reached its usage limit");
+          }
         }
 
         // Loyalty redemption — idempotent via existing transaction check
@@ -491,25 +495,68 @@ export const getByPhoneAndOrderNumber = query({
 // Helpers
 // ============================================================================
 
-async function findInventoryForOrderItem(
-  ctx: any,
-  catalogItemId: string,
-  variantName: string,
-) {
-  const items = await ctx.db
-    .query("inventory")
-    .withIndex("by_catalog_item", (q: any) =>
-      q.eq("catalogItemId", catalogItemId),
-    )
-    .filter((q: any) =>
-      q.and(
-        q.eq(q.field("variantName"), variantName),
-        q.eq(q.field("deletedAt"), undefined),
-      ),
-    )
-    .collect();
+// NOTE: per-line inventory lookup now goes through
+// resolveInventoryReservations in ./inventory (bundle-aware expansion).
+// The local findInventoryForOrderItem copy was removed with it.
 
-  return items[0] ?? null;
+// ============================================================================
+// Order numbers (10K entropy + collision hardening)
+// ----------------------------------------------------------------------------
+// Format: MB-{4 base36 timestamp chars}{8 crypto-secure base36 chars}
+// (e.g. MB-XXXXABCDEFGH). Historical MB-XXXXYY numbers are untouched and
+// keep working — lookups are exact-match only; nothing parses the format.
+//
+// The random suffix comes from WebCrypto (generateSecureBase36String,
+// rejection-sampled, no modulo bias) — never Math.random(), never client
+// input. The timestamp component is a display/cycle aid, not entropy.
+//
+// Collision check: candidates are probed against the non-unique
+// by_order_number index with a bounded retry. This eliminates ordinary
+// collisions but is NOT a database-level uniqueness guarantee — two truly
+// concurrent mutations could still race between check and insert. The
+// 36^8 (~2.8 trillion) suffix space is the primary protection.
+// ============================================================================
+
+export const ORDER_NUMBER_PREFIX = "MB";
+export const ORDER_NUMBER_RANDOM_LENGTH = 8;
+export const ORDER_NUMBER_GENERATION_ATTEMPTS = 5;
+
+/**
+ * Build one order-number candidate. The randomSuffix override exists only
+ * as a deterministic seam for collision-retry tests; production callers
+ * omit it and always receive a crypto-secure suffix.
+ */
+export function buildOrderNumberCandidate(randomSuffix?: string): string {
+  const timestamp = Date.now().toString(36).toUpperCase().slice(-4);
+  const random =
+    randomSuffix ?? generateSecureBase36String(ORDER_NUMBER_RANDOM_LENGTH);
+  return `${ORDER_NUMBER_PREFIX}-${timestamp}${random}`;
+}
+
+/**
+ * Generate an order number with no live collision. Retries with a fresh
+ * crypto suffix on collision; throws safely (no insert) when the bounded
+ * attempts are exhausted. Must run inside the caller's mutation so the
+ * probe sees current committed state.
+ */
+export async function generateUniqueOrderNumber(ctx: {
+  db: MutationCtx["db"];
+}): Promise<string> {
+  for (
+    let attempt = 0;
+    attempt < ORDER_NUMBER_GENERATION_ATTEMPTS;
+    attempt++
+  ) {
+    const candidate = buildOrderNumberCandidate();
+    const existing = await ctx.db
+      .query("orders")
+      .withIndex("by_order_number", (q) => q.eq("orderNumber", candidate))
+      .first();
+    if (!existing) return candidate;
+  }
+  throw new Error(
+    "Could not generate a unique order number. Please try again."
+  );
 }
 
 // ============================================================================
@@ -653,8 +700,11 @@ type DeliveryZoneSettings = {
  * Pickup is free. Outside-area delivery has fee=0 (quote required).
  * When a deliveryZoneId is provided it is validated and used; otherwise the
  * global delivery policy is used for local delivery.
+ *
+ * Exported for focused unit tests (14D); production callers go through
+ * orders.create only.
  */
-async function computeDeliveryFee(
+export async function computeDeliveryFee(
   ctx: MutationCtx,
   args: {
     businessUnitId: Id<"businessUnits">;
@@ -685,6 +735,16 @@ async function computeDeliveryFee(
     .first();
 
   if (policy && policy.feeType === "fixed" && policy.fixedFee !== undefined) {
+    // 14D: server-authoritative minimum order. The client gate is display
+    // only; a tampered or stale client must still be rejected here, mirroring
+    // the legacy deliveryZones branch below.
+    if (policy.minimumOrder && args.afterDiscount < policy.minimumOrder) {
+      const remaining =
+        Math.round((policy.minimumOrder - args.afterDiscount) * 100) / 100;
+      throw new Error(
+        `Minimum order for local delivery is ₹${policy.minimumOrder}. Add ₹${remaining} more to your cart.`
+      );
+    }
     // Check free delivery threshold
     if (policy.freeDeliveryThreshold && args.afterDiscount >= policy.freeDeliveryThreshold) {
       return 0;
@@ -908,6 +968,13 @@ export const create = mutation({
           throw new Error("One or more meal deals are no longer active");
         }
 
+        // The deal must belong to the order's resolved business unit.
+        // The client BU is untrusted; effectiveBusinessUnitId is derived
+        // server-side from the catalog items above.
+        if (dealDoc.businessUnitId !== effectiveBusinessUnitId) {
+          throw new Error("Meal deal is not valid for this store");
+        }
+
         // Verify qualifying items exist in the order with sufficient quantities.
         // Allow primary catalogItemId OR any alternative.
         for (const qi of dealDoc.qualifyingItems) {
@@ -973,18 +1040,48 @@ export const create = mutation({
       authUserId: identity?.subject,
     });
 
+    // 10B — LOYALTY AUTHORIZATION BOUNDARY. The phone-resolved customerId
+    // above is association only and NEVER authorizes point redemption.
+    // Only a pre-existing customer record already linked to the caller's
+    // authenticated identity may redeem. Resolved BEFORE ensureCustomerByPhone
+    // could attach the caller to a phone-matched record, so a just-attached
+    // match can never qualify. Guests (no identity) always resolve null.
+    let loyaltyOwnerId: Id<"customers"> | null = null;
+    if (identity?.subject) {
+      const ownedCustomer = await ctx.db
+        .query("customers")
+        .withIndex("by_auth_user", (q) => q.eq("authUserId", identity.subject))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .first();
+      if (ownedCustomer) {
+        loyaltyOwnerId = ownedCustomer._id;
+      }
+    }
+
     const submittedNonCouponDiscount = args.discount - couponDiscount;
     if (submittedNonCouponDiscount < -PRICE_TOLERANCE) {
       throw new Error("Discount is out of date. Please review your cart.");
     }
-    const redeemable = await getMaxRedeemableInternal(ctx, {
-      customerId,
-      orderTotal: subtotal,
-    });
+    const redeemable = loyaltyOwnerId
+      ? await getMaxRedeemableInternal(ctx, {
+          customerId: loyaltyOwnerId,
+          orderTotal: subtotal,
+        })
+      : { maxPoints: 0, maxValue: 0, reason: "Sign in to redeem loyalty points" };
     const submittedLoyalty = submittedNonCouponDiscount - mealDealDiscount;
-    if (submittedLoyalty > redeemable.maxValue + PRICE_TOLERANCE) {
-      throw new Error("Loyalty discount exceeds your available points");
+    const loyaltyAuth = authorizeLoyaltySpend({
+      loyaltyOwnerId,
+      submittedLoyaltyValue: submittedLoyalty,
+      ownerMaxValue: redeemable.maxValue,
+      tolerance: PRICE_TOLERANCE,
+    });
+    if (loyaltyAuth.error) {
+      throw new Error(loyaltyAuth.error);
     }
+    // Normalize the stored request so the deferred outside-area finalization
+    // (which runs without user identity) can never redeem what was not
+    // authorized here. Owners keep their submitted value; others store 0.
+    const storedLoyaltyPoints = loyaltyOwnerId ? (args.loyaltyPointsToRedeem ?? 0) : 0;
     const loyaltyDiscount = Math.min(Math.max(submittedLoyalty, 0), redeemable.maxValue);
     const discount = couponDiscount + mealDealDiscount + loyaltyDiscount;
     if (Math.abs(args.discount - discount) > PRICE_TOLERANCE) {
@@ -1175,10 +1272,7 @@ export const create = mutation({
     // ----------------------------------------------------------------------
     // 5. Create the order with server-computed values.
     // ----------------------------------------------------------------------
-    const prefix = "MB";
-    const timestamp = Date.now().toString(36).toUpperCase().slice(-4);
-    const random = Math.random().toString(36).substring(2, 4).toUpperCase();
-    const orderNumber = `${prefix}-${timestamp}${random}`;
+    const orderNumber = await generateUniqueOrderNumber(ctx);
     const now = Date.now();
 
     const paymentStatus = "pending" as const;
@@ -1217,7 +1311,7 @@ export const create = mutation({
       paymentMethod: args.paymentMethod,
       offerId,
       offerCode: args.offerCode,
-      loyaltyPointsToRedeem: args.loyaltyPointsToRedeem,
+      loyaltyPointsToRedeem: storedLoyaltyPoints,
       idempotencyKey: args.idempotencyKey,
       shippingZoneId: shippingSnapshot?.shippingZoneId,
       shippingZoneName: shippingSnapshot?.shippingZoneName,
@@ -1243,63 +1337,70 @@ export const create = mutation({
       // Don't send NEW_ORDER notification or reserve inventory for awaiting_payment orders
       // These happen when payment is verified (finalizePaidOrder)
 
-      // Coupon usage — incremented exactly once per successfully created order.
-      // `create` is idempotency-keyed (a retry returns the existing order above),
-      // so a network retry or double submit can never double-count a redemption.
-      // Failed/cancelled orders never reach this point and never consume usage.
+      // Coupon usage — consumed atomically in THIS transaction (10C P2 race
+      // fix): limit check and increment share one OCC transaction, so a
+      // concurrent order retries against fresh state instead of overshooting.
+      // `create` is idempotency-keyed (a retry returns the existing order
+      // above), so a retry can never double-count. Failed/cancelled orders
+      // never reach this point. If the coupon exhausted between validation
+      // and now, creation rolls back — no discounted order proceeds without
+      // a real usage slot.
       if (offerId) {
-        await ctx.runMutation(internal.offers.incrementUsage, { id: offerId });
+        const consumption = await consumeCouponUsage(ctx, offerId);
+        if (!consumption.consumed) {
+          throw new Error("This coupon has reached its usage limit");
+        }
       }
 
       // Reserve stock for each item. Done inline in the create transaction so
       // the reservation and order insert are atomic — a failed reservation rolls
       // the whole order back instead of leaving an order with no stock held.
+      // Combo/Party Pack lines expand to their components through the same
+      // mechanism (bundle row wins when present; see inventory helper).
       for (const item of items) {
-        const inventory = await findInventoryForOrderItem(
-          ctx,
-          item.catalogItemId,
-          item.variantName,
-        );
+        const expansions = await resolveInventoryReservations(ctx, item);
+        for (const expansion of expansions) {
+          const inventory = expansion.inventory;
+          const quantity = expansion.quantity;
 
-        if (!inventory) continue;
+          if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+          }
 
-        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-          throw new Error(`Invalid quantity for "${inventory.variantName}"`);
+          const reserved = inventory.reservedStock ?? 0;
+          const avail = inventory.stockQuantity - reserved;
+          if (avail < quantity) {
+            throw new Error(
+              `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${quantity}`,
+            );
+          }
+
+          const newReserved = reserved + quantity;
+          await ctx.db.patch(inventory._id, {
+            reservedStock: newReserved,
+            available: (inventory.stockQuantity - newReserved) > 0,
+            updatedAt: now,
+          });
+
+          await logMovement(ctx, {
+            inventoryId: inventory._id,
+            businessUnitId: inventory.businessUnitId,
+            type: "reservation",
+            quantity,
+            previousStock: inventory.stockQuantity,
+            newStock: inventory.stockQuantity,
+            orderId,
+          });
+
+          await logActivity(ctx, {
+            orderId,
+            businessUnitId: inventory.businessUnitId,
+            action: "inventory_reserved",
+            newValue: `${quantity} × ${inventory.variantName}`,
+            actor: "system",
+            visibleToCustomer: true,
+          });
         }
-
-        const reserved = inventory.reservedStock ?? 0;
-        const avail = inventory.stockQuantity - reserved;
-        if (avail < item.quantity) {
-          throw new Error(
-            `Insufficient stock for "${inventory.variantName}". Available: ${avail}, requested: ${item.quantity}`,
-          );
-        }
-
-        const newReserved = reserved + item.quantity;
-        await ctx.db.patch(inventory._id, {
-          reservedStock: newReserved,
-          available: (inventory.stockQuantity - newReserved) > 0,
-          updatedAt: now,
-        });
-
-        await logMovement(ctx, {
-          inventoryId: inventory._id,
-          businessUnitId: inventory.businessUnitId,
-          type: "reservation",
-          quantity: item.quantity,
-          previousStock: inventory.stockQuantity,
-          newStock: inventory.stockQuantity,
-          orderId,
-        });
-
-        await logActivity(ctx, {
-          orderId,
-          businessUnitId: inventory.businessUnitId,
-          action: "inventory_reserved",
-          newValue: `${item.quantity} × ${inventory.variantName}`,
-          actor: "system",
-          visibleToCustomer: true,
-        });
       }
 
       const businessUnit = await ctx.db.get(effectiveBusinessUnitId);
@@ -1315,10 +1416,12 @@ export const create = mutation({
 
       // Atomic loyalty redemption — server-authoritative. Deducted within the
       // same transaction as order creation so a failure rolls back the order.
-      const loyaltyPoints = args.loyaltyPointsToRedeem ?? 0;
-      if (loyaltyPoints > 0 && customerId) {
+      // 10B: debited from the AUTHORIZED owner only; guests resolve null and
+      // can never reach redeemLoyaltyInternal with a positive amount.
+      const loyaltyPoints = storedLoyaltyPoints;
+      if (loyaltyPoints > 0 && loyaltyOwnerId) {
         await redeemLoyaltyInternal(ctx, {
-          customerId,
+          customerId: loyaltyOwnerId,
           orderId,
           orderNumber,
           points: loyaltyPoints,
@@ -1437,15 +1540,11 @@ export const updateStatus = mutation({
     // On confirm: deduct reserved stock from actual stock
     if (args.status === "confirmed" && order.status !== "confirmed") {
       for (const item of order.items) {
-        const inventory = await findInventoryForOrderItem(
-          ctx,
-          item.catalogItemId,
-          item.variantName,
-        );
-        if (inventory) {
+        const expansions = await resolveInventoryReservations(ctx, item);
+        for (const expansion of expansions) {
           await ctx.runMutation(internal.inventory.confirmReservation, {
-            inventoryId: inventory._id,
-            quantity: item.quantity,
+            inventoryId: expansion.inventory._id,
+            quantity: expansion.quantity,
             orderId: args.id,
           });
         }
@@ -1463,15 +1562,11 @@ export const updateStatus = mutation({
     ) {
       const deducted = order.status === "confirmed";
       for (const item of order.items) {
-        const inventory = await findInventoryForOrderItem(
-          ctx,
-          item.catalogItemId,
-          item.variantName,
-        );
-        if (inventory) {
+        const expansions = await resolveInventoryReservations(ctx, item);
+        for (const expansion of expansions) {
           await ctx.runMutation(internal.inventory.restoreStock, {
-            inventoryId: inventory._id,
-            quantity: item.quantity,
+            inventoryId: expansion.inventory._id,
+            quantity: expansion.quantity,
             orderId: args.id,
             deducted,
           });
@@ -1761,15 +1856,11 @@ export const softDelete = mutation({
     if (order.status !== "cancelled" && order.status !== "refunded") {
       const deducted = order.status === "confirmed";
       for (const item of order.items) {
-        const inventory = await findInventoryForOrderItem(
-          ctx,
-          item.catalogItemId,
-          item.variantName,
-        );
-        if (inventory) {
+        const expansions = await resolveInventoryReservations(ctx, item);
+        for (const expansion of expansions) {
           await ctx.runMutation(internal.inventory.restoreStock, {
-            inventoryId: inventory._id,
-            quantity: item.quantity,
+            inventoryId: expansion.inventory._id,
+            quantity: expansion.quantity,
             orderId: args.id,
             deducted,
           });

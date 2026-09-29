@@ -97,7 +97,11 @@ export default function BusinessUnitsPage() {
   const restoreBU = useMutation(api.businessUnits.restore);
 
   const isLoading = allDocs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [filters, setFilters] = useState<BusinessUnitFilters>({ query: "", status: "all" });
   const [sortKey, setSortKey] = useState<BusinessUnitSortKey>("displayOrder");
@@ -130,6 +134,8 @@ export default function BusinessUnitsPage() {
   const openCreateDialog = () => { setEditingBusinessUnit(undefined); setFormOpen(true); };
 
   const saveBusinessUnit = async (values: BusinessUnitFormValues) => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       if (editingBusinessUnit) {
         await updateBU({ ...toUpdateArgs(editingBusinessUnit.id, values), sessionToken: getSessionToken()! });
@@ -138,7 +144,9 @@ export default function BusinessUnitsPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save business unit");
+      setActionError({ title: "Could not save business unit", message: err instanceof Error ? err.message : "Failed to save business unit" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -148,7 +156,7 @@ export default function BusinessUnitsPage() {
       await softDeleteBU({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive business unit");
+      setActionError({ title: "Could not delete business unit", message: err instanceof Error ? err.message : "Failed to archive business unit" });
     }
   };
 
@@ -158,7 +166,7 @@ export default function BusinessUnitsPage() {
       await restoreBU({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to restore business unit");
+      setActionError({ title: "Could not restore business unit", message: err instanceof Error ? err.message : "Failed to restore business unit" });
     }
   };
 
@@ -167,6 +175,7 @@ export default function BusinessUnitsPage() {
       <Button size="sm" onClick={openCreateDialog}><Plus className="mr-1.5 size-4" />Add business unit</Button>
     </PageHeader>
 
+    {actionError ? <Alert variant="destructive" className="mb-4"><AlertCircle className="size-4" /><AlertTitle>{actionError.title}</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{actionError.message}<Button size="sm" variant="outline" onClick={() => setActionError(null)}><RefreshCw className="size-3.5" />Dismiss</Button></AlertDescription></Alert> : null}
     {error ? <Alert variant="destructive"><AlertCircle className="size-4" /><AlertTitle>Could not load business units</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{error}<Button size="sm" variant="outline" onClick={() => setError(null)}><RefreshCw className="size-4" />Try again</Button></AlertDescription></Alert> : <section className="overflow-hidden rounded-xl border" aria-label="Business unit management">
       <BusinessUnitToolbar query={filters.query} status={filters.status} onQueryChange={(query) => resetPageAndSetFilters({ ...filters, query })} onStatusChange={(status) => resetPageAndSetFilters({ ...filters, status })} onClear={() => resetPageAndSetFilters({ query: "", status: "all" })} />
       {isLoading ? <BusinessUnitTable businessUnits={[]} isLoading sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} onEdit={() => undefined} onDelete={() => undefined} onRestore={() => undefined} /> : visibleBusinessUnits.length === 0 ? <EmptyState icon={Building2} title="No business units found" description={filteredBusinessUnits.length === 0 && businessUnits.length > 0 ? "Try adjusting your search or filters." : EMPTY_MESSAGES.BUSINESS_UNITS} action={businessUnits.length === 0 ? { label: "Create business unit", onClick: openCreateDialog } : undefined} /> : <>
@@ -174,7 +183,7 @@ export default function BusinessUnitsPage() {
         <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><p>Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedBusinessUnits.length)} of {sortedBusinessUnits.length}</p><Pagination className="mx-0 w-auto"><PaginationContent><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2" aria-live="polite">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination></div>
       </>}
     </section>}
-    <BusinessUnitFormDialog open={formOpen} businessUnit={editingBusinessUnit} onOpenChange={setFormOpen} onSubmit={saveBusinessUnit} />
+    <BusinessUnitFormDialog open={formOpen} businessUnit={editingBusinessUnit} onOpenChange={setFormOpen} onSubmit={saveBusinessUnit} isSaving={isSaving} />
     <BusinessUnitDialogs deleteTarget={deleteTarget} restoreTarget={restoreTarget} onDeleteOpenChange={(open) => { if (!open) setDeleteTarget(undefined); }} onRestoreOpenChange={(open) => { if (!open) setRestoreTarget(undefined); }} onConfirmDelete={archiveBusinessUnit} onConfirmRestore={confirmRestore} />
   </div>;
 }

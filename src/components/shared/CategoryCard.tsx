@@ -224,7 +224,9 @@ export const CategoryCard = memo(function CategoryCard({
           <div className="absolute inset-0 flex flex-col justify-end p-3.5">
             <div className="flex items-end justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="truncate text-sm font-bold text-white leading-tight drop-shadow-sm">
+                {/* Culinary note (Phase 4): photo-tile cards keep their imagery;
+                    only the title adopts Outfit to match Stitch headings. */}
+                <h3 className="truncate text-sm font-bold text-white leading-tight drop-shadow-sm font-culinary-heading">
                   {category.name}
                 </h3>
                 {category.description && (

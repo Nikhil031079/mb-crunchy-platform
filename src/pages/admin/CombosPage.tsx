@@ -29,6 +29,30 @@ import { useAdminAuth } from "@/hooks/use-admin-auth";
 
 const PAGE_SIZE = 8;
 
+/**
+ * Client-side validation for combo create/edit. Returns an error message
+ * for the first problem found, or null when the values are valid.
+ * Drafts may hold temporarily blank rows while editing, but Save is
+ * blocked until every row is valid. Server checks in convex/combos.ts
+ * remain authoritative.
+ */
+export function validateComboValues(values: ComboFormValues): string | null {
+  if (!values.businessUnitId) return "Select a business unit.";
+  if (!Array.isArray(values.items) || values.items.length === 0) {
+    return "Add at least one item to the combo.";
+  }
+  for (let index = 0; index < values.items.length; index += 1) {
+    const item = values.items[index];
+    if (!item || !item.catalogItemId) {
+      return `Item ${index + 1} must reference a valid product.`;
+    }
+    if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+      return `Item ${index + 1} must have a whole quantity of at least 1.`;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Mapping helpers — keep Convex document shapes out of the UI layer
 // ---------------------------------------------------------------------------
@@ -122,7 +146,8 @@ function toUpdateArgs(id: string, values: ComboFormValues) {
 
 export default function CombosPage() {
   const { getSessionToken } = useAdminAuth();
-  const allDocs = useQuery(api.combos.getAll);
+  const token = getSessionToken();
+  const allDocs = useQuery(api.combos.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const allCatalogItems = useQuery(api.catalogItems.getAll);
   const createCombo = useMutation(api.combos.create);
@@ -132,7 +157,10 @@ export default function CombosPage() {
 
   const isLoading =
     allDocs === undefined || allBUs === undefined || allCatalogItems === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
 
   const [filters, setFilters] = useState<ComboFilters>({
     query: "",
@@ -146,6 +174,7 @@ export default function CombosPage() {
   const [editingCombo, setEditingCombo] = useState<Combo>();
   const [deleteTarget, setDeleteTarget] = useState<Combo>();
   const [restoreTarget, setRestoreTarget] = useState<Combo>();
+  const [isSaving, setIsSaving] = useState(false);
 
   const buMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -230,6 +259,13 @@ export default function CombosPage() {
   };
 
   const saveCombo = async (values: ComboFormValues) => {
+    if (isSaving) return;
+    const validationError = validateComboValues(values);
+    if (validationError) {
+      setActionError({ title: "Could not save combo", message: validationError });
+      return;
+    }
+    setIsSaving(true);
     try {
       const token = getSessionToken();
       if (editingCombo) {
@@ -239,9 +275,9 @@ export default function CombosPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save combo"
-      );
+      setActionError({ title: "Could not save combo", message: err instanceof Error ? err.message : "Failed to save combo" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -251,9 +287,7 @@ export default function CombosPage() {
       await softDeleteCombo({ id: deleteTarget.id as any, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to archive combo"
-      );
+      setActionError({ title: "Could not delete combo", message: err instanceof Error ? err.message : "Failed to archive combo" });
     }
   };
 
@@ -263,9 +297,7 @@ export default function CombosPage() {
       await restoreCombo({ id: restoreTarget.id as any, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to restore combo"
-      );
+      setActionError({ title: "Could not restore combo", message: err instanceof Error ? err.message : "Failed to restore combo" });
     }
   };
 
@@ -280,6 +312,19 @@ export default function CombosPage() {
           Add combo
         </Button>
       </PageHeader>
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}>
+              <RefreshCw className="size-3.5" /> Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -402,6 +447,7 @@ export default function CombosPage() {
         catalogItems={catalogItemOptions}
         onOpenChange={setFormOpen}
         onSubmit={saveCombo}
+        isSaving={isSaving}
       />
       <ComboDialogs
         deleteTarget={deleteTarget}

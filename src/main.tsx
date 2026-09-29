@@ -54,6 +54,7 @@ const MartPincodeServiceabilityPage = lazy(() => import("@/pages/admin/MartPinco
 const ShippingZonesPage = lazy(() => import("@/pages/admin/ShippingZonesPage"));
 const ShippingRatesPage = lazy(() => import("@/pages/admin/ShippingRatesPage"));
 const ShippingConfigPage = lazy(() => import("@/pages/admin/ShippingConfigPage"));
+const ShipmentsPage = lazy(() => import("@/pages/admin/ShipmentsPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
 const HomepageSectionsPage = lazy(() => import("@/pages/admin/HomepageSectionsPage"));
@@ -262,6 +263,7 @@ function AppRoutes() {
           <Route path="shipping-zones" element={<ShippingZonesPage />} />
           <Route path="shipping-rates" element={<ShippingRatesPage />} />
           <Route path="shipping-config" element={<ShippingConfigPage />} />
+          <Route path="shiprocket" element={<ShipmentsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="banners" element={<BannersPage />} />
           <Route path="homepage-sections" element={<HomepageSectionsPage />} />

@@ -54,7 +54,9 @@ function StockSkeleton() {
 }
 
 export function InventoryTable({ items, isLoading = false, sortKey, sortDirection, onSort, onAdjust, onEdit, onDelete }: InventoryTableProps) {
+  // 19D: horizontal scroll on narrow screens (Banner/MealDeal table pattern).
   return (
+    <div className="overflow-x-auto">
     <Table>
       <TableHeader>
         <TableRow>
@@ -97,5 +99,6 @@ export function InventoryTable({ items, isLoading = false, sortKey, sortDirectio
           ))}
       </TableBody>
     </Table>
+    </div>
   );
 }

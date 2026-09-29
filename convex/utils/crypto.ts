@@ -92,6 +92,20 @@ export async function verifyPassword(
   return result === 0;
 }
 
+/**
+ * SHA-256 hex digest for server-side session-token hashing (10F).
+ * One-way: the digest cannot reconstruct the JWT. Used so adminSessions
+ * persists tokenHash instead of the plaintext bearer token.
+ */
+export async function sha256Hex(input: string): Promise<string> {
+  const wc = getWebCrypto();
+  const digest = await wc.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(input),
+  );
+  return bufferToHex(digest);
+}
+
 export function generateRecoveryKey(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const wc = getWebCrypto();
@@ -116,6 +130,25 @@ function secureRandomIndex(wc: Crypto, maxExclusive: number): number {
     value = buf[0];
   } while (value >= limit);
   return value % maxExclusive;
+}
+
+const SECURE_BASE36_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/**
+ * Cryptographically secure uppercase base-36 string (10K order numbers).
+ * Built on secureRandomIndex (rejection sampling), so there is no modulo
+ * bias. Uses WebCrypto — server-side only, never client-generated.
+ */
+export function generateSecureBase36String(length: number): string {
+  if (!Number.isInteger(length) || length <= 0) {
+    throw new Error("generateSecureBase36String requires a positive length");
+  }
+  const wc = getWebCrypto();
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out += SECURE_BASE36_ALPHABET[secureRandomIndex(wc, SECURE_BASE36_ALPHABET.length)];
+  }
+  return out;
 }
 
 function base64UrlEncode(buffer: ArrayBuffer): string {

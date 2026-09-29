@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "convex/react";
 import { useState, useRef, useEffect } from "react";
+import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,6 +16,7 @@ import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
+import { ROUTES } from "@/constants";
 
 import type { OrderRecord } from "./types";
 import { STATUS_LABELS, DELIVERY_TYPE_LABELS, DELIVERY_QUOTE_STATUS_LABELS, DELIVERY_QUOTE_STATUS_COLORS } from "./types";
@@ -53,6 +55,17 @@ interface OrderDetailDialogProps {
 
 const toOrderId = (id: string) => id as unknown as Id<"orders">;
 
+/**
+ * Quote-draft session key (15D). The quote amount/notes are unsent local
+ * draft state living in the mounted dialog shell, so they must reset
+ * whenever the dialog session changes: close, reopen, or order switch.
+ * Changing the key drives the reset effect below; persisted quote data
+ * (from the order record) is untouched.
+ */
+export function quoteDraftSessionKey(open: boolean, orderId: string | undefined): string {
+  return `${orderId ?? "none"}-${open ? "open" : "closed"}`;
+}
+
 export function OrderDetailDialog({ open, order, onOpenChange, focusQuoteSection }: OrderDetailDialogProps) {
   const { getSessionToken } = useAdminAuth();
   const sessionToken = getSessionToken();
@@ -61,6 +74,15 @@ export function OrderDetailDialog({ open, order, onOpenChange, focusQuoteSection
   const [quoteNotes, setQuoteNotes] = useState("");
   const [isQuoting, setIsQuoting] = useState(false);
   const quoteAmountRef = useRef<HTMLInputElement>(null);
+
+  // 15D: clear the unsent quote draft whenever the dialog session changes
+  // (close, reopen, or a different order). Persisted quote data comes from
+  // the order record and is unaffected.
+  const draftSession = quoteDraftSessionKey(open, order?.id);
+  useEffect(() => {
+    setQuoteAmount("");
+    setQuoteNotes("");
+  }, [draftSession]);
 
   const updateDeliveryQuote = useMutation(api.orders.updateDeliveryQuote);
 
@@ -81,6 +103,23 @@ export function OrderDetailDialog({ open, order, onOpenChange, focusQuoteSection
       ? { sessionToken, orderId: toOrderId(order.id) }
       : "skip",
   );
+
+  // 15B cross-link: shipments for this order (zero, one, or many).
+  const orderShipments = useQuery(
+    api.courier.adminShipmentMonitoring.getShipmentsByOrder,
+    order && sessionToken
+      ? { sessionToken, orderId: toOrderId(order.id) }
+      : "skip",
+  ) as
+    | Array<{
+        _id: string;
+        shipmentStatus: string;
+        shipmentStatusLabel: string;
+        courierName: string | null;
+        awbNumber: string | null;
+        trackingUrl: string | null;
+      }>
+    | undefined;
 
   if (!order) return null;
 
@@ -134,9 +173,9 @@ export function OrderDetailDialog({ open, order, onOpenChange, focusQuoteSection
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="font-mono">{order.orderNumber}</DialogTitle>
-            <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <DialogTitle className="min-w-0 break-all font-mono">{order.orderNumber}</DialogTitle>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <PrintInvoice order={order} />
               <PrintPackingSlip order={order} />
               <PrintKitchenTicket order={order} />
@@ -228,6 +267,60 @@ export function OrderDetailDialog({ open, order, onOpenChange, focusQuoteSection
               <div className="flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{formatCurrency(order.total)}</span></div>
             </div>
           </section>
+
+          {/* Shipment cross-link (15B) — rendered only when shipment(s) exist. */}
+          {orderShipments !== undefined && orderShipments.length > 0 && (
+            <>
+              <Separator />
+              <section className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-foreground">
+                    Shipment{orderShipments.length === 1 ? "" : "s"}
+                  </h4>
+                  <Link
+                    to={ROUTES.ADMIN.SHIPROCKET}
+                    className="text-xs font-medium text-primary underline"
+                  >
+                    View in Shipments
+                  </Link>
+                </div>
+                <div className="space-y-2">
+                  {orderShipments.map((shipment) => (
+                    <div
+                      key={shipment._id}
+                      className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border p-3 text-sm"
+                    >
+                      <Badge variant="outline" className="text-xs">
+                        {shipment.shipmentStatusLabel}
+                      </Badge>
+                      {shipment.awbNumber && (
+                        <span>
+                          <span className="text-muted-foreground">AWB: </span>
+                          <span className="break-all font-mono">{shipment.awbNumber}</span>
+                        </span>
+                      )}
+                      {shipment.courierName && (
+                        <span>
+                          <span className="text-muted-foreground">Courier: </span>
+                          <span>{shipment.courierName}</span>
+                        </span>
+                      )}
+                      {shipment.trackingUrl && (
+                        <a
+                          href={shipment.trackingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline"
+                        >
+                          Track
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
 
           {/* Delivery Quote Entry (admin) */}
           {isOutsideArea && quotePending && (

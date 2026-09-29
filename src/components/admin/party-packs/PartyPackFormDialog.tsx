@@ -72,6 +72,8 @@ interface PartyPackFormDialogProps {
   catalogItems: CatalogItem[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: PartyPackFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 export function PartyPackFormDialog({
@@ -81,6 +83,7 @@ export function PartyPackFormDialog({
   catalogItems,
   onOpenChange,
   onSubmit,
+  isSaving = false,
 }: PartyPackFormDialogProps) {
   const dialogKey = `${partyPack?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(partyPack);
@@ -104,6 +107,7 @@ export function PartyPackFormDialog({
           businessUnits={businessUnits}
           catalogItems={catalogItems}
           isEditing={isEditing}
+          isSaving={isSaving}
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
         />
@@ -117,6 +121,7 @@ interface PartyPackFormProps {
   businessUnits: { id: string; name: string }[];
   catalogItems: CatalogItem[];
   isEditing: boolean;
+  isSaving: boolean;
   onSubmit: (values: PartyPackFormValues) => void;
   onCancel: () => void;
 }
@@ -126,6 +131,7 @@ function PartyPackForm({
   businessUnits,
   catalogItems,
   isEditing,
+  isSaving,
   onSubmit,
   onCancel,
 }: PartyPackFormProps) {
@@ -539,7 +545,7 @@ function PartyPackForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" form={formId}>
+        <Button type="submit" form={formId} disabled={isSaving}>
           {isEditing ? "Save changes" : "Create party pack"}
         </Button>
       </DialogFooter>

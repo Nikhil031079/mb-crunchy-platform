@@ -27,6 +27,37 @@ export const getAll = query({
 });
 
 // ============================================================================
+// Coverage Reporting (12D — read-only admin visibility)
+// ----------------------------------------------------------------------------
+// Single indexed read per business unit; no writes; superadmin/admin only.
+// ============================================================================
+
+export interface ZoneCoverage {
+  total: number;
+  active: number;
+  inactive: number;
+}
+
+export const getCoverage = query({
+  args: {
+    sessionToken: v.string(),
+    businessUnitId: v.id("businessUnits"),
+  },
+  handler: async (ctx, args): Promise<ZoneCoverage> => {
+    await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
+    const zones = await ctx.db
+      .query("shippingZones")
+      .withIndex("by_business_unit", (q) =>
+        q.eq("businessUnitId", args.businessUnitId)
+      )
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+    const active = zones.filter((z) => z.status === "active").length;
+    return { total: zones.length, active, inactive: zones.length - active };
+  },
+});
+
+// ============================================================================
 // Mutations
 // ============================================================================
 

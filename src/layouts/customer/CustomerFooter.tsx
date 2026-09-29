@@ -74,11 +74,8 @@ export function CustomerFooter({
   const openingHours = firstSettings?.openingHours;
 
   return (
-    <footer className="border-t border-border/40 bg-secondary/30">
-      {/* Top accent strip */}
-      <div className="h-1 w-full bg-gradient-to-r from-accent via-accent/60 to-transparent" />
-
-      <div className="mx-auto max-w-7xl px-4 pb-8 pt-14 sm:px-6 lg:px-8">
+    <footer className="border-t border-white/60 bg-[#FFF8F6] backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 dark:border-white/10 dark:bg-[#241C18] dark:supports-[backdrop-filter]:bg-[#241C18]/80">
+      <div className="mx-auto max-w-7xl px-4 pb-8 pt-12 sm:px-6 sm:pt-14 lg:px-8">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-12">
           {/* Brand */}
           <div className="space-y-4 lg:col-span-4">
@@ -97,7 +94,7 @@ export function CustomerFooter({
                   <ChefHat className="h-5 w-5" />
                 </div>
               )}
-              <span className="text-lg font-bold tracking-tight">{siteName}</span>
+              <span className="font-culinary-heading text-lg font-bold tracking-tight">{siteName}</span>
             </Link>
             <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
               {siteDescription || "Fresh food & grocery delivered fast. One cart, one checkout, one delivery."}
@@ -126,7 +123,7 @@ export function CustomerFooter({
               : Store;
             return (
               <div key={bu._id} className="space-y-4 lg:col-span-2">
-                <h4 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+                <h4 className="flex items-center gap-2 font-culinary-heading text-sm font-semibold tracking-tight">
                   <Icon className="h-4 w-4 text-accent" />
                   {bu.name}
                 </h4>
@@ -151,7 +148,7 @@ export function CustomerFooter({
 
           {/* Contact */}
           <div className="space-y-4 lg:col-span-2">
-            <h4 className="text-sm font-semibold tracking-tight">Contact</h4>
+            <h4 className="font-culinary-heading text-sm font-semibold tracking-tight">Contact</h4>
             <ul className="space-y-3">
               {supportPhone && (
                 <li className="flex items-start gap-2.5">
@@ -194,7 +191,7 @@ export function CustomerFooter({
 
           {/* Working Hours */}
           <div className="space-y-4 lg:col-span-2">
-            <h4 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            <h4 className="flex items-center gap-2 font-culinary-heading text-sm font-semibold tracking-tight">
               <Clock className="h-4 w-4 text-accent" />
               Working Hours
             </h4>

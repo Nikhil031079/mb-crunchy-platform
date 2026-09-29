@@ -17,19 +17,21 @@ interface BusinessUnitFormDialogProps {
   businessUnit?: BusinessUnit;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: BusinessUnitFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 const toFormValues = (businessUnit?: BusinessUnit): BusinessUnitFormValues => businessUnit ? { ...businessUnit, logoUrl: businessUnit.logoUrl ?? "" } : emptyValues;
 const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-export function BusinessUnitFormDialog({ open, businessUnit, onOpenChange, onSubmit }: BusinessUnitFormDialogProps) {
+export function BusinessUnitFormDialog({ open, businessUnit, onOpenChange, onSubmit, isSaving = false }: BusinessUnitFormDialogProps) {
   const dialogKey = `${businessUnit?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(businessUnit);
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-xl">
       <DialogHeader><DialogTitle>{isEditing ? "Edit business unit" : "Create business unit"}</DialogTitle><DialogDescription>{isEditing ? "Update the details used across the storefront and admin." : "Set up a business unit for your commerce platform."}</DialogDescription></DialogHeader>
-      <BusinessUnitForm key={dialogKey} businessUnit={businessUnit} onSubmit={onSubmit} onCancel={() => onOpenChange(false)} isEditing={isEditing} />
+      <BusinessUnitForm key={dialogKey} businessUnit={businessUnit} onSubmit={onSubmit} onCancel={() => onOpenChange(false)} isEditing={isEditing} isSaving={isSaving} />
     </DialogContent>
   </Dialog>;
 }
@@ -37,11 +39,12 @@ export function BusinessUnitFormDialog({ open, businessUnit, onOpenChange, onSub
 interface BusinessUnitFormProps {
   businessUnit?: BusinessUnit;
   isEditing: boolean;
+  isSaving: boolean;
   onSubmit: (values: BusinessUnitFormValues) => void;
   onCancel: () => void;
 }
 
-function BusinessUnitForm({ businessUnit, isEditing, onSubmit, onCancel }: BusinessUnitFormProps) {
+function BusinessUnitForm({ businessUnit, isEditing, isSaving, onSubmit, onCancel }: BusinessUnitFormProps) {
   const [values, setValues] = useState<BusinessUnitFormValues>(() => toFormValues(businessUnit));
   const [slugEdited, setSlugEdited] = useState(Boolean(businessUnit));
   const formId = useId();
@@ -155,6 +158,6 @@ function BusinessUnitForm({ businessUnit, isEditing, onSubmit, onCancel }: Busin
           )}
         </div>
       </form>
-      <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId}>{isEditing ? "Save changes" : "Create business unit"}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId} disabled={isSaving}>{isEditing ? "Save changes" : "Create business unit"}</Button></DialogFooter>
   </>;
 }

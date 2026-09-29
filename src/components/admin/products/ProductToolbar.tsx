@@ -14,7 +14,7 @@ interface ProductToolbarProps {
 }
 
 export function ProductToolbar({ filters, businessUnits, onFiltersChange, onClear }: ProductToolbarProps) {
-  const hasFilters = filters.query.length > 0 || filters.status !== "all" || filters.businessUnitId !== "all";
+  const hasFilters = filters.query.length > 0 || filters.status !== "all" || filters.businessUnitId !== "all" || filters.shipping !== "all";
 
   return (
     <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
@@ -42,6 +42,16 @@ export function ProductToolbar({ filters, businessUnits, onFiltersChange, onClea
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="archived">Archived</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filters.shipping} onValueChange={(value) => onFiltersChange({ ...filters, shipping: value as ProductFilters["shipping"] })}>
+          <SelectTrigger aria-label="Filter by shipping weight" className="w-full sm:w-44">
+            <SelectValue placeholder="All shipping" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All shipping</SelectItem>
+            <SelectItem value="needs-weight">Missing weight</SelectItem>
+            <SelectItem value="non-shippable">Not shippable</SelectItem>
           </SelectContent>
         </Select>
         {hasFilters && <Button type="button" variant="ghost" size="icon" onClick={onClear} aria-label="Clear search and filters"><X className="size-4" /></Button>}

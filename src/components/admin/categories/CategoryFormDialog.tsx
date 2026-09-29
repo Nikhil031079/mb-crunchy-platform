@@ -16,19 +16,21 @@ interface CategoryFormDialogProps {
   businessUnits: { id: string; name: string }[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: CategoryFormValues) => void;
+  /** Disables the submit button while a save mutation is pending. */
+  isSaving?: boolean;
 }
 
 const toFormValues = (category?: Category): CategoryFormValues => category ? { businessUnitId: category.businessUnitId, name: category.name, slug: category.slug, imageUrl: category.imageUrl ?? "", displayOrder: category.displayOrder, status: category.status } : emptyValues;
 const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-export function CategoryFormDialog({ open, category, businessUnits, onOpenChange, onSubmit }: CategoryFormDialogProps) {
+export function CategoryFormDialog({ open, category, businessUnits, onOpenChange, onSubmit, isSaving = false }: CategoryFormDialogProps) {
   const dialogKey = `${category?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(category);
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-xl">
       <DialogHeader><DialogTitle>{isEditing ? "Edit category" : "Create category"}</DialogTitle><DialogDescription>{isEditing ? "Update the category details." : "Add a new category to organize your products."}</DialogDescription></DialogHeader>
-      <CategoryForm key={dialogKey} category={category} businessUnits={businessUnits} onSubmit={onSubmit} onCancel={() => onOpenChange(false)} isEditing={isEditing} />
+      <CategoryForm key={dialogKey} category={category} businessUnits={businessUnits} onSubmit={onSubmit} onCancel={() => onOpenChange(false)} isEditing={isEditing} isSaving={isSaving} />
     </DialogContent>
   </Dialog>;
 }
@@ -37,11 +39,12 @@ interface CategoryFormProps {
   category?: Category;
   businessUnits: { id: string; name: string }[];
   isEditing: boolean;
+  isSaving: boolean;
   onSubmit: (values: CategoryFormValues) => void;
   onCancel: () => void;
 }
 
-function CategoryForm({ category, businessUnits, isEditing, onSubmit, onCancel }: CategoryFormProps) {
+function CategoryForm({ category, businessUnits, isEditing, isSaving, onSubmit, onCancel }: CategoryFormProps) {
   const [values, setValues] = useState<CategoryFormValues>(() => toFormValues(category));
   const [slugEdited, setSlugEdited] = useState(Boolean(category));
   const formId = useId();
@@ -64,6 +67,6 @@ function CategoryForm({ category, businessUnits, isEditing, onSubmit, onCancel }
       <div className="grid gap-2"><Label htmlFor={`${formId}-image`}>Image URL <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id={`${formId}-image`} value={values.imageUrl} onChange={(event) => update("imageUrl", event.target.value)} placeholder="https://..." /></div>
       <div className="grid gap-4 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor={`${formId}-status`}>Status</Label><Select value={values.status} onValueChange={(value) => update("status", value as CategoryStatus)}><SelectTrigger id={`${formId}-status`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent></Select></div><div className="grid gap-2"><Label htmlFor={`${formId}-order`}>Display order</Label><Input id={`${formId}-order`} type="number" min="1" value={values.displayOrder} onChange={(event) => update("displayOrder", Math.max(1, Number(event.target.value)))} required /></div></div>
     </form>
-    <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId}>{isEditing ? "Save changes" : "Create category"}</Button></DialogFooter>
+    <DialogFooter><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" form={formId} disabled={isSaving}>{isEditing ? "Save changes" : "Create category"}</Button></DialogFooter>
   </>;
 }

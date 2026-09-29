@@ -10,27 +10,12 @@ import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { logActivity } from "./orderActivities";
 import { notify } from "./notificationService";
+import { resolveInventoryReservations } from "./inventory";
 
 const DEFAULT_RESERVATION_TIMEOUT_MINUTES = 60;
 
-async function findInventoryForOrderItem(
-  ctx: MutationCtx,
-  catalogItemId: Id<"catalogItems">,
-  variantName: string,
-) {
-  const items = await ctx.db
-    .query("inventory")
-    .withIndex("by_catalog_item", (q) => q.eq("catalogItemId", catalogItemId))
-    .filter((q) =>
-      q.and(
-        q.eq(q.field("variantName"), variantName),
-        q.eq(q.field("deletedAt"), undefined),
-      ),
-    )
-    .collect();
-
-  return items[0] ?? null;
-}
+// NOTE: per-line inventory lookup now goes through
+// resolveInventoryReservations in ./inventory (bundle-aware expansion).
 
 // ============================================================================
 // Reservation Timeout Reclamation
@@ -122,20 +107,16 @@ export const cleanupExpiredReservations = internalMutation({
       const deducted = order.status === "confirmed";
 
       for (const item of order.items) {
-        const inventory = await findInventoryForOrderItem(
-          ctx,
-          item.catalogItemId,
-          item.variantName,
-        );
-        if (!inventory) continue;
-
-        await ctx.runMutation(internal.inventory.restoreStock, {
-          inventoryId: inventory._id,
-          quantity: item.quantity,
-          orderId: order._id,
-          deducted,
-        });
-        releasedItems++;
+        const expansions = await resolveInventoryReservations(ctx, item);
+        for (const expansion of expansions) {
+          await ctx.runMutation(internal.inventory.restoreStock, {
+            inventoryId: expansion.inventory._id,
+            quantity: expansion.quantity,
+            orderId: order._id,
+            deducted,
+          });
+          releasedItems++;
+        }
       }
 
       // Reverse coupon usage if the order had a consumed coupon.

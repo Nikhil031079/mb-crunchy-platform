@@ -19,11 +19,29 @@ import type {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { getOfferMarketingSettings } from "@/utils";
 
 const PAGE_SIZE = 8;
+
+/**
+ * Client-side validation for flash-sale create/edit. Returns an error
+ * message for the first problem found, or null when the values are valid.
+ * Server-side checks in convex/offers.ts remain authoritative.
+ */
+export function validateFlashSaleValues(values: OfferFormValues): string | null {
+  if (!values.businessUnitId) return "Select a business unit.";
+  const startsAt = new Date(values.startsAt).getTime();
+  const endsAt = new Date(values.endsAt).getTime();
+  if (Number.isNaN(startsAt) || Number.isNaN(endsAt)) return "Select a valid start and end date.";
+  if (endsAt <= startsAt) return "End date must be after the start date.";
+  if (values.discountType === "percentage" && (values.discountValue <= 0 || values.discountValue > 100)) {
+    return "Percentage discount must be between 1 and 100.";
+  }
+  return null;
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function fromConvex(doc: any, buMap: Map<string, string>): Offer {
@@ -49,7 +67,9 @@ function fromConvex(doc: any, buMap: Map<string, string>): Offer {
   };
 }
 
-function toUpdateArgs(id: string, values: OfferFormValues) {
+// 19B: shared homepage-visibility mapping (mirrors OffersPage.toSettingsArgs).
+// Both create and update preserve the same visibility settings the form exposes.
+function toSettingsArgs(values: OfferFormValues): Record<string, unknown> {
   const settings: Record<string, unknown> = {};
   if (values.featured) settings.featured = true;
   if (!values.homeVisible) settings.homeVisible = false;
@@ -57,6 +77,12 @@ function toUpdateArgs(id: string, values: OfferFormValues) {
   if (values.isFlashSale) settings.isFlashSale = true;
   if (values.flashSalePriority !== 0) settings.flashSalePriority = values.flashSalePriority;
   if (values.flashSaleFeatured) settings.flashSaleFeatured = true;
+  return settings;
+}
+
+function toUpdateArgs(id: string, values: OfferFormValues) {
+  // NOTE: applicableCatalogItemIds/applicableCategoryIds are intentionally
+  // omitted so unrelated edits never erase existing targeting configuration.
   return {
     id: id as any,
     title: values.title,
@@ -68,13 +94,11 @@ function toUpdateArgs(id: string, values: OfferFormValues) {
     maxDiscount: values.maxDiscount ? Number(values.maxDiscount) : undefined,
     startsAt: new Date(values.startsAt).getTime(),
     endsAt: new Date(values.endsAt).getTime(),
-    applicableCatalogItemIds: [],
-    applicableCategoryIds: [],
     usageLimit: values.usageLimit ? Number(values.usageLimit) : undefined,
     displayOrder: values.displayOrder,
     status: values.status,
     banner: values.banner || undefined,
-    settings,
+    settings: toSettingsArgs(values),
   };
 }
 
@@ -96,18 +120,15 @@ function toCreateArgs(values: OfferFormValues) {
     displayOrder: values.displayOrder,
     status: values.status,
     banner: values.banner || undefined,
-    settings: {
-      ...(values.isFlashSale ? { isFlashSale: true } : {}),
-      ...(values.flashSalePriority !== 0 ? { flashSalePriority: values.flashSalePriority } : {}),
-      ...(values.flashSaleFeatured ? { flashSaleFeatured: true } : {}),
-    },
+    settings: toSettingsArgs(values),
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export default function FlashSalesPage() {
   const { getSessionToken } = useAdminAuth();
-  const allDocs = useQuery(api.offers.getAll);
+  const token = getSessionToken();
+  const allDocs = useQuery(api.offers.getAll, token ? { sessionToken: token } : "skip");
   const allBUs = useQuery(api.businessUnits.getAll);
   const createOffer = useMutation(api.offers.create);
   const updateOffer = useMutation(api.offers.update);
@@ -115,7 +136,10 @@ export default function FlashSalesPage() {
   const restoreOffer = useMutation(api.offers.restore);
 
   const isLoading = allDocs === undefined || allBUs === undefined;
+  // 19C: `error` is the list-level load error (query failures). Mutation
+  // failures use `actionError` so the list stays mounted.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
 
   const [filters, setFilters] = useState<OfferFilters>({ query: "", status: "all", businessUnitId: "all", flashSale: "all" });
   const [sortKey, setSortKey] = useState<OfferSortKey>("displayOrder");
@@ -125,6 +149,7 @@ export default function FlashSalesPage() {
   const [editingOffer, setEditingOffer] = useState<Offer>();
   const [deleteTarget, setDeleteTarget] = useState<Offer>();
   const [restoreTarget, setRestoreTarget] = useState<Offer>();
+  const [isSaving, setIsSaving] = useState(false);
 
   const buMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -187,6 +212,13 @@ export default function FlashSalesPage() {
   const openCreateDialog = () => { setEditingOffer(undefined); setFormOpen(true); };
 
   const saveOffer = async (values: OfferFormValues) => {
+    if (isSaving) return;
+    const validationError = validateFlashSaleValues(values);
+    if (validationError) {
+      setActionError({ title: "Could not save flash sale", message: validationError });
+      return;
+    }
+    setIsSaving(true);
     try {
       if (editingOffer) {
         await updateOffer({ ...toUpdateArgs(editingOffer.id, values), sessionToken: getSessionToken()! });
@@ -195,7 +227,9 @@ export default function FlashSalesPage() {
       }
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save offer");
+      setActionError({ title: "Could not save flash sale", message: err instanceof Error ? err.message : "Failed to save offer" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -205,7 +239,7 @@ export default function FlashSalesPage() {
       await softDeleteOffer({ id: deleteTarget.id as Id<"offers">, sessionToken: getSessionToken()! });
       setDeleteTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive offer");
+      setActionError({ title: "Could not delete flash sale", message: err instanceof Error ? err.message : "Failed to archive offer" });
     }
   };
 
@@ -215,7 +249,7 @@ export default function FlashSalesPage() {
       await restoreOffer({ id: restoreTarget.id as Id<"offers">, sessionToken: getSessionToken()! });
       setRestoreTarget(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to restore offer");
+      setActionError({ title: "Could not restore flash sale", message: err instanceof Error ? err.message : "Failed to restore offer" });
     }
   };
 
@@ -230,6 +264,19 @@ export default function FlashSalesPage() {
           Add flash sale
         </Button>
       </PageHeader>
+
+      {actionError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="size-4" />
+          <AlertTitle>{actionError.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            {actionError.message}
+            <Button size="sm" variant="outline" onClick={() => setActionError(null)}>
+              <RefreshCw className="size-3.5" /> Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -250,6 +297,7 @@ export default function FlashSalesPage() {
             businessUnits={businessUnitOptions}
             onFiltersChange={resetPageAndSetFilters}
             onClear={() => resetPageAndSetFilters({ query: "", status: "all", businessUnitId: "all", flashSale: "all" })}
+            showTypeFilter={false}
           />
           {isLoading ? (
             <OfferTable
@@ -285,6 +333,13 @@ export default function FlashSalesPage() {
                   Showing {(currentPage - 1) * PAGE_SIZE + 1}–
                   {Math.min(currentPage * PAGE_SIZE, sortedOffers.length)} of {sortedOffers.length}
                 </p>
+                <Pagination className="mx-0 w-auto">
+                  <PaginationContent>
+                    <PaginationItem><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage((c) => c - 1)}>Previous</Button></PaginationItem>
+                    <PaginationItem><span className="px-2" aria-live="polite">Page {currentPage} of {pageCount}</span></PaginationItem>
+                    <PaginationItem><Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setPage((c) => c + 1)}>Next</Button></PaginationItem>
+                  </PaginationContent>
+                </Pagination>
                 <div className="flex items-center gap-1.5 text-xs">
                   <Flame className="size-3.5 text-orange-500" />
                   <span>Sorted by flash sale priority, highest first.</span>
@@ -301,6 +356,8 @@ export default function FlashSalesPage() {
         businessUnits={businessUnitOptions}
         onOpenChange={setFormOpen}
         onSubmit={saveOffer}
+        defaultFlashSale
+        isSaving={isSaving}
       />
       <OfferDialogs
         deleteTarget={deleteTarget}

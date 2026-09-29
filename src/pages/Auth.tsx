@@ -242,10 +242,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // ============================================================================
 
   const renderChoiceStep = () => (
-    <CardContent className="space-y-3">
+    <CardContent className="space-y-3 p-5 sm:p-6">
       <Button
-        variant="outline"
-        className="w-full"
+        variant="crunch"
+        className="h-11 w-full font-culinary-heading"
         onClick={() => setStep("phone")}
         disabled={isLoading}
       >
@@ -256,16 +256,16 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+          <span className="w-full border-t border-border/60" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card text-muted-foreground px-2">or</span>
+          <span className="glass-tier-1 rounded-full px-3 py-0.5 text-muted-foreground">or</span>
         </div>
       </div>
 
       <Button
         variant="ghost"
-        className="w-full"
+        className="h-11 w-full"
         onClick={handleGuestLogin}
         disabled={isLoading}
       >
@@ -281,11 +281,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // ============================================================================
 
   const renderPhoneStep = () => (
-    <CardContent className="space-y-4">
+    <CardContent className="space-y-4 p-5 sm:p-6">
       <div className="space-y-2">
         <Label htmlFor="phone">Mobile Number</Label>
         <div className="flex">
-          <span className="inline-flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+          <span className="inline-flex h-11 items-center rounded-l-xl border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
             +91
           </span>
           <Input
@@ -293,7 +293,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             id="phone"
             type="tel"
             placeholder="98765 43210"
-            className="rounded-l-none"
+            glass
+            className="h-11 rounded-l-none rounded-r-xl"
             value={phoneInput}
             onChange={(e) => {
               setPhoneInput(e.target.value.replace(/\D/g, "").slice(0, 10));
@@ -316,13 +317,17 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       </div>
 
       {error && (
-        <p className="text-sm text-destructive text-center" role="alert">
+        <p
+          className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-center text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </p>
       )}
 
       <Button
-        className="w-full"
+        variant="crunch"
+        className="h-11 w-full font-culinary-heading"
         onClick={handlePhoneSubmit}
         disabled={isLoading || phoneInput.length !== 10}
       >
@@ -336,7 +341,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
       <Button
         variant="ghost"
-        className="w-full"
+        className="h-11 w-full"
         onClick={handleBackToChoice}
         disabled={isLoading}
       >
@@ -351,17 +356,17 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // ============================================================================
 
   const renderOtpStep = () => (
-    <CardContent className="space-y-4">
-      <div className="text-center space-y-1">
+    <CardContent className="space-y-4 p-5 sm:p-6">
+      <div className="space-y-1 text-center">
         <p className="text-sm text-muted-foreground">
           Enter the {OTP_LENGTH}-digit code sent to
         </p>
-        <p className="text-sm font-medium">
+        <p className="font-culinary-heading text-sm font-bold tabular-nums">
           {formatIndianPhoneForDisplay(normalizedPhone)}
         </p>
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex justify-center rounded-2xl border border-border/50 bg-white/50 px-2 py-4 dark:bg-white/5">
         <InputOTP
           maxLength={OTP_LENGTH}
           value={otpValue}
@@ -390,13 +395,17 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       </div>
 
       {error && (
-        <p className="text-sm text-destructive text-center" role="alert">
+        <p
+          className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-center text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </p>
       )}
 
       <Button
-        className="w-full"
+        variant="crunch"
+        className="h-11 w-full font-culinary-heading"
         onClick={handleOtpSubmit}
         disabled={isLoading || otpValue.length !== OTP_LENGTH}
       >
@@ -408,7 +417,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         {isLoading ? "Verifying..." : "Verify OTP"}
       </Button>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <Button
           variant="ghost"
           size="sm"
@@ -424,6 +433,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           size="sm"
           onClick={handleResendOtp}
           disabled={isLoading || resendCooldown > 0}
+          className="tabular-nums"
         >
           <RotateCcw className="mr-1 h-3 w-3" />
           {resendCooldown > 0
@@ -460,25 +470,27 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { title, description } = stepTitles[step];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+    <div className="min-h-screen culinary-canvas flex items-center justify-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+        <div className="text-center mb-6 sm:mb-8">
           <div className="flex justify-center">
-            <img
-              src={logo || "/logo.svg"}
-              alt={siteName}
-              width={64}
-              height={64}
-              className="rounded-lg mb-4"
-            />
+            <span className="glass-tier-2 mb-4 flex h-16 w-16 items-center justify-center rounded-2xl">
+              <img
+                src={logo || "/logo.svg"}
+                alt={siteName}
+                width={40}
+                height={40}
+                className="rounded-lg"
+              />
+            </span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">{siteName}</h1>
-          <p className="text-muted-foreground mt-1">Welcome to the storefront</p>
+          <h1 className="font-culinary-heading text-2xl font-bold tracking-tight sm:text-3xl">{siteName}</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Welcome to the storefront</p>
         </div>
 
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle>{title}</CardTitle>
+        <Card className="rounded-3xl glass-tier-1">
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="font-culinary-heading text-xl font-bold tracking-tight">{title}</CardTitle>
             <CardDescription>{description}</CardDescription>
           </CardHeader>
 
