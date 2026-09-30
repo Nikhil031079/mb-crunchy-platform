@@ -13,7 +13,11 @@ interface CategoryNavBarProps {
   categories: EnrichedCategory[];
   /** Currently active category id (highlighted) */
   activeId: string;
-  /** Product count per category id */
+  /**
+   * Product count per category id. Only categories present in this record get
+   * a badge — callers that cannot supply real counts omit it entirely, so a
+   * default-zero badge is never shown (Phase 21C).
+   */
   counts?: Record<string, number>;
   onSelect: (categoryId: string) => void;
   className?: string;
@@ -45,7 +49,7 @@ export const CategoryNavBar = memo(function CategoryNavBar({
         >
           {categories.map((cat) => {
             const isActive = cat._id === activeId;
-            const count = counts?.[cat._id] ?? 0;
+            const count = counts?.[cat._id];
             return (
               <button
                 key={cat._id}
@@ -77,14 +81,16 @@ export const CategoryNavBar = memo(function CategoryNavBar({
                   />
                 </span>
                 <span className="whitespace-nowrap">{cat.name}</span>
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums",
-                    isActive ? "bg-culinary-primary/15 text-culinary-primary" : "bg-secondary text-muted-foreground"
-                  )}
-                >
-                  {count}
-                </span>
+                {count !== undefined && (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums",
+                      isActive ? "bg-culinary-primary/15 text-culinary-primary" : "bg-secondary text-muted-foreground"
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}

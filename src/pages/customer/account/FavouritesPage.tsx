@@ -8,6 +8,10 @@ import type { Id } from "@convex/_generated/dataModel";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/stores/cart";
+import {
+  useBusinessUnitSlugById,
+  useProductCategorySlugs,
+} from "@/hooks/use-product-routes";
 import { ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 
@@ -117,6 +121,11 @@ export default function FavouritesPage() {
     return new Map(catalogItems.map((ci) => [ci._id, ci]));
   }, [catalogItems]);
 
+  // Phase 21B — resolve the slugs the collection card needs to link to a
+  // canonical PDP instead of a dead-end /{businessUnit}/{productSlug} URL.
+  const businessUnitSlugById = useBusinessUnitSlugById();
+  const categorySlugBySourceId = useProductCategorySlugs(catalogItems);
+
   // Enrich collection items with catalog item data
   const enrichedItems: CustomerCollection[] = useMemo(() => {
     return currentItems.map((item) => {
@@ -128,10 +137,11 @@ export default function FavouritesPage() {
         price: catalogItem.price,
         image: catalogItem.coverImage || catalogItem.thumbnail,
         slug: catalogItem.slug,
-        businessUnitSlug: undefined, // Will be resolved from businessUnitId if needed
-      } as CustomerCollection & { name: string; price: number; image?: string; slug?: string; businessUnitSlug?: string };
+        businessUnitSlug: businessUnitSlugById.get(catalogItem.businessUnitId),
+        categorySlug: categorySlugBySourceId.get(catalogItem.sourceId),
+      } as CustomerCollection & { name: string; price: number; image?: string; slug?: string; businessUnitSlug?: string; categorySlug?: string };
     });
-  }, [currentItems, catalogItemMap]);
+  }, [currentItems, catalogItemMap, businessUnitSlugById, categorySlugBySourceId]);
   const currentTab = TABS.find((t) => t.id === activeTab)!;
 
   // Handle add to cart from collection

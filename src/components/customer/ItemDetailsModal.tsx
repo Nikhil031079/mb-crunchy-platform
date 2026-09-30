@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router";
+import { ArrowRight } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useCart } from "@/stores/cart";
@@ -8,7 +10,8 @@ import { Dialog, DialogContent, DialogFooter, DialogOverlay, DialogTitle } from 
 import { Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle } from "@/components/ui/sheet";
 
 import { cn } from "@/lib/utils";
-import { formatCurrency, calculateDiscount } from "@/utils";
+import { formatCurrency, calculateDiscount, buildProductUrl, buildCategoryUrl } from "@/utils";
+import { useCategorySlugById, useBusinessUnitSlugById } from "@/hooks/use-product-routes";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -32,10 +35,15 @@ export function ItemDetailsModal({
   onAddMealDeal,
 }: ItemDetailsModalProps) {
   const { addItem } = useCart();
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(true);
   const [isVariantOpen, setVariantOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | undefined>(undefined);
   const [quantity, setQuantity] = useState(1);
+
+  // Phase 21B — slugs for the "View Details" -> canonical PDP action
+  const categorySlugById = useCategorySlugById();
+  const businessUnitSlugById = useBusinessUnitSlugById();
 
   // Fetch the Product document using selectedItem.sourceId (links to product _id).
   // getByIds returns Product[] — extract [0] to get the single document.
@@ -86,6 +94,24 @@ export function ItemDetailsModal({
   const isProduct = selectedItem.itemType === "product";
   const isCombo = selectedItem.itemType === "combo";
   const isPartyPack = selectedItem.itemType === "partyPack";
+
+  // Phase 21B — canonical PDP destination for "View Details". Combos and party
+  // packs have no PDP of their own, so the action is only offered for products.
+  const pdpBuSlug = businessUnitSlugById.get(selectedItem.businessUnitId);
+  const pdpCategorySlug =
+    isProduct && product ? categorySlugById.get(product.categoryId) : undefined;
+  const pdpPath =
+    isProduct && pdpBuSlug && selectedItem.slug
+      ? pdpCategorySlug
+        ? buildProductUrl(pdpBuSlug, pdpCategorySlug, selectedItem.slug)
+        : buildCategoryUrl(pdpBuSlug, selectedItem.slug)
+      : undefined;
+
+  const handleViewDetails = () => {
+    setIsModalOpen(false);
+    onClose();
+    if (pdpPath) navigate(pdpPath);
+  };
 
   // For combos/partyPacks, prefer source document data for image/description/fallback
   const combo = isCombo ? (comboSource ?? (selectedItem as any)) : (selectedItem as any);
@@ -376,6 +402,12 @@ export function ItemDetailsModal({
         <DialogTitle className="text-xl font-semibold">{selectedItem?.name}</DialogTitle>
         {contentElement}
         <DialogFooter className="flex flex-col-reverse gap-3">
+          {pdpPath && (
+            <Button onClick={handleViewDetails} className="w-full gap-2 sm:w-auto">
+              View Details
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="outline" onClick={() => { setIsModalOpen(false); onClose(); }} className="w-full sm:w-auto">Close</Button>
         </DialogFooter>
       </DialogContent>
@@ -390,6 +422,12 @@ export function ItemDetailsModal({
         <SheetFooter>
           {contentElement}
           <div className="flex gap-2">
+            {pdpPath && (
+              <Button onClick={handleViewDetails} className="flex-1 gap-2">
+                View Details
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
             <Button variant="outline" onClick={() => { setIsModalOpen(false); onClose(); }}>Close</Button>
           </div>
         </SheetFooter>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -7,9 +7,6 @@ import {
   Package,
   Search,
   SlidersHorizontal,
-  Grid3X3,
-  List,
-  ArrowUpDown,
   ChevronDown,
   ArrowRight,
   Utensils,
@@ -36,7 +33,6 @@ import { useLocationStore } from "@/stores/location";
 import {
   SectionHeader,
   OfferBanner,
-  ProductCard,
   ProductCardSkeleton,
   ComboCard,
   ComboCardSkeleton,
@@ -45,6 +41,8 @@ import {
   CardGridSkeleton,
   StoreStatusBadge,
   FlashSalesSection,
+  CatalogGrid,
+  CatalogToolbar,
 } from "@/components/customer";
 import { MealDealVariantDialog } from "@/components/customer/MealDealVariantDialog";
 import { getStockStatus, getProductStockStatus } from "@/components/customer/StockBadge";
@@ -52,7 +50,6 @@ import type { StockInfo } from "@/components/customer/StockBadge";
 
 // Shared components
 import { CategoryIcon } from "@/components/shared/CategoryCard";
-import { SearchBar } from "@/components/shared/SearchBar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { getCategoryCatalog, enrichCategory } from "@/data/categories";
@@ -60,17 +57,12 @@ import { getCategoryCatalog, enrichCategory } from "@/data/categories";
 import type { EnrichedCategory } from "@/data/categories";
 
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { filterAndSortCatalogItems, type SortOption } from "@/lib/catalog";
 
 import type { BusinessUnit, Category, Offer, Combo, PartyPack, BusinessUnitSettings, InventoryItem, Product, CatalogItem, EnrichedMealDeal } from "@/types";
 import type { Id } from "@convex/_generated/dataModel";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
+import { useProductCategorySlugs } from "@/hooks/use-product-routes";
 import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
 
 /**
@@ -87,20 +79,10 @@ function isParentAllowed(
 }
 
 // ============================================================================
-// Sort Options
+// Sort Options — shared source of truth lives in @/lib/catalog (Phase 21C)
 // ============================================================================
 
-type SortOption = "default" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
-
 type CatalogMode = "all" | "products" | "combos" | "partyPacks";
-
-const SORT_OPTIONS: { label: string; value: SortOption }[] = [
-  { label: "Default", value: "default" },
-  { label: "Price: Low to High", value: "price-asc" },
-  { label: "Price: High to Low", value: "price-desc" },
-  { label: "Name: A to Z", value: "name-asc" },
-  { label: "Name: Z to A", value: "name-desc" },
-];
 
 // ============================================================================
 // BusinessUnitPage — Fully dynamic, slug-driven page for ANY business unit
@@ -115,7 +97,6 @@ export default function BusinessUnitPage() {
 
   const [catalogMode, setCatalogMode] = useState<CatalogMode>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("default");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
@@ -259,9 +240,10 @@ export default function BusinessUnitPage() {
 
   // Stock info helper — get stock status for a product's default variant
   const getStockInfoForProduct = useCallback(
-    (product: any): StockInfo | undefined => {
+    (item: CatalogItem): StockInfo | undefined => {
       if (!inventoryItems) return undefined;
-      const variantNames = product.variants?.map((v: any) => v.name) ?? ["Default"];
+      const variants = (item as CatalogItem & { variants?: { name: string }[] }).variants;
+      const variantNames = variants?.map((v) => v.name) ?? ["Default"];
       return getProductStockStatus(inventoryItems, variantNames);
     },
     [inventoryItems]
@@ -341,52 +323,24 @@ export default function BusinessUnitPage() {
     return map;
   }, [activeDeals, activePartyPacks, bySource]);
 
-  // Filter + sort catalog items
-  const filteredItems = useMemo(() => {
-    let items = [...(catalogItems ?? [])];
+  // Products only — combos/party packs have their own sections. The full
+  // store is always shown here; category scoping lives on the canonical
+  // CategoryPage. Search + sort compose through the shared pipeline.
+  const productItems = useMemo(
+    () => (catalogItems ?? []).filter((item) => item.itemType === "product"),
+    [catalogItems],
+  );
 
-    // Only show products in the main grid (combos/party packs have their own sections)
-    items = items.filter((item) => item.itemType === "product");
+  const filteredItems = useMemo(
+    () => filterAndSortCatalogItems(productItems, { searchQuery, sortBy }),
+    [productItems, searchQuery, sortBy],
+  );
 
-    // Filter by category — map products' categoryId to catalog items via sourceId
-    if (activeCategoryId && allProducts) {
-      const productIdsInCategory = new Set(
-        allProducts
-          .filter((p) => p.categoryId === activeCategoryId)
-          .map((p) => p._id)
-      );
-      items = items.filter((item) => productIdsInCategory.has(item.sourceId));
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      items = items.filter(
-        (item) =>
-          item.name.toLowerCase().includes(q) ||
-          item.description?.toLowerCase().includes(q) ||
-          item.tags?.some((t: string) => t.toLowerCase().includes(q))
-      );
-    }
-
-    // Sort
-    switch (sortBy) {
-      case "price-asc":
-        items.sort((a, b) => a.price - b.price);
-        break;
-      case "price-desc":
-        items.sort((a, b) => b.price - a.price);
-        break;
-      case "name-asc":
-        items.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case "name-desc":
-        items.sort((a, b) => b.name.localeCompare(a.name));
-        break;
-    }
-
-    return items;
-  }, [catalogItems, activeCategoryId, searchQuery, sortBy, allProducts]);
+  // Phase 21B — product sourceId → category slug for canonical PDP links.
+  // `allProducts` already carries every categoryId in this store, so nothing
+  // extra is fetched here.
+  const categorySlugBySourceId = useProductCategorySlugs(filteredItems, allProducts);
+  const categorySlugByFeaturedSourceId = useProductCategorySlugs(featuredItems, allProducts);
 
   // Filtered combos for search in combos mode
   const filteredCombos = useMemo(() => {
@@ -421,13 +375,8 @@ export default function BusinessUnitPage() {
   const handleCatalogModeChange = useCallback((mode: CatalogMode) => {
     setCatalogMode(mode);
     if (mode === "combos" || mode === "partyPacks") {
-      setActiveCategoryId(null);
       setSearchQuery("");
     }
-  }, []);
-
-  const handleCategoryChange = useCallback((categoryId: string | null) => {
-    setActiveCategoryId(categoryId);
   }, []);
 
   const scrollToSection = useCallback((id: string) => {
@@ -839,70 +788,14 @@ export default function BusinessUnitPage() {
 
       <div className="sticky top-16 z-40 border-b border-white/60 bg-white/55 backdrop-blur-lg dark:border-white/10 dark:bg-[#1A1412]/70">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {/* Search */}
-            <div className="w-full sm:max-w-sm">
-              <SearchBar
-                placeholder={`Search ${bu.name}...`}
-                onSearch={handleSearch}
-              />
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center gap-2">
-              {/* Sort */}
-              <Select
-                value={sortBy}
-                onValueChange={(val) => setSortBy(val as SortOption)}
-              >
-                <SelectTrigger className="h-9 w-[130px] text-xs gap-1">
-                  <ArrowUpDown className="h-3 w-3" />
-                  <SelectValue placeholder="Sort" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SORT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* View toggle */}
-              <div className="flex rounded-lg border border-border/60 overflow-hidden">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setViewMode("grid")}
-                  aria-pressed={viewMode === "grid"}
-                  aria-label="Grid view"
-                  className={cn(
-                    "h-11 w-11 rounded-none",
-                    viewMode === "grid"
-                      ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  <Grid3X3 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setViewMode("list")}
-                  aria-pressed={viewMode === "list"}
-                  aria-label="List view"
-                  className={cn(
-                    "h-11 w-11 rounded-none border-l border-border/60",
-                    viewMode === "list"
-                      ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  <List className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
+          <CatalogToolbar
+            placeholder={`Search ${bu.name}...`}
+            onSearch={handleSearch}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+          />
         </div>
       </div>
 
@@ -938,46 +831,57 @@ export default function BusinessUnitPage() {
       </div>
 
       {/* ================================================================ */}
-      {/* CATEGORY TABS                                                   */}
+      {/* CATEGORY NAVIGATION — canonical /{bu}/{category} routes (21C)     */}
+      {/*                                                                  */}
+      {/* Phase 21C decision: an intentional category selection navigates   */}
+      {/* to the canonical category URL (shareable, back/refresh-safe,      */}
+      {/* identical to the homepage) instead of silently filtering in-page. */}
       {/* ================================================================ */}
 
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
         {(catalogMode === "all" || catalogMode === "products") && enrichedCategories.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <nav
+            aria-label={`${bu.name} categories`}
+            className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none"
+          >
             <Button
-              variant={activeCategoryId === null ? "default" : "outline"}
+              asChild
+              variant="default"
               size="sm"
-              onClick={() => handleCategoryChange(null)}
               className="shrink-0 rounded-full text-xs"
             >
-              All
+              <Link to={`/${buSlug}`} aria-current="page">
+                All
+              </Link>
             </Button>
             {enrichedCategories.map((cat) => (
               <Button
                 key={cat._id}
-                variant={activeCategoryId === cat._id ? "default" : "outline"}
+                asChild
+                variant="outline"
                 size="sm"
-                onClick={() => handleCategoryChange(cat._id)}
                 className="shrink-0 rounded-full text-xs"
               >
-                {cat.catalog?.icon && (
-                  <span
-                    className={cn(
-                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white",
-                      cat.catalog.gradient
-                    )}
-                  >
-                    <CategoryIcon
-                      icon={cat.catalog.icon}
-                      name={cat.name}
-                      className="h-3 w-3"
-                    />
-                  </span>
-                )}
-                {cat.name}
+                <Link to={`/${buSlug}/${cat.slug}`}>
+                  {cat.catalog?.icon && (
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white",
+                        cat.catalog.gradient
+                      )}
+                    >
+                      <CategoryIcon
+                        icon={cat.catalog.icon}
+                        name={cat.name}
+                        className="h-3 w-3"
+                      />
+                    </span>
+                  )}
+                  {cat.name}
+                </Link>
               </Button>
             ))}
-          </div>
+          </nav>
         )}
       </div>
 
@@ -990,7 +894,7 @@ export default function BusinessUnitPage() {
         {/* FEATURED PRODUCTS                                              */}
         {/* ================================================================ */}
 
-        {!isDataLoading && hasFeatured && !searchQuery && activeCategoryId === null && catalogMode !== "combos" && catalogMode !== "partyPacks" && (
+        {!isDataLoading && hasFeatured && !searchQuery && catalogMode !== "combos" && catalogMode !== "partyPacks" && (
           <section className="mb-12">
             <SectionHeader
               title="Featured"
@@ -998,23 +902,19 @@ export default function BusinessUnitPage() {
               size="sm"
             />
 
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {featuredItems!
+            <CatalogGrid
+              items={featuredItems!
                 .filter((item) => item.itemType === "product")
-                .slice(0, 12)
-                .map((item: any, index: number) => (
-                  <ProductCard
-                    key={item._id}
-                    product={item}
-                    businessUnitSlug={buSlug}
-                    index={index}
-                    compact
-                    onAddToCart={handleAddToCart}
-                    stockInfo={getStockInfoForProduct(item)}
-                    onOpenItemDetails={setSelectedItem}
-                  />
-                ))}
-            </div>
+                .slice(0, 12)}
+              viewMode={viewMode}
+              businessUnitSlug={buSlug}
+              categorySlugFor={(item) => categorySlugByFeaturedSourceId.get(item.sourceId)}
+              onAddToCart={handleAddToCart}
+              stockInfoFor={getStockInfoForProduct}
+              ratingsMap={ratingsMap}
+              onOpenItemDetails={setSelectedItem}
+              skeletonCount={12}
+            />
           </section>
         )}
 
@@ -1033,46 +933,32 @@ export default function BusinessUnitPage() {
             </p>
           )}
 
-          {isDataLoading ? (
-            <CardGridSkeleton count={8} columns={4} type="product" />
-          ) : filteredItems.length > 0 ? (
-            <div
-              className={cn(
-                viewMode === "grid"
-                  ? "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-                  : "space-y-3"
-              )}
-            >
-              {filteredItems.map((item: any, index: number) => (
-                <ProductCard
-                  key={item._id}
-                  product={item}
-                  businessUnitSlug={buSlug}
-                  index={index}
-                  compact={viewMode === "grid"}
-                  showDescription={viewMode === "list"}
-                  onAddToCart={handleAddToCart}
-                  stockInfo={getStockInfoForProduct(item)}
-                  rating={ratingsMap?.[item._id]}
-                  onOpenItemDetails={setSelectedItem}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title={
-                searchQuery
-                  ? "No results found"
-                  : "No products available"
-              }
-              description={
-                searchQuery
-                  ? `We couldn't find anything matching "${searchQuery}". Try a different search term.`
-                  : `${bu.name} doesn't have any products yet. Check back soon!`
-              }
-              icon={Package}
-            />
-          )}
+          <CatalogGrid
+            loading={isDataLoading}
+            items={filteredItems}
+            viewMode={viewMode}
+            businessUnitSlug={buSlug}
+            categorySlugFor={(item) => categorySlugBySourceId.get(item.sourceId)}
+            onAddToCart={handleAddToCart}
+            stockInfoFor={getStockInfoForProduct}
+            ratingsMap={ratingsMap}
+            onOpenItemDetails={setSelectedItem}
+            emptyState={
+              <EmptyState
+                title={
+                  searchQuery
+                    ? "No results found"
+                    : "No products available"
+                }
+                description={
+                  searchQuery
+                    ? `We couldn't find anything matching "${searchQuery}". Try a different search term.`
+                    : `${bu.name} doesn't have any products yet. Check back soon!`
+                }
+                icon={Package}
+              />
+            }
+          />
         </section>
         )}
 

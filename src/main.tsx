@@ -7,7 +7,7 @@ import { AdminAuthProvider } from "@/hooks/use-admin-auth";
 import { KitchenAuthProvider } from "@/hooks/use-kitchen-auth";
 import { BrandingProvider } from "@/hooks/use-branding";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation, useNavigationType } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router";
 import { convexClient } from "@/lib/convex";
 import { sanitizeCartForStaleReferences } from "@/stores/cart";
 import { sanitizeRecentlyViewed } from "@/hooks/use-recently-viewed";
@@ -27,6 +27,15 @@ const CartPage = lazy(() => import("@/pages/customer/CartPage"));
 const CheckoutPage = lazy(() => import("@/pages/customer/CheckoutPage"));
 const OrderTrackingPage = lazy(() => import("@/pages/customer/OrderTrackingPage"));
 const SearchPage = lazy(() => import("@/pages/customer/SearchPage"));
+
+// Policy & Help Pages (Phase 21B — previously unrouted)
+const PrivacyPolicyPage = lazy(() => import("@/pages/customer/policy/PrivacyPolicyPage"));
+const TermsAndConditionsPage = lazy(() => import("@/pages/customer/policy/TermsAndConditionsPage"));
+const ShippingPolicyPage = lazy(() => import("@/pages/customer/policy/ShippingPolicyPage"));
+const RefundAndCancellationPolicyPage = lazy(
+  () => import("@/pages/customer/policy/RefundAndCancellationPolicyPage"),
+);
+const HelpPage = lazy(() => import("@/pages/customer/help/HelpPage"));
 
 // Account Pages
 const AccountLayout = lazy(() => import("@/pages/customer/account/AccountLayout"));
@@ -278,6 +287,16 @@ function AppRoutes() {
         {/* ============ Customer Routes ============ */}
         <Route element={<CustomerLayout />}>
           <Route path="/" element={<HomePage />} />
+
+          {/* Policy & Help — static routes declared before the dynamic store
+              routes so /policy/* and /help never resolve to a business unit */}
+          <Route path="/policy" element={<Navigate to="/policy/privacy" replace />} />
+          <Route path="/policy/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/policy/terms" element={<TermsAndConditionsPage />} />
+          <Route path="/policy/shipping" element={<ShippingPolicyPage />} />
+          <Route path="/policy/refund" element={<RefundAndCancellationPolicyPage />} />
+          <Route path="/help" element={<HelpPage />} />
+
           <Route path="/:businessUnitSlug" element={<BusinessUnitPage />} />
           <Route path="/:businessUnitSlug/:categorySlug" element={<CategoryPage />} />
           <Route

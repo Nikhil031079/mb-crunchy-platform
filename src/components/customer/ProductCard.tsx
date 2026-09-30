@@ -1,14 +1,22 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, useMemo, memo } from "react";
+import { Link } from "react-router";
 import { motion } from "framer-motion";
-import { Heart, ImageOff, Star, Minus, Plus, Loader2 } from "lucide-react";
+import { Heart, ImageOff, Star, Minus, Plus, Loader2, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { formatCurrency, calculateDiscount } from "@/utils";
+import {
+  formatCurrency,
+  calculateDiscount,
+  buildBusinessUnitUrl,
+  buildCategoryUrl,
+  buildProductUrl,
+} from "@/utils";
 import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
+import { useBusinessUnitSlugById } from "@/hooks/use-product-routes";
 
 import type { Product, CatalogItem } from "@/types";
 import type { StockInfo } from "./StockBadge";
@@ -34,7 +42,11 @@ interface ProductCardProps {
   stockInfo?: StockInfo;
   /** Optional rating summary (average + count) */
   rating?: { average: number; count: number };
-  /** Called when the card body is clicked - opens Item Details Modal */
+  /**
+   * Quick-view handler — opens the Item Details Modal.
+   * When the card also resolves to a PDP link, this is surfaced as an explicit
+   * "Quick view" control so the modal stays reachable (Phase 21B).
+   */
   onOpenItemDetails?: (item: CatalogItem) => void;
   /**
    * Contain-fit imagery for packaged goods (Phase 4D) — visual only.
@@ -167,12 +179,52 @@ export const ProductCard = memo(function ProductCard({
     });
   }, [onFavorite, product, isAuthenticated]);
 
-  // Card body click — opens modal if onOpenItemDetails is provided
+  const itemType = "itemType" in product ? product.itemType : "product";
+  const isProductCard = itemType === "product";
+
+  // Sections usually pass the store slug, but their maps are built from
+  // homepage-visible stores only. Resolve it from the live store list as a
+  // fallback so a card can never end up without a destination (Phase 21B).
+  const businessUnitSlugById = useBusinessUnitSlugById();
+  const buSlug =
+    businessUnitSlug ??
+    ("businessUnitId" in product
+      ? businessUnitSlugById.get(product.businessUnitId)
+      : undefined);
+
+  // Canonical destination for the card's primary area (Phase 21B):
+  //  - product with a resolved category slug -> /{bu}/{category}/{product}
+  //  - product whose category slug can't be resolved -> /{bu}/{productSlug}
+  //    (CategoryPage already redirects that segment to the canonical PDP)
+  //  - combo/partyPack have no PDP, so they keep quick-view as their primary
+  //    interaction and fall back to the store page when no modal is wired up.
+  const navPath = useMemo(() => {
+    if (!buSlug || !product.slug) return undefined;
+    if (isProductCard) {
+      return categorySlug
+        ? buildProductUrl(buSlug, categorySlug, product.slug)
+        : buildCategoryUrl(buSlug, product.slug);
+    }
+    return onOpenItemDetails ? undefined : buildBusinessUnitUrl(buSlug);
+  }, [buSlug, categorySlug, product.slug, isProductCard, onOpenItemDetails]);
+
+  // Card body click — opens modal when the card has no PDP link to follow
   const cardOnClick = () => {
     if (onOpenItemDetails) {
       onOpenItemDetails(product as CatalogItem);
     }
   };
+
+  // Explicit quick-view control — keeps the modal reachable when the card's
+  // primary area now navigates to the PDP.
+  const handleQuickView = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onOpenItemDetails?.(product as CatalogItem);
+    },
+    [onOpenItemDetails, product]
+  );
 
   const inner = (
     <Card
@@ -184,6 +236,7 @@ export const ProductCard = memo(function ProductCard({
         "group relative overflow-hidden glass-tier-1 rounded-3xl glass-lift",
         "border border-border/50 px-2.5 py-2.5 sm:px-4 sm:py-4 gap-3 lg:gap-4",
         onOpenItemDetails && "cursor-pointer",
+        navPath && "cursor-pointer",
         isOutOfStock && "opacity-70",
         className
       )}
@@ -240,7 +293,7 @@ export const ProductCard = memo(function ProductCard({
 
             {/* Badge stack — top-left */}
             {(discount > 0 || isBestSeller || isNewArrival) && (
-              <div className="absolute left-0 top-0 z-10 flex flex-col items-start gap-1">
+              <div className="pointer-events-none absolute left-0 top-0 z-10 flex flex-col items-start gap-1">
                 {discount > 0 && (
                   <Badge
                     variant="default"
@@ -271,7 +324,7 @@ export const ProductCard = memo(function ProductCard({
 
             {/* Featured Badge */}
             {"featured" in product && product.featured && (
-              <div className="absolute right-0 top-0">
+              <div className="pointer-events-none absolute right-0 top-0">
                 <Badge
                   variant="special"
                   className="rounded-none rounded-bl-lg text-[10px] font-bold px-2 py-1 h-auto gap-0.5"
@@ -284,7 +337,7 @@ export const ProductCard = memo(function ProductCard({
 
             {/* Out of Stock Overlay */}
             {isOutOfStock && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
                 <Badge
                   variant="destructive"
                   className="text-xs font-semibold px-3 py-1"
@@ -307,6 +360,19 @@ export const ProductCard = memo(function ProductCard({
                 )}
               />
             </button>
+
+            {/* Quick View — explicit modal control; the card's primary area
+                now navigates to the PDP, so quick-view gets its own affordance */}
+            {onOpenItemDetails && navPath && (
+              <button
+                type="button"
+                onClick={handleQuickView}
+                className="absolute bottom-2 left-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm transition-all hover:bg-background hover:scale-110"
+                aria-label={`Quick view ${product.name}`}
+              >
+                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            )}
 
             {/* Quick Add — floating circular button (Blinkit-style stepper) */}
             {onAddToCart && !isOutOfStock && (
@@ -381,9 +447,21 @@ export const ProductCard = memo(function ProductCard({
                 </div>
               )}
 
-              {/* Name */}
+              {/* Name — stretched link: the text is the semantic link and its
+                  ::after covers the whole card, so image/body clicks navigate
+                  to the canonical PDP while action buttons stay above it */}
               <h3 className="line-clamp-2 text-[13px] lg:text-lg font-semibold leading-tight lg:leading-snug group-hover:text-culinary-primary transition-colors font-culinary-heading">
-                {product.name}
+                {navPath ? (
+                  <Link
+                    to={navPath}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-inherit after:absolute after:inset-0 after:content-['']"
+                  >
+                    {product.name}
+                  </Link>
+                ) : (
+                  product.name
+                )}
               </h3>
             </div>
 

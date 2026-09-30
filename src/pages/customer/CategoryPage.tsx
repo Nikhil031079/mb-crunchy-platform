@@ -6,9 +6,6 @@ import {
   ArrowLeft,
   ChevronRight,
   Package,
-  Grid3X3,
-  List,
-  ArrowUpDown,
   LayoutGrid,
   Utensils,
   ShoppingBag,
@@ -30,29 +27,25 @@ import type { CardProduct } from "@/components/customer/ProductCard";
 
 // Customer components
 import {
-  ProductCard,
   CardGridSkeleton,
   StoreStatusBadge,
+  CatalogGrid,
+  CatalogToolbar,
 } from "@/components/customer";
 import { CategoryNavBar } from "@/components/customer/CategoryNavBar";
 import { CategoryEmptyState } from "@/components/customer/CategoryEmptyState";
+import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
 
 // Shared components
 import { CategoryCard, CategoryIcon } from "@/components/shared/CategoryCard";
-import { SearchBar } from "@/components/shared/SearchBar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 
 // UI components
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+import { filterAndSortCatalogItems, type SortOption } from "@/lib/catalog";
 
 import type {
   BusinessUnit,
@@ -63,18 +56,8 @@ import type {
 } from "@/types";
 
 // ============================================================================
-// Sort Options
+// Sort Options — shared source of truth lives in @/lib/catalog (Phase 21C)
 // ============================================================================
-
-type SortOption = "default" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
-
-const SORT_OPTIONS: { label: string; value: SortOption }[] = [
-  { label: "Default", value: "default" },
-  { label: "Price: Low to High", value: "price-asc" },
-  { label: "Price: High to Low", value: "price-desc" },
-  { label: "Name: A to Z", value: "name-asc" },
-  { label: "Name: Z to A", value: "name-desc" },
-];
 
 const categoryAnchorId = (slug: string) => `category-${slug}`;
 
@@ -99,6 +82,8 @@ export default function CategoryPage() {
   const [sortBy, setSortBy] = useState<SortOption>("default");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeCategoryId, setActiveCategoryId] = useState("");
+  // Universal quick-view modal — same product interaction as BusinessUnitPage.
+  const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
   const navigate = useNavigate();
 
   const slugKey = `${businessUnitSlug}/${categorySlug}`;
@@ -109,6 +94,7 @@ export default function CategoryPage() {
     setSortBy("default");
     setViewMode("grid");
     setActiveCategoryId("");
+    setSelectedItem(null);
   }
 
   // ==========================================================================
@@ -254,47 +240,26 @@ export default function CategoryPage() {
     (isDataLoaded && initialCategory ? initialCategory._id : "");
 
   // ==========================================================================
-  // Filtering + sorting
+  // Filtering + sorting — shared pipeline (@/lib/catalog)
+  //
+  // Items arrive already scoped to their category above, so the pipeline is
+  // free to compose search and sort: there is deliberately no early return,
+  // which is what previously made sort silently ignored during in-page search.
   // ==========================================================================
-
-  const filterItems = useCallback(
-    (items: CatalogItem[]) => {
-      const list = [...items];
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        return list.filter(
-          (item) =>
-            item.name.toLowerCase().includes(q) ||
-            item.description?.toLowerCase().includes(q) ||
-            item.tags?.some((t) => t.toLowerCase().includes(q))
-        );
-      }
-      switch (sortBy) {
-        case "price-asc":
-          list.sort((a, b) => a.price - b.price);
-          break;
-        case "price-desc":
-          list.sort((a, b) => b.price - a.price);
-          break;
-        case "name-asc":
-          list.sort((a, b) => a.name.localeCompare(b.name));
-          break;
-        case "name-desc":
-          list.sort((a, b) => b.name.localeCompare(a.name));
-          break;
-      }
-      return list;
-    },
-    [searchQuery, sortBy]
-  );
 
   const filteredByCategoryId = useMemo(() => {
     const map = new Map<string, CatalogItem[]>();
     for (const c of activeCategories) {
-      map.set(c._id, filterItems(itemsByCategoryId.get(c._id) ?? []));
+      map.set(
+        c._id,
+        filterAndSortCatalogItems(itemsByCategoryId.get(c._id) ?? [], {
+          searchQuery,
+          sortBy,
+        }),
+      );
     }
     return map;
-  }, [activeCategories, itemsByCategoryId, filterItems]);
+  }, [activeCategories, itemsByCategoryId, searchQuery, sortBy]);
 
   const anyResults = useMemo(
     () => activeCategories.some((c) => (filteredByCategoryId.get(c._id)?.length ?? 0) > 0),
@@ -569,7 +534,9 @@ const handleAddToCart = useCallback(
               {bu.name}
             </Link>
             <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
-            <span className="shrink-0 font-medium text-foreground">Categories</span>
+            <span className="shrink-0 font-medium text-foreground">
+              {initialCategory?.name ?? "Categories"}
+            </span>
           </nav>
 
           {/* Title */}
@@ -606,8 +573,17 @@ const handleAddToCart = useCallback(
             </div>
           </motion.div>
 
-          {/* Quick stats */}
+          {/* Quick stats — the active category scope is always visible */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            {initialCategory && (
+              <Badge
+                variant="outline"
+                className="border-accent/40 bg-accent/10 text-xs font-semibold text-accent"
+              >
+                <LayoutGrid className="mr-1 h-3 w-3" />
+                {initialCategory.name}
+              </Badge>
+            )}
             <StoreStatusBadge isOpen={storeIsOpen} openingHours={buSettings?.openingHours} />
             <Badge variant="outline" className="border-border/60 bg-card text-xs">
               <LayoutGrid className="mr-1 h-3 w-3" />
@@ -627,62 +603,14 @@ const handleAddToCart = useCallback(
 
       <div className="border-b border-white/60 bg-white/55 backdrop-blur-lg dark:border-white/10 dark:bg-[#1A1412]/70">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="w-full sm:max-w-sm">
-              <SearchBar
-                placeholder={`Search ${bu.name}...`}
-                onSearch={handleSearch}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Select
-                value={sortBy}
-                onValueChange={(val) => setSortBy(val as SortOption)}
-              >
-                <SelectTrigger className="h-9 w-[130px] text-xs gap-1">
-                  <ArrowUpDown className="h-3 w-3" />
-                  <SelectValue placeholder="Sort" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SORT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="flex overflow-hidden rounded-xl border border-border/60 bg-white/50 dark:bg-white/5">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setViewMode("grid")}
-                  className={cn(
-                    "h-11 w-11 rounded-none",
-                    viewMode === "grid" ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary" : "text-muted-foreground"
-                  )}
-                  aria-label="Grid view"
-                  aria-pressed={viewMode === "grid"}
-                >
-                  <Grid3X3 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setViewMode("list")}
-                  className={cn(
-                    "h-11 w-11 rounded-none border-l border-border/60",
-                    viewMode === "list" ? "bg-culinary-primary/10 text-culinary-primary-deep dark:text-culinary-primary" : "text-muted-foreground"
-                  )}
-                  aria-label="List view"
-                  aria-pressed={viewMode === "list"}
-                >
-                  <List className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
+          <CatalogToolbar
+            placeholder={`Search ${bu.name}...`}
+            onSearch={handleSearch}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+          />
         </div>
       </div>
 
@@ -818,33 +746,21 @@ const handleAddToCart = useCallback(
                         </Badge>
                       </div>
 
-                      {/* Content */}
-                      {searchQuery && items.length === 0 ? (
+                      {/* Content — shared catalog grid (Phase 21C) */}
+                      {items.length > 0 ? (
+                        <CatalogGrid
+                          items={items}
+                          viewMode={viewMode}
+                          businessUnitSlug={buSlug}
+                          categorySlugFor={() => cat.slug}
+                          onAddToCart={handleAddToCart}
+                          ratingsMap={ratingsMap}
+                          onOpenItemDetails={setSelectedItem}
+                        />
+                      ) : searchQuery ? (
                         <p className="rounded-xl border border-dashed border-border/60 bg-secondary/20 px-4 py-4 text-center text-sm text-muted-foreground">
                           No matches for &quot;{searchQuery}&quot; in {cat.name}
                         </p>
-                      ) : items.length > 0 ? (
-                        <div
-                          className={cn(
-                            viewMode === "grid"
-                              ? "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-                              : "space-y-3"
-                          )}
-                        >
-                          {items.map((item, index) => (
-                            <ProductCard
-                              key={item._id}
-                              product={item}
-                              businessUnitSlug={buSlug}
-                              categorySlug={cat.slug}
-                              index={index}
-                              compact={viewMode === "grid"}
-                              showDescription={viewMode === "list"}
-                              onAddToCart={handleAddToCart}
-                              rating={ratingsMap?.[item._id]}
-                            />
-                          ))}
-                        </div>
                       ) : (
                         <CategoryEmptyState
                           name={cat.name}
@@ -865,6 +781,15 @@ const handleAddToCart = useCallback(
             )}
           </div>
         </main>
+      )}
+
+      {/* Universal item details modal — same product interaction as the
+          canonical store catalog (Phase 21C) */}
+      {selectedItem && (
+        <ItemDetailsModal
+          selectedItem={selectedItem}
+          onClose={() => setSelectedItem(null)}
+        />
       )}
     </div>
   );

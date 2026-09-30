@@ -6,6 +6,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
 import { cn } from "@/lib/utils";
+import { useProductCategorySlugs } from "@/hooks/use-product-routes";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard, ProductCardSkeleton } from "./ProductCard";
@@ -60,6 +61,8 @@ export function ProductGridSection({
     !loading && itemIds.length > 0 ? { ids: itemIds } : "skip",
   ) as Record<string, { average: number; count: number }> | undefined;
 
+  const categorySlugBySourceId = useProductCategorySlugs(items);
+
   if (loading) {
     return (
       <section id={id} className="py-12 sm:py-16">
@@ -103,6 +106,7 @@ export function ProductGridSection({
               key={item._id}
               product={item}
               businessUnitSlug={buSlugsById.get(item.businessUnitId)}
+              categorySlug={categorySlugBySourceId.get(item.sourceId)}
               index={index}
               compact
               onAddToCart={onAddToCart}

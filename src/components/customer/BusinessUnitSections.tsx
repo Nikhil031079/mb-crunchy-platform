@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
+import { useProductCategorySlugs } from "@/hooks/use-product-routes";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard } from "./ProductCard";
@@ -106,6 +107,8 @@ function BusinessUnitSection({
   const hasFeatured = featuredProducts && featuredProducts.length > 0;
   const hasPartyPacks = partyPacks && partyPacks.length > 0;
 
+  const categorySlugBySourceId = useProductCategorySlugs(featuredProducts);
+
   if (!isDataLoaded) {
     return <BusinessUnitSectionSkeleton buIndex={buIndex} />;
   }
@@ -175,6 +178,7 @@ function BusinessUnitSection({
                   key={item._id}
                   product={item}
                   businessUnitSlug={buSlug}
+                  categorySlug={categorySlugBySourceId.get(item.sourceId)}
                   index={index}
                   compact
                   onAddToCart={handleAddToCart}

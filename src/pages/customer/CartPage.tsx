@@ -29,6 +29,7 @@ import { filterCatalogItemIds, formatCurrency, checkKitchenServiceability } from
 // Hooks
 import { useCart, setActiveDeals } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
+import { useProductCategorySlugs, useBusinessUnitSlugById } from "@/hooks/use-product-routes";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCartMealDealDetection, useMealDeals } from "@/hooks/use-meal-deals";
 import { useLocationStore } from "@/stores/location";
@@ -182,6 +183,14 @@ export default function CartPage() {
     } as any,
   ) as CatalogItem[] | undefined;
 
+  // Phase 21B — recommendation cards span every store, so both slugs are
+  // resolved per item instead of assuming the cart's first business unit.
+  const businessUnitSlugById = useBusinessUnitSlugById();
+  const recommendedViewItems = useMemo(
+    () => (recommendedItems ?? []).slice(0, 6),
+    [recommendedItems],
+  );
+  const recommendedCategorySlugs = useProductCategorySlugs(recommendedViewItems);
   // Free delivery threshold — check delivery policy first, fall back to BU settings
   const freeDeliveryThreshold = useMemo(() => {
     const policyThreshold = deliveryPolicy?.freeDeliveryThreshold;
@@ -933,10 +942,12 @@ export default function CartPage() {
               <h2 className="font-culinary-heading text-lg font-bold tracking-tight">You might also like</h2>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {recommendedItems.slice(0, 6).map((item) => (
+              {recommendedViewItems.map((item) => (
                 <ProductCard
                   key={item._id}
                   product={item}
+                  businessUnitSlug={businessUnitSlugById.get(item.businessUnitId)}
+                  categorySlug={recommendedCategorySlugs.get(item.sourceId)}
                   compact
                   onAddToCart={addToCart as (product: CatalogItem | CardProduct) => Promise<void>}
                 />

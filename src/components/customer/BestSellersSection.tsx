@@ -7,6 +7,7 @@ import { api } from "@convex/_generated/api";
 
 import { cn } from "@/lib/utils";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useProductCategorySlugs } from "@/hooks/use-product-routes";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard, ProductCardSkeleton } from "./ProductCard";
@@ -56,6 +57,8 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
 
   const firstBuSlug = businessUnits[0]?.slug;
 
+  const categorySlugBySourceId = useProductCategorySlugs(bestSellers);
+
   if (isLoading) {
     return (
       <section className="py-10 sm:py-12">
@@ -103,6 +106,7 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
               key={item._id}
               product={item}
               businessUnitSlug={buSlugsById.get(item.businessUnitId)}
+              categorySlug={categorySlugBySourceId.get(item.sourceId)}
               index={index}
               compact
               onAddToCart={handleAddToCart}

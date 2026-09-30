@@ -2,21 +2,11 @@ import { useMemo, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import {
-  Leaf,
-  Truck,
-  ArrowRight,
-  Sparkles,
-  ChefHat,
-  BadgeCheck,
-  Store,
-  LayoutGrid,
-} from "lucide-react";
+import { ArrowRight, Sparkles, LayoutGrid } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
 
 import { SITE_NAME } from "@/constants";
-import { cn } from "@/lib/utils";
 import { isContentActive, getContentMarketingSettings } from "@/utils";
 
 // Customer Reusable Components
@@ -40,11 +30,10 @@ import { HomepageFilterRail } from "@/components/customer/HomepageFilterRail";
 import { CategoryNavBar } from "@/components/customer/CategoryNavBar";
 // Homepage sections (Phase 4D) — visual recomposition only
 import { PromoRibbonSection } from "@/components/customer/PromoRibbonSection";
-import { MartGridSection } from "@/components/customer/MartGridSection";
 import { TrendingRailSection } from "@/components/customer/TrendingRailSection";
 
 // Shared components
-import { CategoryCard } from "@/components/shared/CategoryCard";
+import { CategoryCard, CategoryCardSkeleton } from "@/components/shared/CategoryCard";
 import { getCategoryCatalog, enrichCategory } from "@/data/categories";
 
 import type { EnrichedCategory } from "@/data/categories";
@@ -52,51 +41,20 @@ import type { EnrichedCategory } from "@/data/categories";
 import type { BusinessUnit, Category, Content, CatalogItem } from "@/types";
 
 // ============================================================================
-// Trust items — compact brand trust band
+// NOTE (Phase 21C): the inline TRUST_ITEMS band was removed here. It overlapped
+// HomepageInfoStrip (Fast Delivery/Fresh Everyday vs Fast Local
+// Delivery/Fresh Food) while carrying no unique customer job, so the homepage
+// now keeps exactly ONE trust/brand layer — HomepageInfoStrip, which also
+// surfaces live promotional chips. No third trust system was introduced.
 // ============================================================================
-
-interface TrustItem {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-  color: string;
-}
-
-const TRUST_ITEMS: TrustItem[] = [
-  {
-    icon: ChefHat,
-    title: "Fresh Food",
-    description: "Prepared fresh, every single day",
-    color: "text-orange-600 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-400",
-  },
-  {
-    icon: Leaf,
-    title: "Organic Products",
-    description: "Farm-fresh & naturally sourced",
-    color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-400",
-  },
-  {
-    icon: Truck,
-    title: "Fast Local Delivery",
-    description: "At your doorstep in minutes",
-    color: "text-amber-600 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-400",
-  },
-  {
-    icon: Store,
-    title: "Pickup",
-    description: "Order online, collect in store",
-    color: "text-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-400",
-  },
-  {
-    icon: BadgeCheck,
-    title: "Trusted Local Store",
-    description: "Your neighbourhood favourite",
-    color: "text-green-600 bg-green-50 dark:bg-green-950/50 dark:text-green-400",
-  },
-];
 
 // ============================================================================
 // CategoriesSection — Premium category grid from BU data
+//
+// Phase 21C: every card links to /{businessUnitSlug}/{categorySlug}. A
+// category whose store cannot be resolved is dropped instead of rendered
+// with a missing or foreign store slug, so Kitchen categories can never land
+// inside Mart (and vice versa).
 // ============================================================================
 
 function CategoriesSection({
@@ -111,12 +69,34 @@ function CategoriesSection({
     api.categories.getAllActiveAcrossBusinessUnits,
   ) as Category[] | undefined;
 
-  const allCategories = useMemo(() => {
-    if (!allCategoriesRaw) return [];
-    return allCategoriesRaw.filter((c) => c.status === "active");
-  }, [allCategoriesRaw]);
+  const resolved = useMemo(() => {
+    if (!allCategoriesRaw) return null;
+    const byId = new Map<string, BusinessUnit>(businessUnits.map((bu) => [bu._id, bu]));
+    return allCategoriesRaw
+      .filter((c) => c.status === "active")
+      .filter((c) => byId.has(c.businessUnitId))
+      .map((c) => ({ category: c, bu: byId.get(c.businessUnitId) as BusinessUnit }));
+  }, [allCategoriesRaw, businessUnits]);
 
-  if (isLoading || allCategories.length === 0) return null;
+  // Lightweight skeleton while the shared category query is still landing —
+  // keeps the section from popping in after first paint (Phase 21C).
+  if (isLoading || resolved === null) {
+    return (
+      <section id="categories" className="py-10 sm:py-12 scroll-mt-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-2 h-1 w-8 animate-pulse rounded-full bg-secondary" />
+          <div className="mb-6 h-7 w-44 animate-pulse rounded bg-secondary" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {Array.from({ length: 6 }, (_, i) => (
+              <CategoryCardSkeleton key={i} />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (resolved.length === 0) return null;
 
   return (
     <section id="categories" className="py-10 sm:py-12 scroll-mt-24">
@@ -134,14 +114,16 @@ function CategoriesSection({
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {allCategories.slice(0, 6).map((cat, index) => {
-            const bu = businessUnits.find((b) => b._id === cat.businessUnitId);
-            const enriched = enrichCategory(cat, getCategoryCatalog(bu?.catalogMode)) as EnrichedCategory;
+          {resolved.slice(0, 6).map(({ category, bu }, index) => {
+            const enriched = enrichCategory(
+              category,
+              getCategoryCatalog(bu.catalogMode),
+            ) as EnrichedCategory;
             return (
               <CategoryCard
-                key={cat._id}
+                key={category._id}
                 category={enriched}
-                businessUnitSlug={bu?.slug ?? ""}
+                businessUnitSlug={bu.slug}
                 index={index}
                 icon={enriched.catalog?.icon}
                 gradient={enriched.catalog?.gradient}
@@ -202,17 +184,20 @@ export default function HomePage() {
   const navCategoriesRaw = useQuery(
     api.categories.getAllActiveAcrossBusinessUnits,
   ) as Category[] | undefined;
-  const navCategories = useMemo<EnrichedCategory[]>(
-    () =>
-      (navCategoriesRaw ?? [])
-        .filter((c) => c.status === "active")
-        .sort((a, b) => a.displayOrder - b.displayOrder)
-        .map((c) => {
-          const bu = activeBusinessUnits.find((b) => b._id === c.businessUnitId);
-          return enrichCategory(c, getCategoryCatalog(bu?.catalogMode)) as EnrichedCategory;
-        }),
-    [navCategoriesRaw, activeBusinessUnits],
-  );
+  const navCategories = useMemo<EnrichedCategory[]>(() => {
+    // Resolve each category against a live store first — a category whose
+    // store is unknown is dropped so its pill can never route to a wrong or
+    // missing business unit (Phase 21C).
+    const byId = new Map<string, BusinessUnit>(activeBusinessUnits.map((b) => [b._id, b]));
+    return (navCategoriesRaw ?? [])
+      .filter((c) => c.status === "active")
+      .filter((c) => byId.has(c.businessUnitId))
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .map((c) => {
+        const bu = byId.get(c.businessUnitId) as BusinessUnit;
+        return enrichCategory(c, getCategoryCatalog(bu.catalogMode)) as EnrichedCategory;
+      });
+  }, [navCategoriesRaw, activeBusinessUnits]);
   const handleNavSelect = useCallback(
     (categoryId: string) => {
       const cat = navCategories.find((c) => c._id === categoryId);
@@ -308,17 +293,20 @@ export default function HomePage() {
     return slides;
   }, [activeBusinessUnits]);
 
-  // --- Phase 4B: dual-hero inputs (existing CTAs, split per panel) ---
+  // --- Phase 21C: hero CTAs are derived from the LIVE store slugs.
+  // Nothing here hardcodes "/kitchen" or "/mb-mart" — a slug change in the
+  // admin panel flows straight through to every hero destination.
+  const kitchenAction = kitchenBU
+    ? { label: "Order from Kitchen", href: `/${kitchenBU.slug}` }
+    : null;
+  const martAction = martBU
+    ? { label: "Shop Mart", href: `/${martBU.slug}` }
+    : null;
   const heroCtas = [
-    { label: "Order from Kitchen", href: "/kitchen", variant: "default" as const },
-    { label: "Shop Mart", href: "/mb-mart", variant: "outline" as const },
+    ...(kitchenAction ? [{ ...kitchenAction, variant: "default" as const }] : []),
+    ...(martAction ? [{ ...martAction, variant: "outline" as const }] : []),
   ];
-  const kitchenAction = heroCtas[0]
-    ? { label: heroCtas[0].label, href: heroCtas[0].href }
-    : null;
-  const martAction = heroCtas[1]
-    ? { label: heroCtas[1].label, href: heroCtas[1].href }
-    : null;
+
   const showDualHero =
     !isLoading &&
     !heroBanners &&
@@ -328,7 +316,8 @@ export default function HomePage() {
 
   return (
     // Culinary Tier 0 canvas (Phase 4) — warm homepage base.
-    // Section order, data sources, and handlers unchanged.
+    // Phase 21C: section order now follows the discovery sequence
+    // (hero → store rail → categories → products → offers → trust → CTA).
     <div className="min-h-screen culinary-canvas">
       {/* ================================================================ */}
       {/* 1. HERO — Stitch dual Kitchen/Mart composition (Phase 4B).       */}
@@ -375,7 +364,7 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 1B. FILTER/MODE RAIL + SUBCATEGORY RAIL (Phase 4B)               */}
+      {/* 2. STORE RAIL — filter/mode rail + subcategory rail (Phase 4B)   */}
       {/* ================================================================ */}
 
       {!isLoading && (kitchenBU || martBU) && (
@@ -391,13 +380,30 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 2. CATEGORIES — Premium category grid from BU data              */}
+      {/* 3. CATEGORIES — every card routes to /{bu}/{category}            */}
       {/* ================================================================ */}
 
       {!isLoading && <CategoriesSection businessUnits={activeBusinessUnits} isLoading={isLoading} />}
 
       {/* ================================================================ */}
-      {/* 3. POPULAR PRODUCTS — Best sellers across stores                 */}
+      {/* 4. TODAY'S SPECIALS — featured picks across stores                */}
+      {/* ================================================================ */}
+
+      {!isLoading && <TodaySpecialsSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
+
+      {/* ================================================================ */}
+      {/* 5. TRENDING — renders nothing (heading included) without data     */}
+      {/* ================================================================ */}
+
+      {!isLoading && (
+        <TrendingRailSection
+          businessUnits={activeBusinessUnits}
+          onOpenItemDetails={setSelectedItem}
+        />
+      )}
+
+      {/* ================================================================ */}
+      {/* 6. TOP PICKS — best sellers across stores                         */}
       {/* ================================================================ */}
 
       {!isLoading && (
@@ -405,27 +411,52 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 3B. PROMO RIBBON — recomposed announcement/offer data (Phase 4D) */}
+      {/* 7. RECOMMENDED FOR YOU — deterministic personalized picks         */}
+      {/* ================================================================ */}
+
+      {!isLoading && (
+        <RecommendedForYouSection
+          businessUnits={activeBusinessUnits}
+          onOpenItemDetails={setSelectedItem}
+        />
+      )}
+
+      {/* ================================================================ */}
+      {/* 8. COMBOS + PARTY PACKS — discovery only. Both sections return    */}
+      {/*    null when the store has no data, so nothing empty renders.     */}
+      {/* ================================================================ */}
+
+      {!isLoading && (
+        <ComboOffersSection
+          businessUnits={activeBusinessUnits}
+          onOpenItemDetails={setSelectedItem}
+        />
+      )}
+
+      {!isLoading && (
+        <PartyPacksSection
+          businessUnits={activeBusinessUnits}
+          onOpenItemDetails={setSelectedItem}
+        />
+      )}
+
+      {/* ================================================================ */}
+      {/* 9. OFFERS RIBBON — only when an announcement, promo or live       */}
+      {/*    flash offer is active (self-guarded)                           */}
       {/* ================================================================ */}
 
       {!isLoading && <PromoRibbonSection />}
 
       {/* ================================================================ */}
-      {/* 3C. MART GRID — dedicated Mart catalog section (Phase 4D)        */}
+      {/* 10. ONE TRUST LAYER — the single brand/trust surface (21C).       */}
+      {/*     Replaces the duplicated TRUST_ITEMS band.                     */}
       {/* ================================================================ */}
 
-      {!isLoading && martBU && (
-        <MartGridSection martBU={martBU} onOpenItemDetails={setSelectedItem} />
-      )}
+      {!isLoading && <HomepageInfoStrip />}
 
       {/* ================================================================ */}
-      {/* 4. TODAY'S SPECIALS — Featured picks across stores               */}
-      {/* ================================================================ */}
-
-      {!isLoading && <TodaySpecialsSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
-
-      {/* ================================================================ */}
-      {/* 5. EXPERIENCE CTA — early conversion, show Kitchen/Mart context  */}
+      {/* 11. FINAL STORE CTA — one closing action into a canonical store  */}
+      {/*      catalog (moved to the end in Phase 21C)                      */}
       {/* ================================================================ */}
 
       {!isLoading && (
@@ -475,63 +506,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-      )}
-
-      {/* ================================================================ */}
-      {/* 5. INFO STRIP — merged promo / announcement / trust points       */}
-      {/* ================================================================ */}
-
-      {!isLoading && <HomepageInfoStrip />}
-
-      {/* ================================================================ */}
-      {/* 6. RECOMMENDED FOR YOU — deterministic personalized picks         */}
-      {/* ================================================================ */}
-
-      {!isLoading && <RecommendedForYouSection businessUnits={activeBusinessUnits} onOpenItemDetails={setSelectedItem} />}
-
-      {/* ================================================================ */}
-      {/* 7. TRUST BAND — compact brand trust points                       */}
-      {/* ================================================================ */}
-
-      <section className="py-10 sm:py-12" aria-label="Why shop with us">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="glass-tier-1 rounded-3xl px-6 py-8 sm:px-8 sm:py-10">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-x-8 lg:grid-cols-5 lg:gap-0 lg:divide-x lg:divide-culinary-outline-variant/50">
-              {TRUST_ITEMS.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.title} className="flex items-center gap-3 lg:justify-center lg:px-6 lg:first:pl-0 lg:last:pr-0">
-                    <div
-                      className={cn(
-                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
-                        item.color
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold leading-tight font-culinary-heading">{item.title}</p>
-                      <p className="text-xs text-muted-foreground leading-tight">
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================================ */}
-      {/* 8. TRENDING RAIL — existing per-BU trending data (Phase 4D)      */}
-      {/* ================================================================ */}
-
-      {!isLoading && (
-        <TrendingRailSection
-          businessUnits={activeBusinessUnits}
-          onOpenItemDetails={setSelectedItem}
-        />
       )}
 
       {/* ================================================================ */}

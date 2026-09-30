@@ -36,6 +36,7 @@ import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
+import { useProductCategorySlugs, useBusinessUnitSlugById } from "@/hooks/use-product-routes";
 import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 
 // Customer components
@@ -232,8 +233,18 @@ export default function ProductPage() {
 
   const recRatingsMap = useQuery(
     api.reviews.getAverageByCatalogItemIds,
-    recommendationIds.length > 0 ? { ids: recommendationIds } : "skip"
+    recommendationIds.length > 0 ? { ids: recommendationIds } : "skip",
   ) as Record<string, { average: number; count: number }> | undefined;
+
+  // Phase 21B — canonical PDP slugs for the related/trending cards below.
+  // getRelatedByTags is not scoped to one store, so the business unit slug is
+  // resolved per item rather than reusing the current store's slug.
+  const businessUnitSlugById = useBusinessUnitSlugById();
+  const recommendationItems = useMemo(
+    () => [...(relatedItems ?? []), ...(trendingItems ?? [])],
+    [relatedItems, trendingItems],
+  );
+  const categorySlugBySourceId = useProductCategorySlugs(recommendationItems);
 
   const storeIsOpen = buSettings ? isStoreCurrentlyOpen(buSettings) : true;
   const nextOpenTime = buSettings && !storeIsOpen ? getNextOpenTime(buSettings) : null;
@@ -1289,7 +1300,10 @@ export default function ProductPage() {
                     <ProductCard
                       key={item._id}
                       product={item}
-                      businessUnitSlug={buSlug}
+                      businessUnitSlug={
+                        businessUnitSlugById.get(item.businessUnitId) ?? buSlug
+                      }
+                      categorySlug={categorySlugBySourceId.get(item.sourceId)}
                       index={0}
                       compact
                       rating={recRatingsMap?.[item._id]}
@@ -1310,7 +1324,10 @@ export default function ProductPage() {
                     <ProductCard
                       key={item._id}
                       product={item}
-                      businessUnitSlug={buSlug}
+                      businessUnitSlug={
+                        businessUnitSlugById.get(item.businessUnitId) ?? buSlug
+                      }
+                      categorySlug={categorySlugBySourceId.get(item.sourceId)}
                       index={0}
                       compact
                       rating={recRatingsMap?.[item._id]}

@@ -211,9 +211,15 @@ function ResultCard({ item, query, ratings }: ResultCardProps) {
     >
       <Link
         to={
-          item.itemType === "product" && item._categorySlug
-            ? `/${item._businessUnitSlug}/${item._categorySlug}/${item.slug}`
-            : `/${item._businessUnitSlug}/${item.slug}`
+          item.itemType !== "product"
+            ? // Combos/party packs have no PDP — land on the store page, which
+              // is the smallest existing destination that never 404s.
+              `/${item._businessUnitSlug}`
+            : item._categorySlug
+              ? `/${item._businessUnitSlug}/${item._categorySlug}/${item.slug}`
+              : // Product without a resolvable category slug: CategoryPage
+                // redirects this segment to the canonical PDP.
+                `/${item._businessUnitSlug}/${item.slug}`
         }
         className="group block"
       >

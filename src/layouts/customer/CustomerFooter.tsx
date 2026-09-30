@@ -213,7 +213,7 @@ export function CustomerFooter({
           <p className="text-xs text-muted-foreground">
             &copy; {currentYear} {siteName}. All rights reserved.
           </p>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             <Link
               to={ROUTES.HOME}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
@@ -231,6 +231,36 @@ export function CustomerFooter({
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               Sign In
+            </Link>
+            <Link
+              to={ROUTES.POLICY.PRIVACY}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Privacy
+            </Link>
+            <Link
+              to={ROUTES.POLICY.TERMS}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Terms
+            </Link>
+            <Link
+              to={ROUTES.POLICY.SHIPPING}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Shipping
+            </Link>
+            <Link
+              to={ROUTES.POLICY.REFUND}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Refunds
+            </Link>
+            <Link
+              to={ROUTES.POLICY.HELP}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Help
             </Link>
           </div>
           <p className="flex items-center gap-1 text-xs text-muted-foreground">

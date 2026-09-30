@@ -30,6 +30,8 @@ interface TrendingRailSectionProps {
 
 const RAIL_LIMIT = 6;
 const RAIL_MAX_ITEMS = 8;
+/** Below this, the rail is a plain row and carousel arrows would mislead. */
+const RAIL_MIN_FOR_ARROWS = 4;
 
 export function TrendingRailSection({
   businessUnits,
@@ -84,6 +86,13 @@ export function TrendingRailSection({
     (buIds[0] !== undefined && trending0 === undefined) ||
     (buIds[1] !== undefined && trending1 === undefined);
 
+  // Sparse-data rule (Phase 21C): with no products there is no heading and no
+  // carousel affordance — the section disappears entirely.
+  if (!isLoading && items.length === 0) return null;
+
+  // 4+ cards → normal rail with arrows. 1–3 cards render without arrows.
+  const showArrows = items.length >= RAIL_MIN_FOR_ARROWS;
+
   const scrollRail = (direction: 1 | -1) => {
     railRef.current?.scrollBy({ left: direction * 320, behavior: "smooth" });
   };
@@ -107,22 +116,26 @@ export function TrendingRailSection({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => scrollRail(-1)}
-              aria-label="Scroll trending products left"
-              className="glass-tier-1 flex h-9 w-9 items-center justify-center rounded-full shadow-sm transition-all hover:shadow-md active:scale-90"
-            >
-              <ChevronLeft className="h-[18px] w-[18px]" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollRail(1)}
-              aria-label="Scroll trending products right"
-              className="glass-tier-1 flex h-9 w-9 items-center justify-center rounded-full shadow-sm transition-all hover:shadow-md active:scale-90"
-            >
-              <ChevronRight className="h-[18px] w-[18px]" aria-hidden />
-            </button>
+            {showArrows && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => scrollRail(-1)}
+                  aria-label="Scroll trending products left"
+                  className="glass-tier-1 flex h-9 w-9 items-center justify-center rounded-full shadow-sm transition-all hover:shadow-md active:scale-90"
+                >
+                  <ChevronLeft className="h-[18px] w-[18px]" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollRail(1)}
+                  aria-label="Scroll trending products right"
+                  className="glass-tier-1 flex h-9 w-9 items-center justify-center rounded-full shadow-sm transition-all hover:shadow-md active:scale-90"
+                >
+                  <ChevronRight className="h-[18px] w-[18px]" aria-hidden />
+                </button>
+              </>
+            )}
           </div>
         </div>
 

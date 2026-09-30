@@ -7,6 +7,7 @@ import { api } from "@convex/_generated/api";
 
 import { cn } from "@/lib/utils";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useProductCategorySlugs } from "@/hooks/use-product-routes";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard, ProductCardSkeleton } from "./ProductCard";
@@ -57,6 +58,8 @@ export function MartGridSection({ martBU, onOpenItemDetails }: MartGridSectionPr
       .slice(0, 8);
   }, [bestSellersRaw, martBU._id]);
 
+  const categorySlugBySourceId = useProductCategorySlugs(martItems);
+
   if (isLoading) {
     return (
       <section className="py-10 sm:py-12">
@@ -99,6 +102,7 @@ export function MartGridSection({ martBU, onOpenItemDetails }: MartGridSectionPr
               key={item._id}
               product={item}
               businessUnitSlug={martBU.slug}
+              categorySlug={categorySlugBySourceId.get(item.sourceId)}
               index={index}
               compact
               imageFit="contain"

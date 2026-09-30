@@ -9,6 +9,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
+import { useProductCategorySlugs } from "@/hooks/use-product-routes";
 import { filterCatalogItemIds } from "@/utils";
 
 import { SectionHeader } from "./SectionHeader";
@@ -145,6 +146,8 @@ export function CrossSellSections({
     recommendedCombos.length > 0 ||
     recommendedPacks.length > 0;
 
+  const categorySlugBySourceId = useProductCategorySlugs(mayAlsoLike);
+
   if (!hasAny) return null;
 
   return (
@@ -164,6 +167,7 @@ export function CrossSellSections({
                 key={item._id}
                 product={item}
                 businessUnitSlug={businessUnit.slug}
+                categorySlug={categorySlugBySourceId.get(item.sourceId)}
                 index={0}
                 compact
                 onAddToCart={handleAddProduct}

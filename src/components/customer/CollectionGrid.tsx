@@ -7,7 +7,12 @@ import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/utils";
+import {
+  formatCurrency,
+  buildBusinessUnitUrl,
+  buildCategoryUrl,
+  buildProductUrl,
+} from "@/utils";
 
 import type { CustomerCollection, CatalogItemType } from "@/types";
 
@@ -90,6 +95,21 @@ function CollectionItemCard({
   const itemImage = (item as unknown as Record<string, unknown>).image as string | undefined;
   const itemSlug = (item as unknown as Record<string, unknown>).slug as string | undefined;
   const buSlug = (item as unknown as Record<string, unknown>).businessUnitSlug as string | undefined;
+  const categorySlug = (item as unknown as Record<string, unknown>).categorySlug as string | undefined;
+
+  // Phase 21B — canonical destination:
+  //  - product            -> /{bu}/{category}/{product} (or /{bu}/{product}
+  //    while the category slug is still resolving; CategoryPage redirects it)
+  //  - combo/party pack   -> /{bu} (they have no PDP of their own)
+  const viewHref = !buSlug
+    ? undefined
+    : item.itemType === "product"
+      ? itemSlug
+        ? categorySlug
+          ? buildProductUrl(buSlug, categorySlug, itemSlug)
+          : buildCategoryUrl(buSlug, itemSlug)
+        : undefined
+      : buildBusinessUnitUrl(buSlug);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -165,9 +185,10 @@ function CollectionItemCard({
                 Add to Cart
               </Button>
             )}
-            {buSlug && itemSlug && (
+            {viewHref && (
               <Link
-                to={`/${buSlug}/${itemSlug}`}
+                to={viewHref}
+                aria-label={`View ${itemName ?? "item"} details`}
                 className="inline-flex items-center justify-center h-11 w-11 rounded-lg border border-border/60 text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ExternalLink className="h-3.5 w-3.5" />

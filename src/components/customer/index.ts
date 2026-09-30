@@ -5,6 +5,11 @@
 // Navigation
 export { MobileBottomBar } from "./MobileBottomBar";
 
+// Catalog (Phase 21C — shared catalog engine)
+export { CatalogToolbar } from "./CatalogToolbar";
+export type { CatalogViewMode } from "./CatalogToolbar";
+export { CatalogGrid } from "./CatalogGrid";
+
 // Sections
 export { HeroSection, HeroSectionSkeleton } from "./HeroSection";
 export { SectionHeader, SectionHeaderSkeleton } from "./SectionHeader";
