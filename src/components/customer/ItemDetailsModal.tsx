@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useCart } from "@/stores/cart";
@@ -11,6 +12,12 @@ import { Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle } from "@/com
 
 import { cn } from "@/lib/utils";
 import { formatCurrency, calculateDiscount, buildProductUrl, buildCategoryUrl } from "@/utils";
+import {
+  getDefaultActiveVariant,
+  getActiveVariants,
+  getInlineVariants,
+  resolveQuickAddVariantLine,
+} from "@/utils/product-variants";
 import { useCategorySlugById, useBusinessUnitSlugById } from "@/hooks/use-product-routes";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -135,13 +142,17 @@ export function ItemDetailsModal({
   const minPrice = activeVariants.length > 0
     ? Math.min(...activeVariants.map((v: any) => v.price))
     : isProduct && product
-      ? product.variants?.[0]?.price ?? 0
+      ? selectedItem.price
       : (selectedItem as any).price;
 
-  // Authoritative selected-variant lookup for display and cart
+  // Authoritative selected-variant lookup for display and cart.
+  // Only ACTIVE variants are valid selections — a stale selection from a
+  // previously viewed product falls back to the canonical default.
   const selectedVariantData = useMemo(() => {
     if (!isProduct || !selectedVariant || !product?.variants) return undefined;
-    return product.variants.find((v: any) => v.optionValue === selectedVariant);
+    return getActiveVariants(product.variants).find(
+      (v) => v.optionValue === selectedVariant
+    );
   }, [isProduct, selectedVariant, product?.variants]);
 
   const displayedPrice = selectedVariantData?.price ?? minPrice;
@@ -201,13 +212,28 @@ export function ItemDetailsModal({
       catalogItemId = selectedItem._id;
       itemType = "product";
       name = selectedItem.name;
-      variantName = selectedVariant ?? "Default";
       quantityToAdd = quantity;
-      const variantData = selectedVariant
-        ? product?.variants?.find((v: any) => v.optionValue === selectedVariant)
-        : undefined;
-      unitPrice = variantData?.price ?? minPrice;
       image = product?.coverImage || selectedItem.coverImage;
+      // Canonical variant identity + price: honors an explicit ACTIVE
+      // selection, otherwise the canonical default active variant, and only
+      // falls back to "Default" + catalog price when the product has zero
+      // active variants (matches the server-side order checks).
+      const line = await resolveQuickAddVariantLine({
+        itemType: "product",
+        name,
+        price: selectedItem.price,
+        sourceId: selectedItem.sourceId,
+        variants: product?.variants ?? getInlineVariants(productForVariant),
+        selectedVariantName: selectedVariant,
+      });
+      if (!line) {
+        toast.error("Unable to add to cart", {
+          description: `${name} could not be added right now. Please try again.`,
+        });
+        return;
+      }
+      variantName = line.variantName;
+      unitPrice = line.unitPrice;
     } else if (isCombo) {
       catalogItemId = selectedItem._id;
       itemType = "combo";
@@ -254,16 +280,19 @@ export function ItemDetailsModal({
       setIsModalOpen(false);
       onClose();
     }
-  }, [isProduct, isCombo, isPartyPack, product, comboSource, partyPackSource, catalogById, selectedVariant, quantity, minPrice, addItem, selectedItem, setIsModalOpen, onClose]);
+  }, [isProduct, isCombo, isPartyPack, product, productForVariant, comboSource, partyPackSource, catalogById, selectedVariant, quantity, addItem, selectedItem, setIsModalOpen, onClose]);
 
   const handleOpenVariantSelector = useCallback(() => setVariantOpen(true), []);
 
-  // Initialize selectedVariant to the first variant when product loads
+  // Initialize selectedVariant to the CANONICAL default active variant when
+  // the product loads, and reset whenever the modal switches to another item
+  // so a stale selection can never be written as the cart identity.
   useEffect(() => {
-    if (isProduct && product?.variants?.length && !selectedVariant) {
-      setSelectedVariant(product.variants[0].optionValue);
-    }
-  }, [isProduct, product?.variants, selectedVariant]);
+    if (!isProduct) return;
+    setSelectedVariant(
+      getDefaultActiveVariant(product?.variants)?.optionValue
+    );
+  }, [isProduct, product?.variants]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -325,7 +354,15 @@ export function ItemDetailsModal({
             <button onClick={() => setQuantity((q) => q + 1)} className="rounded-r-md border border-border/50 px-3 py-2.5 text-sm hover:border-border min-h-[44px]">+</button>
           </div>
         </div>
-        <Button size="lg" onClick={handleAddToCart} className="w-full gap-2 mt-4" disabled={!selectedVariant && isProduct}>
+        <Button
+          size="lg"
+          onClick={handleAddToCart}
+          className="w-full gap-2 mt-4"
+          disabled={
+            isProduct &&
+            (!product || (activeVariants.length > 0 && !selectedVariant))
+          }
+        >
           <span className="flex items-center justify-center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><path d="M9 8l4 4L15 8"/></svg>Add to Cart</span>
         </Button>
       </div>

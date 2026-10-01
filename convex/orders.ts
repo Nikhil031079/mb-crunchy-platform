@@ -144,8 +144,12 @@ export const finalizePaidOrder = internalMutation({
         });
 
         // Reserve stock (bundle lines expand to components; see inventory helper).
+        // Strict at reserve time: a tracked item whose variantName matches no
+        // inventory row must fail closed here, not resolve to "untracked".
         for (const item of order.items) {
-          const expansions = await resolveInventoryReservations(ctx, item);
+          const expansions = await resolveInventoryReservations(ctx, item, {
+            failOnVariantMismatch: true,
+          });
           for (const expansion of expansions) {
             const inventory = expansion.inventory;
             const quantity = expansion.quantity;
@@ -650,14 +654,23 @@ async function resolveOrderLine(
 
   let unitPrice: number;
   if (item.itemType === "product") {
-    const variant = (source.variants ?? []).find(
-      (v) => v.active && v.optionValue === item.variantName,
+    const activeVariants = (source.variants ?? []).filter((v) => v.active);
+    const variant = activeVariants.find(
+      (v) => v.optionValue === item.variantName,
     );
     if (variant) {
       unitPrice = variant.price;
+    } else if (activeVariants.length > 0) {
+      // Fail closed (Phase 21D-B): the product HAS active variants but this
+      // cart line references one that is not among them (stale or invalid
+      // identity). Never price it as a non-variant product — the customer
+      // must review the cart instead.
+      throw new Error(
+        `The selected variant for "${source.name ?? item.itemType}" is no longer available. Please review your cart.`,
+      );
     } else {
-      // Fallback: product has no matching variant (e.g., no variants defined, or "Default" sent for product without variants).
-      // Use the catalog item's base price (stored in the catalog item's price field).
+      // Zero ACTIVE variants: legitimate non-variant product (or every variant
+      // is inactive) — use the catalog item's base price.
       unitPrice = doc.price ?? 0;
     }
   } else {
@@ -1283,6 +1296,24 @@ export const create = mutation({
     const orderPaymentStatus = isOutsideArea ? "pending" as const : paymentStatus;
     const deliveryQuoteStatus = isOutsideArea ? "pending" as const : undefined;
 
+    // Outside-area orders defer the REAL inventory reservation to
+    // finalizePaidOrder (after payment capture + accepted quote), so validate
+    // the inventory configuration here — READ-ONLY — before the order insert
+    // and therefore before any Razorpay order/payment boundary exists. A
+    // tracked item whose variantName matches no inventory row would otherwise
+    // only throw at finalize, i.e. after capture. resolveInventoryReservations
+    // performs no writes (queries + optional throw only), so this dry-run can
+    // never reserve, mutate, or double-reserve stock; the authoritative
+    // reservation stays at finalization. Genuinely untracked items (zero
+    // inventory rows) still resolve to [] and are NOT rejected.
+    if (isOutsideArea) {
+      for (const item of items) {
+        await resolveInventoryReservations(ctx, item, {
+          failOnVariantMismatch: true,
+        });
+      }
+    }
+
     const orderId = await ctx.db.insert("orders", {
       businessUnitId: effectiveBusinessUnitId,
       orderNumber,
@@ -1357,8 +1388,12 @@ export const create = mutation({
       // the whole order back instead of leaving an order with no stock held.
       // Combo/Party Pack lines expand to their components through the same
       // mechanism (bundle row wins when present; see inventory helper).
+      // Strict at reserve time: a tracked item whose variantName matches no
+      // inventory row must fail closed here, not resolve to "untracked".
       for (const item of items) {
-        const expansions = await resolveInventoryReservations(ctx, item);
+        const expansions = await resolveInventoryReservations(ctx, item, {
+          failOnVariantMismatch: true,
+        });
         for (const expansion of expansions) {
           const inventory = expansion.inventory;
           const quantity = expansion.quantity;

@@ -1352,6 +1352,20 @@ export default function CheckoutPage() {
         const message =
           error instanceof Error ? error.message : "Order creation failed";
         console.error("Checkout failed:", error);
+
+        // 21D-B S6 — the server mixed-BU gate is authoritative. Send the
+        // customer back to the store selection panel with the same guidance
+        // the panel shows instead of a generic failure. No cart lines are
+        // discarded and no server rule is bypassed.
+        if (message.includes("MIXED_BUSINESS_UNIT_CHECKOUT_REQUIRED")) {
+          setSelectedCheckoutBU(null);
+          toast.error("Choose Store to Checkout", {
+            description:
+              "Your cart contains items from different stores. Please checkout each store separately.",
+          });
+          return;
+        }
+
         const isAvailabilityError =
           message.includes("stock") ||
           message.includes("catalogItems") ||
@@ -1359,12 +1373,18 @@ export default function CheckoutPage() {
         // 14D: surface server-side minimum-order rejections verbatim so the
         // configured amount reaches the customer instead of a generic error.
         const isMinOrderError = message.toLowerCase().includes("minimum order");
+        // 21D-B: variant/inventory fail-closed rejections are already written
+        // as customer-facing copy ("Please review your cart.") — show them
+        // verbatim so the customer knows exactly what to fix.
+        const isVariantError = message.includes("selected variant");
         toast.error("Checkout failed", {
-          description: isAvailabilityError
-            ? "Some items in your cart are no longer available. Please review your cart."
-            : isMinOrderError
-              ? message
-              : "Please try again or contact support.",
+          description: isVariantError
+            ? message
+            : isAvailabilityError
+              ? "Some items in your cart are no longer available. Please review your cart."
+              : isMinOrderError
+                ? message
+                : "Please try again or contact support.",
         });
       } finally {
         setIsSubmitting(false);

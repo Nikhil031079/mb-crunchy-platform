@@ -45,6 +45,14 @@ export interface InventoryReservationExpansion {
  * Returns an empty list when nothing is resolvable; callers keep the legacy
  * `continue` (skip) behavior in that case. No client data is trusted: the
  * bundle definition comes from the combos/partyPacks tables.
+ *
+ * Phase 21D-B — `options.failOnVariantMismatch` (reserve-time only): a line
+ * whose variantName matches no inventory row would otherwise resolve to
+ * "untracked" and silently skip stock. With strict mode enabled, that is only
+ * acceptable when the item genuinely has NO inventory rows at all; if rows
+ * exist under other variant keys the configuration and the cart line disagree
+ * and the caller must fail closed instead of proceeding. Bundle lines keep the
+ * documented expansion rules above.
  */
 export async function resolveInventoryReservations(
   ctx: any,
@@ -54,6 +62,7 @@ export async function resolveInventoryReservations(
     itemType?: string;
     quantity: number;
   },
+  options?: { failOnVariantMismatch?: boolean },
 ): Promise<InventoryReservationExpansion[]> {
   const liveRows = await ctx.db
     .query("inventory")
@@ -70,7 +79,31 @@ export async function resolveInventoryReservations(
   const bundleRow = liveRows[0] ?? null;
   if (bundleRow) return [{ inventory: bundleRow, quantity: line.quantity }];
 
-  if (line.itemType !== "combo" && line.itemType !== "partyPack") return [];
+  const isBundleLine =
+    line.itemType === "combo" || line.itemType === "partyPack";
+
+  // Tracked-vs-untracked guard for product lines (bundles are covered by the
+  // component expansion below, which has its own single-row rule).
+  if (options?.failOnVariantMismatch && !isBundleLine) {
+    const itemRows = await ctx.db
+      .query("inventory")
+      .withIndex("by_catalog_item", (q: any) =>
+        q.eq("catalogItemId", line.catalogItemId),
+      )
+      .filter((q: any) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+    if (itemRows.length > 0) {
+      const catalogItem = await ctx.db.get(line.catalogItemId);
+      const itemName = catalogItem?.name ?? "This item";
+      throw new Error(
+        `The selected variant for "${itemName}" is no longer available. Please review your cart.`,
+      );
+    }
+    // Zero rows: the item is genuinely untracked — legacy skip behavior stands.
+    return [];
+  }
+
+  if (!isBundleLine) return [];
   if (!Number.isInteger(line.quantity) || line.quantity < 1) return [];
 
   const catalogItem = await ctx.db.get(line.catalogItemId);

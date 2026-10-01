@@ -13,6 +13,7 @@ import {
   useProductCategorySlugs,
 } from "@/hooks/use-product-routes";
 import { ROUTES } from "@/constants";
+import { resolveQuickAddVariantLine } from "@/utils/product-variants";
 import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -155,19 +156,32 @@ export default function FavouritesPage() {
         return;
       }
       const enriched = item as any;
+      const displayName = enriched.name ?? catalogItem.name;
+      const line = await resolveQuickAddVariantLine({
+        itemType: catalogItem.itemType,
+        name: displayName,
+        price: enriched.price ?? catalogItem.price,
+        sourceId: catalogItem.sourceId,
+      });
+      if (!line) {
+        toast.error("Unable to add to cart", {
+          description: `${displayName || "This item"} could not be added right now. Please try again.`,
+        });
+        return;
+      }
       const added = await addItem({
         catalogItemId: catalogItem._id,
         itemType: item.itemType,
         businessUnitId: catalogItem.businessUnitId,
-        name: enriched.name ?? catalogItem.name,
-        variantName: "Default",
+        name: displayName,
+        variantName: line.variantName,
         quantity: 1,
-        unitPrice: enriched.price ?? catalogItem.price,
+        unitPrice: line.unitPrice,
         image: enriched.image ?? catalogItem.coverImage ?? catalogItem.thumbnail,
       });
       if (added) {
         toast.success("Added to cart", {
-          description: enriched.name ?? catalogItem.name,
+          description: displayName,
         });
       }
     },

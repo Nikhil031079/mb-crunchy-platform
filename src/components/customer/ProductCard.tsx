@@ -14,6 +14,7 @@ import {
   buildCategoryUrl,
   buildProductUrl,
 } from "@/utils";
+import { getDefaultActiveVariant } from "@/utils/product-variants";
 import { useCart } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
 import { useBusinessUnitSlugById } from "@/hooks/use-product-routes";
@@ -114,8 +115,12 @@ export const ProductCard = memo(function ProductCard({
   const isOutOfStock = stockInfo?.status === "out_of_stock";
   const isLowStock = stockInfo?.status === "low_stock";
 
-  // Check if this product is in the cart and get its quantity
-  const defaultVariantName = hasVariants ? product.variants![0].optionValue : "Default";
+  // Check if this product is in the cart and get its quantity.
+  // Lookup uses the CANONICAL default active variant so the card badge matches
+  // the line written by quick-add and the PDP (Phase 21D-B).
+  const defaultVariantName = hasVariants
+    ? getDefaultActiveVariant(product.variants)?.optionValue ?? "Default"
+    : "Default";
   const cartItem = cart.items.find(
     (item) => item.catalogItemId === product._id && item.variantName === defaultVariantName
   );

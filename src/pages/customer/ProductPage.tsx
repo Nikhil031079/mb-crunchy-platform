@@ -31,6 +31,13 @@ import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
 import { formatCurrency, calculateDiscount } from "@/utils";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
+import {
+  getActiveVariants,
+  getDefaultVariant,
+  getVariantGroups,
+  getDefaultSelections,
+  findMatchingVariant,
+} from "@/utils/product-variants";
 
 // Hooks
 import { useCart } from "@/stores/cart";
@@ -54,64 +61,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import type { BusinessUnit, Category, Product, ProductVariant, BusinessUnitSettings, InventoryItem, CatalogItem, ReviewStats } from "@/types";
+import type { BusinessUnit, Category, Product, BusinessUnitSettings, InventoryItem, CatalogItem, ReviewStats } from "@/types";
 import { StockBadge, getStockStatus } from "@/components/customer/StockBadge";
 import type { StockInfo } from "@/components/customer/StockBadge";
-
-// ============================================================================
-// Variant Helpers (client-side, mirrors convex/utils/variantHelper.ts)
-// ============================================================================
-
-function getActiveVariants(variants: ProductVariant[]): ProductVariant[] {
-  return variants
-    .filter((v) => v.active)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
-function getDefaultVariant(variants: ProductVariant[]): ProductVariant | undefined {
-  const active = getActiveVariants(variants);
-  return active.find((v) => v.isDefault) ?? active[0] ?? variants[0];
-}
-
-function getVariantGroups(variants: ProductVariant[]): { groupName: string; options: ProductVariant[] }[] {
-  const active = getActiveVariants(variants);
-  const groupMap = new Map<string, ProductVariant[]>();
-  for (const v of active) {
-    const key = v.optionName || "";
-    const list = groupMap.get(key) ?? [];
-    list.push(v);
-    groupMap.set(key, list);
-  }
-  return Array.from(groupMap.entries())
-    .map(([groupName, options]) => ({
-      groupName,
-      options: options.sort((a, b) => a.sortOrder - b.sortOrder),
-    }))
-    .filter((g) => g.groupName !== "" || g.options.length > 1);
-}
-
-function getDefaultSelections(variants: ProductVariant[]): Record<string, string> {
-  const groups = getVariantGroups(variants);
-  const selections: Record<string, string> = {};
-  for (const group of groups) {
-    const def = group.options.find((o) => o.isDefault) ?? group.options[0];
-    if (def) selections[group.groupName] = def.optionValue;
-  }
-  return selections;
-}
-
-function findMatchingVariant(
-  variants: ProductVariant[],
-  selections: Record<string, string>
-): ProductVariant | undefined {
-  const active = getActiveVariants(variants);
-  for (const v of active) {
-    const group = v.optionName;
-    const sel = selections[group];
-    if (sel !== undefined && sel === v.optionValue) return v;
-  }
-  return getDefaultVariant(variants);
-}
 
 // ============================================================================
 // ProductPage

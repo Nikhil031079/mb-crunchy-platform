@@ -27,6 +27,10 @@ import { useBrowsingPreference } from "@/hooks/use-browsing-preference";
 import { useMealDeals } from "@/hooks/use-meal-deals";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { checkKitchenServiceability } from "@/utils";
+import {
+  getInlineVariants,
+  resolveQuickAddVariantLine,
+} from "@/utils/product-variants";
 import { useLocationStore } from "@/stores/location";
 
 // Customer reusable components
@@ -394,15 +398,29 @@ export default function BusinessUnitPage() {
         });
         return;
       }
-      const defaultVariant = product.variants?.[0];
+      const line = await resolveQuickAddVariantLine({
+        itemType: "product",
+        name: product.name,
+        price: product.price,
+        sourceId: product.sourceId,
+        variants:
+          getInlineVariants(product) ??
+          allProducts?.find((p) => p._id === product.sourceId)?.variants,
+      });
+      if (!line) {
+        toast.error("Unable to add to cart", {
+          description: `${product.name || "This item"} could not be added right now. Please try again.`,
+        });
+        return;
+      }
       const added = await addItem({
         catalogItemId: product._id,
         itemType: "product",
         businessUnitId: businessUnit._id,
         name: product.name,
-        variantName: defaultVariant?.optionValue ?? "Default",
+        variantName: line.variantName,
         quantity: 1,
-        unitPrice: product.price ?? defaultVariant?.price ?? 0,
+        unitPrice: line.unitPrice,
         image: product.coverImage || product.thumbnail,
       });
       if (added) {
@@ -411,7 +429,7 @@ export default function BusinessUnitPage() {
         });
       }
     },
-    [addItem, businessUnit, storeIsOpen, nextOpenTime]
+    [addItem, businessUnit, storeIsOpen, nextOpenTime, allProducts]
   );
 
   const handleAddCombo = useCallback(

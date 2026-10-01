@@ -20,6 +20,10 @@ import { SITE_NAME } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
+import {
+  getInlineVariants,
+  resolveQuickAddVariantLine,
+} from "@/utils/product-variants";
 import { getCategoryCatalog, enrichCategory } from "@/data/categories";
 
 import type { EnrichedCategory } from "@/data/categories";
@@ -308,26 +312,37 @@ const handleAddToCart = useCallback(
         });
         return;
       }
-      // Check if product has variants (CardProduct) or is a CatalogItem
-      const isCardProduct = "variants" in product && Array.isArray(product.variants);
-      const defaultVariant = isCardProduct ? product.variants?.[0] : undefined;
-      const variantName = isCardProduct ? defaultVariant?.optionValue ?? "Default" : "Default";
-      const unitPrice = isCardProduct ? (defaultVariant?.price ?? 0) : (product as CatalogItem).price ?? 0;
+      const item = product as CatalogItem;
+      const line = await resolveQuickAddVariantLine({
+        itemType: "product",
+        name: product.name,
+        price: item.price,
+        sourceId: item.sourceId,
+        variants:
+          getInlineVariants(product) ??
+          allProducts?.find((p) => p._id === item.sourceId)?.variants,
+      });
+      if (!line) {
+        toast.error("Unable to add to cart", {
+          description: `${product.name || "This item"} could not be added right now. Please try again.`,
+        });
+        return;
+      }
       const added = await addItem({
         catalogItemId: product._id,
         itemType: "product",
         businessUnitId: businessUnit._id,
         name: product.name,
-        variantName,
+        variantName: line.variantName,
         quantity: 1,
-        unitPrice,
+        unitPrice: line.unitPrice,
         image: product.coverImage || product.thumbnail,
       });
       if (added) {
         toast.success("Added to cart", { description: product.name });
       }
     },
-    [addItem, businessUnit, storeIsOpen, nextOpenTime]
+    [addItem, businessUnit, storeIsOpen, nextOpenTime, allProducts]
   );
 
   // ==========================================================================
