@@ -46,6 +46,7 @@ export { CustomerReviewCard, CustomerReviewCardSkeleton } from "./CustomerReview
 
 // Interactive
 export { QuantitySelector } from "./QuantitySelector";
+export { CartVariantEditor, isCartVariantUnavailable } from "./CartVariantEditor";
 
 // Collections
 export { CollectionGrid } from "./CollectionGrid";

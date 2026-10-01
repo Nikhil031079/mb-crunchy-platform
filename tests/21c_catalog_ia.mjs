@@ -252,11 +252,17 @@ const ALLOWED_21D_B = new Set([
   "convex/inventory.ts",
   "src/pages/customer/CheckoutPage.tsx",
 ]);
+// Phase 21D-C (cart configuration continuity) follows the same working-tree
+// mechanism with its own SEPARATE set — ALLOWED_21D_B above stays exactly as
+// 21D-B left it, and the forbidden guards below stay intact.
+const ALLOWED_21D_C = new Set([
+  "src/stores/cart.ts",
+]);
 const changed = execSync("git diff --name-only", { cwd: ROOT, encoding: "utf8" })
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
-  .filter((f) => !ALLOWED_21D_B.has(f));
+  .filter((f) => !ALLOWED_21D_B.has(f) && !ALLOWED_21D_C.has(f));
 
 check(
   "16. No Convex files changed",

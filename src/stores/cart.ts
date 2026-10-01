@@ -993,6 +993,108 @@ export function useCart() {
     []
   );
 
+  /**
+   * Phase 21D-C — update a cart line's variant configuration (or refresh a
+   * captured price) in one atomic transition (single setState → single
+   * persist + notify).
+   *
+   * - Meal-deal lines are refused: their pricing belongs to the deal.
+   * - Quantity, cartItemId, name, image and businessUnitId are preserved.
+   * - Variant change: the line is re-identified in place; if a standalone
+   *   line already holds the resulting catalogItemId + variantName, the
+   *   quantities merge into that line at the freshly resolved unit price so
+   *   no duplicate identity is created.
+   * - Subtotal/total are recomputed and the result passes through
+   *   reconcileCartState so deal-consistency rules stay intact.
+   *
+   * Returns true when the requested configuration is now in effect.
+   */
+  const updateVariant = useCallback(
+    (
+      cartItemId: string,
+      next: { variantName: string; unitPrice: number },
+    ): boolean => {
+      let applied = false;
+      setState((prev) => {
+        const targetIdx = prev.items.findIndex(
+          (i) => i.cartItemId === cartItemId,
+        );
+        if (targetIdx < 0) return prev;
+        const target = prev.items[targetIdx];
+
+        if (target.mealDealId) return prev;
+        if (typeof next.variantName !== "string" || next.variantName.length === 0) {
+          return prev;
+        }
+        if (!Number.isFinite(next.unitPrice) || next.unitPrice < 0) return prev;
+
+        if (
+          target.variantName === next.variantName &&
+          target.unitPrice === next.unitPrice
+        ) {
+          applied = true;
+          return prev;
+        }
+
+        // A standalone line already holding the requested identity — merge
+        // into it instead of creating a duplicate catalogItemId+variantName.
+        const siblingIdx = prev.items.findIndex(
+          (i, idx) =>
+            idx !== targetIdx &&
+            !i.mealDealId &&
+            i.catalogItemId === target.catalogItemId &&
+            i.variantName === next.variantName,
+        );
+
+        let newItems: CartItem[];
+        if (siblingIdx >= 0) {
+          const sibling = prev.items[siblingIdx];
+          const mergedQuantity = sibling.quantity + target.quantity;
+          newItems = prev.items
+            .filter((_, idx) => idx !== targetIdx)
+            .map((i, idx) =>
+              idx === (siblingIdx > targetIdx ? siblingIdx - 1 : siblingIdx)
+                ? {
+                    ...sibling,
+                    unitPrice: next.unitPrice,
+                    quantity: mergedQuantity,
+                    totalPrice: next.unitPrice * mergedQuantity,
+                  }
+                : i,
+            );
+        } else {
+          newItems = prev.items.map((i, idx) =>
+            idx === targetIdx
+              ? {
+                  ...target,
+                  variantName: next.variantName,
+                  unitPrice: next.unitPrice,
+                  totalPrice: next.unitPrice * target.quantity,
+                }
+              : i,
+          );
+        }
+
+        applied = true;
+        const subtotal = calculateSubtotal(newItems);
+        return reconcileCartState({
+          ...prev,
+          items: newItems,
+          subtotal,
+          total: computeTotal(
+            subtotal,
+            prev.discount,
+            prev.deliveryFee,
+            prev.tax,
+            prev.mealDealSavings,
+          ),
+        });
+      });
+      return applied;
+    },
+    []
+  );
+
   const removeItem = useCallback((cartItemId: string) => {
     setState((prev) => removeItemInternal(prev, cartItemId));
   }, []);
@@ -1581,6 +1683,7 @@ export function useCart() {
     cart,
     addItem,
     updateQuantity,
+    updateVariant,
     removeItem,
     clearCart,
     dismissNotice,

@@ -22,9 +22,11 @@ import {
 import { toast } from "sonner";
 
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { SITE_NAME, ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { filterCatalogItemIds, formatCurrency, checkKitchenServiceability } from "@/utils";
+import { getActiveVariants } from "@/utils/product-variants";
 
 // Hooks
 import { useCart, setActiveDeals } from "@/stores/cart";
@@ -33,7 +35,7 @@ import { useProductCategorySlugs, useBusinessUnitSlugById } from "@/hooks/use-pr
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCartMealDealDetection, useMealDeals } from "@/hooks/use-meal-deals";
 import { useLocationStore } from "@/stores/location";
-import { QuantitySelector } from "@/components/customer";
+import { QuantitySelector, CartVariantEditor } from "@/components/customer";
 import { ProductCard, ProductCardSkeleton } from "@/components/customer";
 import { FrequentlyBoughtTogetherSection } from "@/components/customer/FrequentlyBoughtTogetherSection";
 import { RecentlyViewedSection } from "@/components/customer/RecentlyViewedSection";
@@ -47,17 +49,47 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 
-import type { BusinessUnit, DeliveryPolicy, BusinessUnitSettings, CatalogItem } from "@/types";
+import type { BusinessUnit, DeliveryPolicy, BusinessUnitSettings, CartItem, CatalogItem, InventoryItem, Product } from "@/types";
 import type { CardProduct } from "@/components/customer/ProductCard";
 
 // ============================================================================
 // CartPage — Enhanced with free delivery progress, savings, recommendations
 // ============================================================================
 
+// Phase 21D-C M5 — mirrors PRICE_TOLERANCE in convex/orders.ts (resolveOrderLine)
+// so the stale-price indicator only surfaces captured prices the server would
+// reject at checkout.
+const STALE_PRICE_THRESHOLD = 0.02;
+
+/**
+ * Phase 21D-C M5 — current server-authoritative price for a cart line.
+ * Mirrors resolveOrderLine (convex/orders.ts): active-variant products price
+ * from the matched active variant; products with zero active variants use the
+ * catalog price. Product lines whose docs are missing or cross-BU disagree
+ * resolve to null (no indicator — never guess a price).
+ */
+function resolveCurrentLinePrice(
+  item: CartItem,
+  catalogEntry: CatalogItem | undefined,
+  productDoc: Product | undefined,
+): number | null {
+  if (item.itemType !== "product" || item.mealDealId) return null;
+  if (!catalogEntry || !productDoc) return null;
+  if (productDoc.businessUnitId !== item.businessUnitId) return null;
+  const active = getActiveVariants(productDoc.variants);
+  if (active.length === 0) return catalogEntry.price;
+  const variant = active.find((v) => v.optionValue === item.variantName);
+  return variant ? variant.price : null;
+}
+
 export default function CartPage() {
   const navigate = useNavigate();
-  const { cart, updateQuantity, removeItem, clearCart, itemCount, addItem, dismissNotice, applyMealDeal, allocateExistingMealDeal, removeMealDeal } = useCart();
+  const { cart, updateQuantity, updateVariant, removeItem, clearCart, itemCount, addItem, dismissNotice, applyMealDeal, allocateExistingMealDeal, removeMealDeal } = useCart();
   const addToCart = useAddToCart();
+
+  // Phase 21D-C — the cart line currently being edited (single inventory
+  // subscription drives whichever editor is open; fixed hook count).
+  const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
 
   // Meal Deal variant selection dialog
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
@@ -169,6 +201,51 @@ export default function CartPage() {
     () => filterCatalogItemIds(cart.items.map((item) => item.catalogItemId)),
     [cart.items],
   );
+
+  // ── Phase 21D-C — catalog + source data for cart-line variant editing ──
+  const cartCatalogItems = useQuery(
+    api.catalogItems.getByIds,
+    cartItemIds.length > 0 ? { ids: cartItemIds as Id<"catalogItems">[] } : "skip",
+  ) as CatalogItem[] | undefined;
+
+  const cartCatalogById = useMemo(
+    () => new Map((cartCatalogItems ?? []).map((c) => [c._id, c])),
+    [cartCatalogItems],
+  );
+
+  const cartProductSourceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of cart.items) {
+      if (item.itemType !== "product" || item.mealDealId) continue;
+      const sourceId = cartCatalogById.get(item.catalogItemId)?.sourceId;
+      if (sourceId) ids.add(sourceId);
+    }
+    return [...ids];
+  }, [cart.items, cartCatalogById]);
+
+  const cartProducts = useQuery(
+    api.products.getByIds,
+    cartProductSourceIds.length > 0
+      ? { ids: cartProductSourceIds as Id<"products">[] }
+      : "skip",
+  ) as Product[] | undefined;
+
+  const cartProductById = useMemo(
+    () => new Map((cartProducts ?? []).map((p) => [p._id, p])),
+    [cartProducts],
+  );
+
+  // Storefront inventory for the line being edited — one reactive
+  // subscription, skipped until an editor is open.
+  const editingItem = editingCartItemId
+    ? cart.items.find((i) => i.cartItemId === editingCartItemId) ?? null
+    : null;
+  const editingInventory = useQuery(
+    api.inventory.getByCatalogItem,
+    editingItem
+      ? { catalogItemId: editingItem.catalogItemId as Id<"catalogItems"> }
+      : "skip",
+  ) as InventoryItem[] | undefined;
 
   // Fetch recommendations across all active business units,
   // excluding items already in the cart.
@@ -572,6 +649,29 @@ export default function CartPage() {
                   )}
             <AnimatePresence mode="popLayout">
               {group.items.map((item) => {
+                // Phase 21D-C — variant editing + stale-price data for this line
+                const catalogEntry = cartCatalogById.get(item.catalogItemId);
+                const productDoc =
+                  item.itemType === "product" && catalogEntry?.sourceId
+                    ? cartProductById.get(catalogEntry.sourceId)
+                    : undefined;
+                const activeVariants =
+                  !item.mealDealId &&
+                  productDoc &&
+                  productDoc.businessUnitId === item.businessUnitId
+                    ? getActiveVariants(productDoc.variants)
+                    : [];
+                const editable = activeVariants.length > 0;
+                const currentPrice = resolveCurrentLinePrice(
+                  item,
+                  catalogEntry,
+                  productDoc,
+                );
+                const stalePrice =
+                  currentPrice !== null &&
+                  Math.abs(currentPrice - item.unitPrice) > STALE_PRICE_THRESHOLD
+                    ? currentPrice
+                    : null;
                 return (
                   <motion.div
                     key={item.cartItemId}
@@ -615,9 +715,31 @@ export default function CartPage() {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {item.variantName}
-                          </p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              {item.variantName}
+                            </p>
+                            {editable && (
+                              <CartVariantEditor
+                                item={item}
+                                activeVariants={activeVariants}
+                                inventory={
+                                  editingCartItemId === item.cartItemId
+                                    ? editingInventory
+                                    : undefined
+                                }
+                                open={editingCartItemId === item.cartItemId}
+                                onOpenChange={(nextOpen) =>
+                                  setEditingCartItemId(
+                                    nextOpen ? item.cartItemId ?? null : null,
+                                  )
+                                }
+                                onApply={(next) =>
+                                  updateVariant(item.cartItemId ?? "cl_0", next)
+                                }
+                              />
+                            )}
+                          </div>
                         )}
                         <div className="flex items-baseline gap-2 mt-2">
                           <p className="font-culinary-heading text-base font-bold tracking-tight">
@@ -627,6 +749,39 @@ export default function CartPage() {
                             &times; {item.quantity}
                           </p>
                         </div>
+                        {stalePrice !== null && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 dark:border-amber-800 dark:bg-amber-950/30">
+                            <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">
+                              Price changed
+                            </span>
+                            <span className="text-[10px] text-amber-700 dark:text-amber-300">
+                              Now {formatCurrency(stalePrice)}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const applied = updateVariant(
+                                  item.cartItemId ?? "cl_0",
+                                  {
+                                    variantName: item.variantName,
+                                    unitPrice: stalePrice,
+                                  },
+                                );
+                                if (!applied) {
+                                  toast.error("Couldn't update price", {
+                                    description: `${item.name} could not be updated. Your cart was not changed.`,
+                                  });
+                                }
+                              }}
+                              className="h-5 px-1.5 text-[10px] font-semibold text-amber-900 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-100 dark:hover:bg-amber-900/40"
+                              aria-label={`Update price of ${item.name}`}
+                            >
+                              Update price
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Quantity + Remove */}
