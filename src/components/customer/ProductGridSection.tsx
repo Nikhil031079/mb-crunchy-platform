@@ -7,6 +7,7 @@ import type { Id } from "@convex/_generated/dataModel";
 
 import { cn } from "@/lib/utils";
 import { useProductCategorySlugs } from "@/hooks/use-product-routes";
+import { useDefaultVariantNames } from "@/hooks/use-default-variant-names";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard, ProductCardSkeleton } from "./ProductCard";
@@ -62,6 +63,7 @@ export function ProductGridSection({
   ) as Record<string, { average: number; count: number }> | undefined;
 
   const categorySlugBySourceId = useProductCategorySlugs(items);
+  const defaultVariantNameBySourceId = useDefaultVariantNames(items);
 
   if (loading) {
     return (
@@ -112,6 +114,7 @@ export function ProductGridSection({
               onAddToCart={onAddToCart}
               rating={ratingsMap?.[item._id]}
               onOpenItemDetails={onOpenItemDetails}
+              defaultVariantName={defaultVariantNameBySourceId.get(item.sourceId)}
               className={cn(index >= 4 && "hidden sm:block")}
             />
           ))}

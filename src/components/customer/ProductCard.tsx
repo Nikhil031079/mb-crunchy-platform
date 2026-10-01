@@ -55,6 +55,13 @@ interface ProductCardProps {
    * image uncropped in a light padded well (Mart grid).
    */
   imageFit?: "cover" | "contain";
+  /**
+   * Canonical default variant name resolved from this product's variants
+   * (the quick-add identity) — threaded by the parent when the card item is
+   * a plain CatalogItem with no inline variants (Phase 21C-FIX). Inline
+   * variants always win; this is the fallback.
+   */
+  defaultVariantName?: string;
 }
 
 export const ProductCard = memo(function ProductCard({
@@ -72,6 +79,7 @@ export const ProductCard = memo(function ProductCard({
   rating,
   onOpenItemDetails,
   imageFit = "cover",
+  defaultVariantName,
 }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
   const [hoverImageError, setHoverImageError] = useState(false);
@@ -116,13 +124,18 @@ export const ProductCard = memo(function ProductCard({
   const isLowStock = stockInfo?.status === "low_stock";
 
   // Check if this product is in the cart and get its quantity.
-  // Lookup uses the CANONICAL default active variant so the card badge matches
-  // the line written by quick-add and the PDP (Phase 21D-B).
-  const defaultVariantName = hasVariants
+  // Identity must be the SAME line quick-add writes: catalogItemId + the
+  // CANONICAL default active variant (21D-B rule — getDefaultActiveVariant,
+  // never position, never an inactive variant). Inline variants resolve on
+  // the card; plain CatalogItems carry none, so the parent threads the
+  // fetched canonical name through `defaultVariantName` (Phase 21C-FIX).
+  const inlineDefaultVariantName = hasVariants
     ? getDefaultActiveVariant(product.variants)?.optionValue ?? "Default"
-    : "Default";
+    : undefined;
+  // Mirrors quick-add's getInlineVariants-first resolution order.
+  const cartVariantName = inlineDefaultVariantName ?? defaultVariantName ?? "Default";
   const cartItem = cart.items.find(
-    (item) => item.catalogItemId === product._id && item.variantName === defaultVariantName
+    (item) => item.catalogItemId === product._id && item.variantName === cartVariantName
   );
   const cartQuantity = cartItem?.quantity ?? 0;
 
@@ -143,6 +156,10 @@ export const ProductCard = memo(function ProductCard({
 
   // cartItemId is guaranteed by the cart store's migration logic,
   // but TypeScript doesn't know this invariant. Generate one if missing.
+  // `cartItem` is a dependency of BOTH handlers — without it the callbacks
+  // close over the first-render line (quantity 0/1) and go stale: the
+  // stepper froze at 2 and the final minus removed the line entirely
+  // (Phase 21C-FIX defect 1B).
   const handleIncrement = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -150,7 +167,7 @@ export const ProductCard = memo(function ProductCard({
       const cartItemId = cartItem.cartItemId ?? `cl_${Date.now().toString(36)}_${(Math.random()*1e8>>>0).toString(36)}`;
       updateQuantity(cartItemId, cartItem.quantity + 1);
     }
-  }, [updateQuantity]);
+  }, [updateQuantity, cartItem]);
 
   const handleDecrement = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -164,7 +181,7 @@ export const ProductCard = memo(function ProductCard({
         updateQuantity(cartItemId, newQty);
       }
     }
-  }, [updateQuantity]);
+  }, [updateQuantity, cartItem]);
 
   const handleFavorite = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -542,8 +559,8 @@ export const ProductCard = memo(function ProductCard({
             {hasVariants && product.variants!.length > 1 && (
               <div className="mt-2 hidden items-center justify-between gap-2 rounded-lg border border-border/50 bg-secondary/30 px-2 py-1 text-[11px] lg:flex">
                 <span className="truncate text-muted-foreground">
-                  {defaultVariantName !== "Default"
-                    ? defaultVariantName
+                  {inlineDefaultVariantName && inlineDefaultVariantName !== "Default"
+                    ? inlineDefaultVariantName
                     : "Multiple variants"}
                 </span>
                 <span className="shrink-0 font-semibold text-culinary-primary">

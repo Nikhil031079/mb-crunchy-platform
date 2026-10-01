@@ -10,6 +10,7 @@ import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 import { useProductCategorySlugs } from "@/hooks/use-product-routes";
+import { useDefaultVariantNames } from "@/hooks/use-default-variant-names";
 import { filterCatalogItemIds } from "@/utils";
 
 import { SectionHeader } from "./SectionHeader";
@@ -147,6 +148,7 @@ export function CrossSellSections({
     recommendedPacks.length > 0;
 
   const categorySlugBySourceId = useProductCategorySlugs(mayAlsoLike);
+  const defaultVariantNameBySourceId = useDefaultVariantNames(mayAlsoLike);
 
   if (!hasAny) return null;
 
@@ -171,6 +173,7 @@ export function CrossSellSections({
                 index={0}
                 compact
                 onAddToCart={handleAddProduct}
+                defaultVariantName={defaultVariantNameBySourceId.get(item.sourceId)}
               />
             ))}
           </div>

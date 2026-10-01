@@ -17,7 +17,6 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
 import { SITE_NAME } from "@/constants";
-import { cn } from "@/lib/utils";
 import { useCart } from "@/stores/cart";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import {
@@ -41,7 +40,6 @@ import { CategoryEmptyState } from "@/components/customer/CategoryEmptyState";
 import { ItemDetailsModal } from "@/components/customer/ItemDetailsModal";
 
 // Shared components
-import { CategoryCard, CategoryIcon } from "@/components/shared/CategoryCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 
@@ -60,16 +58,13 @@ import type {
 } from "@/types";
 
 // ============================================================================
-// Sort Options — shared source of truth lives in @/lib/catalog (Phase 21C)
-// ============================================================================
-
-const categoryAnchorId = (slug: string) => `category-${slug}`;
-
-// ============================================================================
-// CategoryPage — Section-based category browser
+// CategoryPage — scoped category catalog
 //
-// All active categories of a business unit are rendered as sections with a
-// sticky navigation bar. The :categorySlug param targets the initial section.
+// The :categorySlug route renders THAT category's products through the shared
+// catalog pipeline (CatalogToolbar + CatalogGrid). Other active categories
+// stay reachable via the sticky CategoryNavBar, which navigates to each
+// category's canonical URL so URL, title, breadcrumb and grid scope always
+// stay in sync (Phase 21C-FIX). Sort options live in @/lib/catalog.
 // ============================================================================
 
 export default function CategoryPage() {
@@ -85,7 +80,6 @@ export default function CategoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("default");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [activeCategoryId, setActiveCategoryId] = useState("");
   // Universal quick-view modal — same product interaction as BusinessUnitPage.
   const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
   const navigate = useNavigate();
@@ -97,7 +91,6 @@ export default function CategoryPage() {
     setSearchQuery("");
     setSortBy("default");
     setViewMode("grid");
-    setActiveCategoryId("");
     setSelectedItem(null);
   }
 
@@ -162,6 +155,12 @@ export default function CategoryPage() {
     [categories, catalog]
   );
 
+  // The route's category — this page's single catalog scope (Phase 21C-FIX).
+  const activeCategory = useMemo(
+    () => activeCategories.find((c) => c.slug === categorySlug),
+    [activeCategories, categorySlug]
+  );
+
   // Map categoryId → product ids, and product sourceId → catalog item
   const productIdsByCategory = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -209,18 +208,18 @@ export default function CategoryPage() {
     return record;
   }, [activeCategories, countByCategoryId]);
 
-  const totalProducts = useMemo(
-    () => activeCategories.reduce((sum, c) => sum + (countByCategoryId.get(c._id) ?? 0), 0),
-    [activeCategories, countByCategoryId]
+  const scopedProductCount = useMemo(
+    () => (activeCategory ? countByCategoryId.get(activeCategory._id) ?? 0 : 0),
+    [activeCategory, countByCategoryId]
   );
 
-  // Ratings summary for all displayable catalog items
+  // Ratings summary for the route category's displayable catalog items
   const allCatalogItemIds = useMemo(
     () =>
-      Array.from(itemsByCategoryId.values())
-        .flat()
-        .map((i) => i._id as Id<"catalogItems">),
-    [itemsByCategoryId]
+      (activeCategory ? itemsByCategoryId.get(activeCategory._id) ?? [] : []).map(
+        (i) => i._id as Id<"catalogItems">
+      ),
+    [activeCategory, itemsByCategoryId]
   );
 
   const ratingsMap = useQuery(
@@ -228,46 +227,23 @@ export default function CategoryPage() {
     allCatalogItemIds.length > 0 ? { ids: allCatalogItemIds } : "skip"
   ) as Record<string, { average: number; count: number }> | undefined;
 
-  const initialCategory = useMemo(
-    () => activeCategories.find((c) => c.slug === categorySlug),
-    [activeCategories, categorySlug]
+  // ==========================================================================
+  // Filtering + sorting — shared pipeline (@/lib/catalog), scoped to the
+  // route category. Search and sort compose with no early return, which is
+  // what previously made sort silently ignored during in-page search.
+  // ==========================================================================
+
+  const scopedItems = useMemo(
+    () => (activeCategory ? itemsByCategoryId.get(activeCategory._id) ?? [] : []),
+    [activeCategory, itemsByCategoryId]
   );
 
-  const categoryIdBySlug = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of activeCategories) map.set(c.slug, c._id);
-    return map;
-  }, [activeCategories]);
-
-  const effectiveActiveCategoryId =
-    activeCategoryId ||
-    (isDataLoaded && initialCategory ? initialCategory._id : "");
-
-  // ==========================================================================
-  // Filtering + sorting — shared pipeline (@/lib/catalog)
-  //
-  // Items arrive already scoped to their category above, so the pipeline is
-  // free to compose search and sort: there is deliberately no early return,
-  // which is what previously made sort silently ignored during in-page search.
-  // ==========================================================================
-
-  const filteredByCategoryId = useMemo(() => {
-    const map = new Map<string, CatalogItem[]>();
-    for (const c of activeCategories) {
-      map.set(
-        c._id,
-        filterAndSortCatalogItems(itemsByCategoryId.get(c._id) ?? [], {
-          searchQuery,
-          sortBy,
-        }),
-      );
-    }
-    return map;
-  }, [activeCategories, itemsByCategoryId, searchQuery, sortBy]);
-
-  const anyResults = useMemo(
-    () => activeCategories.some((c) => (filteredByCategoryId.get(c._id)?.length ?? 0) > 0),
-    [activeCategories, filteredByCategoryId]
+  const filteredItems = useMemo(
+    () => filterAndSortCatalogItems(scopedItems, {
+      searchQuery,
+      sortBy,
+    }),
+    [scopedItems, searchQuery, sortBy]
   );
 
   // ==========================================================================
@@ -278,28 +254,36 @@ export default function CategoryPage() {
     setSearchQuery(query);
   }, []);
 
-  const scrollToCategory = useCallback((categoryId: string) => {
-    const el = document.getElementById(categoryAnchorId(categoryId));
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-
-  const scrollToOverview = useCallback(() => {
-    const el = document.getElementById("category-overview");
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-
-  const getNextNonEmptyCategoryId = useCallback(
-    (fromId: string): string | null => {
-      const idx = activeCategories.findIndex((c) => c._id === fromId);
-      if (idx < 0) return null;
-      for (let i = 1; i <= activeCategories.length; i++) {
-        const candidate = activeCategories[(idx + i) % activeCategories.length];
-        if ((countByCategoryId.get(candidate._id) ?? 0) > 0) return candidate._id;
+  // Chips navigate to the selected category's canonical URL, so the URL,
+  // document title, breadcrumb, nav highlight and grid scope all stay in
+  // sync — navigation instead of in-page scrolling (Phase 21C-FIX).
+  const navigateToCategory = useCallback(
+    (categoryId: string) => {
+      const target = activeCategories.find((c) => c._id === categoryId);
+      if (target && target._id !== activeCategory?._id) {
+        navigate(`/${buSlug}/${target.slug}`);
       }
-      return null;
     },
-    [activeCategories, countByCategoryId]
+    [activeCategories, activeCategory, buSlug, navigate]
   );
+
+  // Next category with products — destination for CategoryEmptyState's
+  // "Explore other categories" action (URL navigation, not scrolling).
+  const nextCategoryWithProducts = useMemo(() => {
+    if (!activeCategory) return undefined;
+    const start = activeCategories.findIndex((c) => c._id === activeCategory._id);
+    if (start < 0) return undefined;
+    for (let i = 1; i <= activeCategories.length; i++) {
+      const candidate = activeCategories[(start + i) % activeCategories.length];
+      if (
+        candidate._id !== activeCategory._id &&
+        (countByCategoryId.get(candidate._id) ?? 0) > 0
+      ) {
+        return candidate;
+      }
+    }
+    return undefined;
+  }, [activeCategories, activeCategory, countByCategoryId]);
 
 const handleAddToCart = useCallback(
     async (product: CatalogItem | CardProduct) => {
@@ -349,44 +333,14 @@ const handleAddToCart = useCallback(
   // Effects
   // ==========================================================================
 
-  // Page title
+  // Page title — the route category leads, the store stays as context
   useEffect(() => {
     if (businessUnit) {
-      document.title = `${businessUnit.name} Categories | ${SITE_NAME}`;
+      document.title = activeCategory
+        ? `${activeCategory.name} | ${businessUnit.name} | ${SITE_NAME}`
+        : `${businessUnit.name} Categories | ${SITE_NAME}`;
     }
-  }, [businessUnit]);
-
-  // Scroll to the category referenced in the URL once data is ready
-  useEffect(() => {
-    if (!isDataLoaded || !initialCategory) return;
-    requestAnimationFrame(() => {
-      const el = document.getElementById(categoryAnchorId(initialCategory.slug));
-      if (el) el.scrollIntoView({ behavior: "auto", block: "start" });
-    });
-  }, [isDataLoaded, initialCategory]);
-
-  // Scroll-spy — highlight the category currently in view
-  useEffect(() => {
-    if (!isDataLoaded || activeCategories.length === 0) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const slug = entry.target.id.replace("category-", "");
-            const id = categoryIdBySlug.get(slug);
-            if (id) setActiveCategoryId(id);
-            return;
-          }
-        }
-      },
-      { rootMargin: "-100px 0px -60% 0px", threshold: 0 }
-    );
-    for (const c of activeCategories) {
-      const el = document.getElementById(categoryAnchorId(c.slug));
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, [isDataLoaded, activeCategories, categoryIdBySlug]);
+  }, [businessUnit, activeCategory]);
 
   // Route fallback — never treat a product slug as a category. When the
   // :categorySlug segment isn't an active category but matches an active
@@ -550,7 +504,7 @@ const handleAddToCart = useCallback(
             </Link>
             <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="shrink-0 font-medium text-foreground">
-              {initialCategory?.name ?? "Categories"}
+              {activeCategory?.name ?? "Categories"}
             </span>
           </nav>
 
@@ -577,7 +531,7 @@ const handleAddToCart = useCallback(
               </span>
               <div className="min-w-0">
                 <h1 className="font-culinary-heading truncate text-2xl font-bold tracking-tight md:text-3xl">
-                  {bu.name} Categories
+                  {activeCategory?.name ?? bu.name}
                 </h1>
                 {bu.description && (
                   <p className="mt-0.5 truncate text-sm text-muted-foreground max-w-xl">
@@ -588,25 +542,12 @@ const handleAddToCart = useCallback(
             </div>
           </motion.div>
 
-          {/* Quick stats — the active category scope is always visible */}
+          {/* Quick stats — store status + the route category's product count */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            {initialCategory && (
-              <Badge
-                variant="outline"
-                className="border-accent/40 bg-accent/10 text-xs font-semibold text-accent"
-              >
-                <LayoutGrid className="mr-1 h-3 w-3" />
-                {initialCategory.name}
-              </Badge>
-            )}
             <StoreStatusBadge isOpen={storeIsOpen} openingHours={buSettings?.openingHours} />
             <Badge variant="outline" className="border-border/60 bg-card text-xs">
-              <LayoutGrid className="mr-1 h-3 w-3" />
-              {activeCategories.length} categor{activeCategories.length === 1 ? "y" : "ies"}
-            </Badge>
-            <Badge variant="outline" className="border-border/60 bg-card text-xs">
               <Package className="mr-1 h-3 w-3" />
-              {totalProducts} product{totalProducts === 1 ? "" : "s"}
+              {scopedProductCount} product{scopedProductCount === 1 ? "" : "s"}
             </Badge>
           </div>
         </div>
@@ -619,7 +560,7 @@ const handleAddToCart = useCallback(
       <div className="border-b border-white/60 bg-white/55 backdrop-blur-lg dark:border-white/10 dark:bg-[#1A1412]/70">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
           <CatalogToolbar
-            placeholder={`Search ${bu.name}...`}
+            placeholder={`Search ${activeCategory?.name ?? bu.name}...`}
             onSearch={handleSearch}
             sortBy={sortBy}
             onSortChange={setSortBy}
@@ -635,9 +576,9 @@ const handleAddToCart = useCallback(
 
       <CategoryNavBar
         categories={activeCategories}
-        activeId={effectiveActiveCategoryId}
+        activeId={activeCategory?._id ?? ""}
         counts={countsRecord}
-        onSelect={scrollToCategory}
+        onSelect={navigateToCategory}
       />
 
       {noCategories ? (
@@ -655,148 +596,51 @@ const handleAddToCart = useCallback(
             }
           />
         </div>
-      ) : (
+      ) : activeCategory ? (
         <main>
           {/* ============================================================ */}
-          {/* ALL CATEGORIES OVERVIEW GRID                                */}
+          {/* CATEGORY PRODUCTS — single scoped catalog (Phase 21C-FIX)    */}
           {/* ============================================================ */}
 
-          <div id="category-overview" className="scroll-mt-36">
-            <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-              <div className="mb-5 flex items-end justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <LayoutGrid className="h-4 w-4 text-accent" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-accent">
-                      Browse
-                    </span>
-                  </div>
-                  <h2 className="font-culinary-heading text-xl font-bold tracking-tight sm:text-2xl">All Categories</h2>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                {activeCategories.map((cat, index) => (
-                  <CategoryCard
-                    key={cat._id}
-                    category={cat}
-                    businessUnitSlug={buSlug}
-                    index={index}
-                    productCount={countByCategoryId.get(cat._id) ?? 0}
-                    icon={cat.catalog?.icon}
-                    gradient={cat.catalog?.gradient}
-                    featured={cat.catalog?.featured}
-                    onClick={() => scrollToCategory(cat._id)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ============================================================ */}
-          {/* CATEGORY SECTIONS                                           */}
-          {/* ============================================================ */}
-
-          <div className="border-t border-border/40">
-            {searchQuery && !anyResults ? (
-              <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-                <EmptyState
-                  title="No results found"
-                  description={`We couldn't find anything matching "${searchQuery}" in ${bu.name}. Try a different search term.`}
-                  icon={Package}
-                  action={
-                    <Button variant="outline" size="sm" onClick={() => handleSearch("")}>
-                      Clear Search
-                    </Button>
-                  }
-                />
-              </div>
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            {filteredItems.length > 0 ? (
+              <CatalogGrid
+                items={filteredItems}
+                viewMode={viewMode}
+                businessUnitSlug={buSlug}
+                categorySlugFor={() => activeCategory.slug}
+                onAddToCart={handleAddToCart}
+                ratingsMap={ratingsMap}
+                onOpenItemDetails={setSelectedItem}
+                products={allProducts}
+              />
+            ) : searchQuery ? (
+              <EmptyState
+                title="No results found"
+                description={`We couldn't find anything matching "${searchQuery}" in ${activeCategory.name}. Try a different search term.`}
+                icon={Package}
+                action={
+                  <Button variant="outline" size="sm" onClick={() => handleSearch("")}>
+                    Clear Search
+                  </Button>
+                }
+              />
             ) : (
-              activeCategories.map((cat) => {
-                const items = filteredByCategoryId.get(cat._id) ?? [];
-                const totalCount = countByCategoryId.get(cat._id) ?? 0;
-                const nextNonEmptyId = getNextNonEmptyCategoryId(cat._id);
-
-                return (
-                  <section
-                    key={cat._id}
-                    id={categoryAnchorId(cat.slug)}
-                    className="scroll-mt-32 border-b border-border/40 py-8 sm:py-10"
-                  >
-                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                      {/* Section header */}
-                      <div className="mb-5 flex items-center justify-between gap-4">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span
-                            className={cn(
-                              "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-sm",
-                              cat.catalog?.gradient ?? "from-secondary to-secondary"
-                            )}
-                          >
-                            <CategoryIcon
-                              icon={cat.catalog?.icon}
-                              name={cat.name}
-                              className="h-5 w-5"
-                            />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h2 className="font-culinary-heading truncate text-lg font-bold tracking-tight sm:text-xl">
-                                {cat.name}
-                              </h2>
-                              {cat.catalog?.featured && (
-                                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-accent">
-                                  Featured
-                                </span>
-                              )}
-                            </div>
-                            <p className="truncate text-xs text-muted-foreground sm:text-sm">
-                              {cat.description ?? cat.catalog?.description}
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="shrink-0 border-border/60 bg-card text-xs">
-                          <Package className="mr-1 h-3 w-3" />
-                          {totalCount} product{totalCount === 1 ? "" : "s"}
-                        </Badge>
-                      </div>
-
-                      {/* Content — shared catalog grid (Phase 21C) */}
-                      {items.length > 0 ? (
-                        <CatalogGrid
-                          items={items}
-                          viewMode={viewMode}
-                          businessUnitSlug={buSlug}
-                          categorySlugFor={() => cat.slug}
-                          onAddToCart={handleAddToCart}
-                          ratingsMap={ratingsMap}
-                          onOpenItemDetails={setSelectedItem}
-                        />
-                      ) : searchQuery ? (
-                        <p className="rounded-xl border border-dashed border-border/60 bg-secondary/20 px-4 py-4 text-center text-sm text-muted-foreground">
-                          No matches for &quot;{searchQuery}&quot; in {cat.name}
-                        </p>
-                      ) : (
-                        <CategoryEmptyState
-                          name={cat.name}
-                          icon={cat.catalog?.icon}
-                          gradient={cat.catalog?.gradient}
-                          onExploreOther={
-                            nextNonEmptyId
-                              ? () => scrollToCategory(nextNonEmptyId)
-                              : undefined
-                          }
-                          onBrowseAll={scrollToOverview}
-                        />
-                      )}
-                    </div>
-                  </section>
-                );
-              })
+              <CategoryEmptyState
+                name={activeCategory.name}
+                icon={activeCategory.catalog?.icon}
+                gradient={activeCategory.catalog?.gradient}
+                onExploreOther={
+                  nextCategoryWithProducts
+                    ? () => navigateToCategory(nextCategoryWithProducts._id)
+                    : undefined
+                }
+                onBrowseAll={() => navigate(`/${buSlug}`)}
+              />
             )}
           </div>
         </main>
-      )}
+      ) : null}
 
       {/* Universal item details modal — same product interaction as the
           canonical store catalog (Phase 21C) */}

@@ -932,6 +932,7 @@ export default function BusinessUnitPage() {
               ratingsMap={ratingsMap}
               onOpenItemDetails={setSelectedItem}
               skeletonCount={12}
+              products={allProducts}
             />
           </section>
         )}
@@ -961,6 +962,7 @@ export default function BusinessUnitPage() {
             stockInfoFor={getStockInfoForProduct}
             ratingsMap={ratingsMap}
             onOpenItemDetails={setSelectedItem}
+            products={allProducts}
             emptyState={
               <EmptyState
                 title={

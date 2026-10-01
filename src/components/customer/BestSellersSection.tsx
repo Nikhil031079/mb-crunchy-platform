@@ -8,6 +8,7 @@ import { api } from "@convex/_generated/api";
 import { cn } from "@/lib/utils";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useProductCategorySlugs } from "@/hooks/use-product-routes";
+import { useDefaultVariantNames } from "@/hooks/use-default-variant-names";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard, ProductCardSkeleton } from "./ProductCard";
@@ -58,6 +59,7 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
   const firstBuSlug = businessUnits[0]?.slug;
 
   const categorySlugBySourceId = useProductCategorySlugs(bestSellers);
+  const defaultVariantNameBySourceId = useDefaultVariantNames(bestSellers);
 
   if (isLoading) {
     return (
@@ -110,6 +112,7 @@ export function BestSellersSection({ businessUnits }: BestSellersSectionProps) {
               index={index}
               compact
               onAddToCart={handleAddToCart}
+              defaultVariantName={defaultVariantNameBySourceId.get(item.sourceId)}
               className={cn(index >= 4 && "hidden sm:block")}
             />
           ))}

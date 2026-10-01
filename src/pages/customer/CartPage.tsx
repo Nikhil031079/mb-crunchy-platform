@@ -32,6 +32,7 @@ import { getActiveVariants } from "@/utils/product-variants";
 import { useCart, setActiveDeals } from "@/stores/cart";
 import { useAuth } from "@/hooks/use-auth";
 import { useProductCategorySlugs, useBusinessUnitSlugById } from "@/hooks/use-product-routes";
+import { useDefaultVariantNames } from "@/hooks/use-default-variant-names";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCartMealDealDetection, useMealDeals } from "@/hooks/use-meal-deals";
 import { useLocationStore } from "@/stores/location";
@@ -268,6 +269,7 @@ export default function CartPage() {
     [recommendedItems],
   );
   const recommendedCategorySlugs = useProductCategorySlugs(recommendedViewItems);
+  const recommendedDefaultVariantNames = useDefaultVariantNames(recommendedViewItems);
   // Free delivery threshold — check delivery policy first, fall back to BU settings
   const freeDeliveryThreshold = useMemo(() => {
     const policyThreshold = deliveryPolicy?.freeDeliveryThreshold;
@@ -1105,6 +1107,7 @@ export default function CartPage() {
                   categorySlug={recommendedCategorySlugs.get(item.sourceId)}
                   compact
                   onAddToCart={addToCart as (product: CatalogItem | CardProduct) => Promise<void>}
+                  defaultVariantName={recommendedDefaultVariantNames.get(item.sourceId)}
                 />
               ))}
             </div>

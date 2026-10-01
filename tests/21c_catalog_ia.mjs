@@ -152,7 +152,7 @@ check(
 );
 check(
   "4d. CategoryPage feeds search + sort through the shared pipeline",
-  has(CAT, "filterAndSortCatalogItems(itemsByCategoryId.get(c._id) ?? [], {"),
+  has(CAT, "filterAndSortCatalogItems(scopedItems, {"),
 );
 check("4e. CategoryPage has no remaining search-early-return", lacks(CAT, "return list.filter("));
 check(
@@ -164,7 +164,7 @@ check(
 console.log("\n5-7. Category scope + product routing");
 // ---------------------------------------------------------------------------
 check("5a. CategoryPage grid is bound to its own store slug", has(CAT, "businessUnitSlug={buSlug}"));
-check("5b. CategoryPage binds every card to the section category", has(CAT, "categorySlugFor={() => cat.slug}"));
+check("5b. CategoryPage binds every card to the route category", has(CAT, "categorySlugFor={() => activeCategory.slug}"));
 check(
   "5c. BusinessUnitPage category chips navigate to canonical category URLs",
   has(BU, "to={`/${buSlug}/${cat.slug}`}"),

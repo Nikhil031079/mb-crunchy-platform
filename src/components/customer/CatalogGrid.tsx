@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
+import { useDefaultVariantNames } from "@/hooks/use-default-variant-names";
 
 import { ProductCard } from "./ProductCard";
 import { CardGridSkeleton } from "./Skeleton";
 
 import type { StockInfo } from "./StockBadge";
 import type { CardProduct } from "./ProductCard";
-import type { CatalogItem } from "@/types";
+import type { CatalogItem, Product } from "@/types";
 import type { CatalogViewMode } from "./CatalogToolbar";
 
 // ============================================================================
@@ -35,6 +36,13 @@ interface CatalogGridProps {
   skeletonCount?: number;
   /** Rendered only when not loading and there is nothing to show. */
   emptyState?: React.ReactNode;
+  /**
+   * The store's products already loaded by the parent — used to resolve each
+   * card's canonical default-variant identity (quick-add line match) without
+   * extra queries (Phase 21C-FIX). Falls back to one shared products.getByIds
+   * subscription when omitted.
+   */
+  products?: readonly Pick<Product, "_id" | "variants">[];
 }
 
 export function CatalogGrid({
@@ -49,7 +57,11 @@ export function CatalogGrid({
   loading = false,
   skeletonCount = 8,
   emptyState,
+  products,
 }: CatalogGridProps) {
+  // Resolved BEFORE any early return so the hook order is stable.
+  const defaultVariantNameBySourceId = useDefaultVariantNames(items, products);
+
   if (loading) {
     return <CardGridSkeleton count={skeletonCount} columns={4} type="product" />;
   }
@@ -78,6 +90,7 @@ export function CatalogGrid({
           stockInfo={stockInfoFor?.(item)}
           rating={ratingsMap?.[item._id]}
           onOpenItemDetails={onOpenItemDetails}
+          defaultVariantName={defaultVariantNameBySourceId.get(item.sourceId)}
         />
       ))}
     </div>

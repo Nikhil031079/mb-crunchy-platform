@@ -11,6 +11,7 @@ import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCart } from "@/stores/cart";
 import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 import { useProductCategorySlugs } from "@/hooks/use-product-routes";
+import { useDefaultVariantNames } from "@/hooks/use-default-variant-names";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard } from "./ProductCard";
@@ -108,6 +109,7 @@ function BusinessUnitSection({
   const hasPartyPacks = partyPacks && partyPacks.length > 0;
 
   const categorySlugBySourceId = useProductCategorySlugs(featuredProducts);
+  const defaultVariantNameBySourceId = useDefaultVariantNames(featuredProducts);
 
   if (!isDataLoaded) {
     return <BusinessUnitSectionSkeleton buIndex={buIndex} />;
@@ -182,6 +184,7 @@ function BusinessUnitSection({
                   index={index}
                   compact
                   onAddToCart={handleAddToCart}
+                  defaultVariantName={defaultVariantNameBySourceId.get(item.sourceId)}
                 />
               ))}
             </div>
