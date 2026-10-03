@@ -186,7 +186,7 @@ function OrderConfirmationCard({
   businessName,
   order,
 }: OrderConfirmationCardProps) {
-  const orderSubtotal = order ? order.subtotal - order.discount : 0;
+  const orderSubtotal = order ? order.subtotal : 0;
   const orderDeliveryFee = order?.deliveryFee ?? 0;
   const paymentLabel = order
     ? order.paymentStatus === "paid"
@@ -263,12 +263,52 @@ function OrderConfirmationCard({
               <span className="text-muted-foreground">Order Number</span>
               <span className="font-mono font-semibold">{orderNumber || "Processing..."}</span>
             </div>
+            {order && order.items && order.items.length > 0 && (
+              <div className="space-y-1.5 border-t border-border/60 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Items
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {(() => {
+                      const count = order.items.reduce((total, item) => total + item.quantity, 0);
+                      return count === 1 ? "1 item" : `${count} items`;
+                    })()}
+                  </span>
+                </div>
+                <ul className="space-y-1.5">
+                  {order.items.map((item, index) => (
+                    <li
+                      key={`${item.name}-${item.variantName}-${index}`}
+                      className="flex items-start justify-between gap-3 text-sm"
+                    >
+                      <span className="min-w-0 break-words text-muted-foreground">
+                        {item.name} ({item.variantName}) × {item.quantity}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {formatCurrency(item.totalPrice)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Order Subtotal</span>
               <span className="font-medium">
                 {order ? formatCurrency(orderSubtotal) : "Loading..."}
               </span>
             </div>
+            {order && order.discount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Discount{order.offerCode ? ` (${order.offerCode})` : ""}
+                </span>
+                <span className="font-medium text-emerald-600">
+                  -{formatCurrency(order.discount)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Delivery</span>
               <span className="font-medium">
@@ -1254,14 +1294,19 @@ export default function CheckoutPage() {
   // ==========================================================================
 
   useEffect(() => {
-    if (cart.items.length === 0 && !orderSuccess) {
+    // A persisted/active confirmation lookup means the confirmation screen
+    // (rendered below once confirmedOrder resolves) must win over the
+    // empty-cart redirect — otherwise a browser refresh loses it.
+    const awaitingConfirmation = !!activeLookup && confirmedOrder === undefined;
+    const confirmationShown = !!orderSuccess || (!!activeLookup && !!confirmedOrder?.order);
+    if (cart.items.length === 0 && !confirmationShown && !awaitingConfirmation) {
       // Small delay to avoid flash redirect
       const timer = setTimeout(() => {
         navigate(ROUTES.CART);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [cart.items.length, navigate, orderSuccess]);
+  }, [cart.items.length, navigate, orderSuccess, activeLookup, confirmedOrder]);
 
   // ==========================================================================
   // Form Handlers

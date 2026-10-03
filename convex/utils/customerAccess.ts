@@ -84,6 +84,7 @@ export function sanitizeOrderForCustomer(
   items: Doc<"orders">["items"];
   subtotal: number;
   discount: number;
+  offerCode?: string;
   deliveryFee: number;
   tax: number;
   total: number;
@@ -108,6 +109,7 @@ export function sanitizeOrderForCustomer(
     items: order.items,
     subtotal: order.subtotal,
     discount: order.discount,
+    offerCode: order.offerCode,
     deliveryFee: order.deliveryFee,
     tax: order.tax,
     total: order.total,
