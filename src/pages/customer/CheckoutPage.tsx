@@ -29,10 +29,11 @@ import { api } from "@convex/_generated/api";
 
 import { SITE_NAME, ROUTES, FALLBACK_WHATSAPP_NUMBER, DEFAULT_PICKUP_ESTIMATE } from "@/constants";
 import { cn } from "@/lib/utils";
-import { formatCurrency, checkKitchenServiceability, checkMartPincodeFormat } from "@/utils";
+import { formatCurrency, checkKitchenServiceability, checkMartPincodeFormat, filterCatalogItemIds } from "@/utils";
 import { printOrderReceipt } from "@/utils/orderReceipt";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
+import { getActiveVariants } from "@/utils/product-variants";
 
 // Hooks
 import { useCart } from "@/stores/cart";
@@ -43,6 +44,7 @@ import { useLocationStore } from "@/stores/location";
 import { StoreStatusDot } from "@/components/customer/StoreStatusBadge";
 import { PaymentPendingCard } from "@/components/customer/PaymentPendingCard";
 import { PhoneInput } from "@/components/customer/PhoneInput";
+import { QuantitySelector } from "@/components/customer";
 
 // Payment
 import { openRazorpayCheckout } from "@/hooks/use-razorpay";
@@ -61,10 +63,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type {
   BusinessUnitSettings,
   CartAppliedMealDeal,
+  CartItem,
+  CatalogItem,
   Customer,
   CustomerAddress,
   LoyaltySettings,
   LoyaltyAccount,
+  Product,
 } from "@/types";
 import type { Id } from "@convex/_generated/dataModel";
 
@@ -102,6 +107,36 @@ function getMartDeliveryErrorMessage(reason?: string): string {
     default:
       return "Delivery is not available for this pincode.";
   }
+}
+
+// ============================================================================
+// Phase 21D-D — stale cart price detection (mirrors Phase 21D-C CartPage)
+// ============================================================================
+
+// Mirrors PRICE_TOLERANCE in convex/orders.ts (resolveOrderLine) — and the
+// identical threshold in CartPage — so the checkout indicator only surfaces
+// captured prices the server would reject at submit.
+const STALE_PRICE_THRESHOLD = 0.02;
+
+/**
+ * Current server-authoritative price for a checkout cart line. Mirrors
+ * resolveCurrentLinePrice (CartPage, Phase 21D-C): active-variant products
+ * price from the matched active variant; zero-active-variant products use
+ * the catalog price; product lines whose docs are missing or cross-BU
+ * disagree resolve to null (no indicator — never guess a price).
+ */
+function resolveCurrentLinePrice(
+  item: CartItem,
+  catalogEntry: CatalogItem | undefined,
+  productDoc: Product | undefined,
+): number | null {
+  if (item.itemType !== "product" || item.mealDealId) return null;
+  if (!catalogEntry || !productDoc) return null;
+  if (productDoc.businessUnitId !== item.businessUnitId) return null;
+  const active = getActiveVariants(productDoc.variants);
+  if (active.length === 0) return catalogEntry.price;
+  const variant = active.find((v) => v.optionValue === item.variantName);
+  return variant ? variant.price : null;
 }
 
 // ============================================================================
@@ -740,7 +775,7 @@ function OutsideAreaConfirmation({ orderNumber, phone }: { orderNumber: string; 
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, clearCart, itemCount, dismissNotice, removeByBusinessUnit } = useCart();
+  const { cart, clearCart, itemCount, dismissNotice, removeByBusinessUnit, updateQuantity, updateVariant } = useCart();
   const createOrder = useMutation(api.orders.create);
   const createRazorpayOrder = useAction(api.razorpay.createOrder);
   const verifyRazorpayPayment = useAction(api.razorpay.verifyPayment);
@@ -809,6 +844,91 @@ export default function CheckoutPage() {
   const checkoutMealDealSavings = useMemo(
     () => selectCheckoutMealDeals(cart.appliedMealDeals, selectedCheckoutBU).savings,
     [cart.appliedMealDeals, selectedCheckoutBU],
+  );
+
+  // ==========================================================================
+  // Phase 21D-D — checkout quantity editing (cart store stays the single
+  // source of truth; no local quantity state) + 21D-C stale-price surface
+  // ==========================================================================
+
+  // Catalog + product docs for the DISPLAYED checkout lines so the order
+  // summary can surface 21D-C stale prices before payment. Query args change
+  // with the selected BU; the hook count is fixed.
+  const checkoutItemCatalogIds = useMemo(
+    () => filterCatalogItemIds(checkoutItems.map((item) => item.catalogItemId)),
+    [checkoutItems],
+  );
+
+  const checkoutCatalogItems = useQuery(
+    api.catalogItems.getByIds,
+    checkoutItemCatalogIds.length > 0
+      ? { ids: checkoutItemCatalogIds as Id<"catalogItems">[] }
+      : "skip",
+  ) as CatalogItem[] | undefined;
+
+  const checkoutCatalogById = useMemo(
+    () => new Map((checkoutCatalogItems ?? []).map((c) => [c._id, c])),
+    [checkoutCatalogItems],
+  );
+
+  const checkoutProductSourceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of checkoutItems) {
+      if (item.itemType !== "product" || item.mealDealId) continue;
+      const sourceId = checkoutCatalogById.get(item.catalogItemId)?.sourceId;
+      if (sourceId) ids.add(sourceId);
+    }
+    return [...ids];
+  }, [checkoutItems, checkoutCatalogById]);
+
+  const checkoutProducts = useQuery(
+    api.products.getByIds,
+    checkoutProductSourceIds.length > 0
+      ? { ids: checkoutProductSourceIds as Id<"products">[] }
+      : "skip",
+  ) as Product[] | undefined;
+
+  const checkoutProductById = useMemo(
+    () => new Map((checkoutProducts ?? []).map((p) => [p._id, p])),
+    [checkoutProducts],
+  );
+
+  // Payment boundary — quantity editing locks while submission is in flight,
+  // the Razorpay attempt is live, or an order already exists at a FIXED
+  // amount (pendingOrder: the retry flow charges pendingOrder.amount, so the
+  // cart must not drift from it). Lock clears when the existing checkout
+  // state machine returns to idle without a pending order. No second
+  // payment state machine is introduced.
+  const checkoutQtyLocked =
+    isSubmitting || paymentStatus !== "idle" || pendingOrder !== null;
+
+  // Per-line guard: while one line's store write is settling, further clicks
+  // on THAT line are ignored (rapid duplicate clicks cannot double-apply).
+  // Other lines stay editable — no global "everything is loading" state.
+  const [pendingQtyIds, setPendingQtyIds] = useState<ReadonlySet<string>>(new Set());
+
+  const handleCheckoutQuantityChange = useCallback(
+    (cartItemId: string, nextQuantity: number) => {
+      if (checkoutQtyLocked) return;
+      if (pendingQtyIds.has(cartItemId)) return;
+      if (!Number.isFinite(nextQuantity)) return;
+      // Clamp to a valid quantity; minimum 1 keeps checkout inside the
+      // existing cart contract (a checkout edit can never remove a line).
+      const quantity = Math.max(1, Math.min(99, Math.floor(nextQuantity)));
+      setPendingQtyIds((prev) => new Set(prev).add(cartItemId));
+      // Single update path — the existing cart store remains the only
+      // quantity authority (its merge/meal-deal/validation rules unchanged).
+      updateQuantity(cartItemId, quantity);
+      window.setTimeout(() => {
+        setPendingQtyIds((prev) => {
+          if (!prev.has(cartItemId)) return prev;
+          const next = new Set(prev);
+          next.delete(cartItemId);
+          return next;
+        });
+      }, 0);
+    },
+    [checkoutQtyLocked, pendingQtyIds, updateQuantity],
   );
 
   // Order confirmation lookup — after order creation, we subscribe to the
@@ -2314,50 +2434,124 @@ export default function CheckoutPage() {
 
                 {/* Items */}
                 <div className="max-h-48 space-y-3 overflow-y-auto">
-                  {checkoutItems.map((item) => (
-                    <div
-                      key={`${item.catalogItemId}-${item.variantName}`}
-                      className="flex items-center gap-3"
-                    >
-                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-secondary">
-                        {item.image ? (
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <ImageOff className="h-4 w-4 text-muted-foreground/30" />
-                          </div>
-                        )}
-                        <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                          {item.quantity}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {item.name}
-                        </p>
-                        {item.bundleItems && item.bundleItems.length > 0 ? (
-                          <div className="text-xs text-muted-foreground">
-                            {item.bundleItems.map((bi, i) => (
-                              <span key={i}>
-                                {bi.quantity}× {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            {item.variantName}
+                  {checkoutItems.map((item) => {
+                    // Phase 21D-D — stale-price state for this line (mirrors
+                    // the 21D-C CartPage indicator: same resolution, same
+                    // threshold, same updateVariant remedy).
+                    const catalogEntry = checkoutCatalogById.get(item.catalogItemId);
+                    const productDoc =
+                      item.itemType === "product" && catalogEntry?.sourceId
+                        ? checkoutProductById.get(catalogEntry.sourceId)
+                        : undefined;
+                    const currentPrice = resolveCurrentLinePrice(
+                      item,
+                      catalogEntry,
+                      productDoc,
+                    );
+                    const stalePrice =
+                      currentPrice !== null &&
+                      Math.abs(currentPrice - item.unitPrice) > STALE_PRICE_THRESHOLD
+                        ? currentPrice
+                        : null;
+                    const lineQtyLocked =
+                      checkoutQtyLocked || pendingQtyIds.has(item.cartItemId ?? "cl_0");
+                    return (
+                      <div
+                        key={item.cartItemId ?? `${item.catalogItemId}-${item.variantName}`}
+                        className="flex items-center gap-3"
+                      >
+                        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-secondary">
+                          {item.image ? (
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <ImageOff className="h-4 w-4 text-muted-foreground/30" />
+                            </div>
+                          )}
+                          <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                            {item.quantity}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {item.name}
                           </p>
-                        )}
+                          {item.bundleItems && item.bundleItems.length > 0 ? (
+                            <div className="text-xs text-muted-foreground">
+                              {item.bundleItems.map((bi, i) => (
+                                <span key={i}>
+                                  {bi.quantity}× {bi.name}{i < item.bundleItems!.length - 1 ? ", " : ""}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {item.variantName}
+                            </p>
+                          )}
+                          {stalePrice !== null && (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 dark:border-amber-800 dark:bg-amber-950/30">
+                              <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">
+                                Price changed
+                              </span>
+                              <span className="text-[10px] text-amber-700 dark:text-amber-300">
+                                Now {formatCurrency(stalePrice)}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={lineQtyLocked}
+                                onClick={() => {
+                                  const applied = updateVariant(
+                                    item.cartItemId ?? "cl_0",
+                                    {
+                                      variantName: item.variantName,
+                                      unitPrice: stalePrice,
+                                    },
+                                  );
+                                  if (!applied) {
+                                    toast.error("Couldn't update price", {
+                                      description: `${item.name} could not be updated. Your cart was not changed.`,
+                                    });
+                                  }
+                                }}
+                                className="h-5 px-1.5 text-[10px] font-semibold text-amber-900 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-100 dark:hover:bg-amber-900/40"
+                                aria-label={`Update price of ${item.name}`}
+                              >
+                                Update price
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                          <span className="text-sm font-medium">
+                            {formatCurrency(item.totalPrice)}
+                          </span>
+                          {/* Phase 21D-D — checkout quantity: keyed to this
+                              line's cartItemId, min 1, store is the only
+                              authority, locked across the payment boundary. */}
+                          <QuantitySelector
+                            value={item.quantity}
+                            onChange={(qty) =>
+                              handleCheckoutQuantityChange(
+                                item.cartItemId ?? "cl_0",
+                                qty,
+                              )
+                            }
+                            min={1}
+                            max={99}
+                            size="sm"
+                            disabled={lineQtyLocked}
+                          />
+                        </div>
                       </div>
-                      <span className="text-sm font-medium shrink-0">
-                        {formatCurrency(item.totalPrice)}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <Separator />

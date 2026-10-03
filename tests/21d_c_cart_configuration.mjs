@@ -475,11 +475,14 @@ const cDiffBody = execSync("git diff -- tests/21c_catalog_ia.mjs", {
 // Sanctioned line classes: the 21D-C ALLOWED_21D_C extension, plus the
 // Phase 21C-FIX needle sync in checks 4d/5b (old line + new line each —
 // `filterAndSortCatalogItems` / `categorySlugFor` appear in both) — the
-// assertions stay equal-strength and the diff stays bounded at 10 lines.
+// assertions stay equal-strength and any working-tree drift stays bounded
+// at 10 lines. The 21C needle sync itself was committed in f97fa4b, so an
+// empty worktree diff is the correct post-commit baseline (Phase 21D-D
+// harness sync; the bounded + sanctioned-line guard still applies to any
+// future non-empty diff).
 check(
-  "T12.5. 21C diff is the bounded sanctioned edit only (<= 10 lines)",
-  cDiffBody.length > 0 &&
-    cDiffBody.length <= 10 &&
+  "T12.5. 21C diff is empty (committed) or a bounded sanctioned edit only (<= 10 lines)",
+  cDiffBody.length <= 10 &&
     cDiffBody.every((l) => /ALLOWED|21D|src\/stores\/cart\.ts|filterAndSortCatalogItems|categorySlugFor|\]\);$/.test(l)),
   `${cDiffBody.length} lines`,
 );
@@ -504,6 +507,13 @@ const ALLOWED_21C_FIX = new Set([
   "src/hooks/use-default-variant-names.ts",
   "tests/21c_fix_category_quantity.mjs",
 ]);
+// Phase 21D-D (checkout quantity continuity) sanctioned implementation set —
+// the scope's primary file plus its new structural suite (Phase 21D-D
+// harness sync, explicitly reported in the phase report).
+const ALLOWED_21D_D = new Set([
+  "src/pages/customer/CheckoutPage.tsx",
+  "tests/21d_d_checkout_quantity.mjs",
+]);
 const unexpected = changed.filter(
   (f) =>
     ![
@@ -514,7 +524,8 @@ const unexpected = changed.filter(
       SUITE_DB,
       SUITE_DC,
     ].includes(f) &&
-    !ALLOWED_21C_FIX.has(f),
+    !ALLOWED_21C_FIX.has(f) &&
+    !ALLOWED_21D_D.has(f),
 );
 check(
   "T13.1. Tracked changes limited to the sanctioned implementation sets",
