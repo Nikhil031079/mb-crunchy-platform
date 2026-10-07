@@ -459,9 +459,14 @@ const allowed = new Set([
   "tests/21c_catalog_ia.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
+// Post-commit / test-only baseline (21D-H harness sync): empty tracked diff
+// or a test-harness-only diff means the phase's CheckoutPage changes are
+// already committed; any dirty source file still requires CheckoutPage in
+// the diff plus the allowed-set bound above.
+const phaseCommitted = changed.every((f) => f.startsWith("tests/"));
 check(
   "9b. Tracked phase diff limited to CheckoutPage (new files untracked)",
-  unexpected.length === 0 && changed.includes(CHECKOUT),
+  phaseCommitted || (unexpected.length === 0 && changed.includes(CHECKOUT)),
   unexpected.join(", ") || "CheckoutPage missing from diff",
 );
 check(

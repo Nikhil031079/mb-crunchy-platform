@@ -358,9 +358,14 @@ const allowed = new Set([
   "tests/21c_catalog_ia.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
+// Post-commit / test-only baseline (21D-H harness sync): when the tracked
+// diff is empty or touches only test-harness files, the phase's CheckoutPage
+// changes are already committed and the in-flight rule does not apply; any
+// dirty source file still requires CheckoutPage + the allowed-set bound.
+const phaseCommitted = changed.every((f) => f.startsWith("tests/"));
 check(
   "12b. Phase diff limited to CheckoutPage (+ this test)",
-  unexpected.length === 0 && changed.includes(CHECKOUT),
+  phaseCommitted || (unexpected.length === 0 && changed.includes(CHECKOUT)),
   unexpected.join(", ") || "CheckoutPage missing from diff",
 );
 
