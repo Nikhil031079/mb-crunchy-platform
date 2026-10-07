@@ -372,6 +372,13 @@ const allowed = new Set([
   // test-only phase's files.
   "tests/21d_h_product_add_to_cart.mjs",
   "tests/21d_c_cart_configuration.mjs",
+  // Phase 21F working-tree scope (reported in 21F report): the checkout
+  // payment-retry fix (CheckoutPage) plus this suite family's scope
+  // allow-set syncs in the 21D-C / 21D-D / 21D-G2 suites.
+  "src/pages/customer/CheckoutPage.tsx",
+  "tests/21f_checkout_payment_retry.mjs",
+  "tests/21d_d_checkout_quantity.mjs",
+  "tests/21d_g2_destination_city_state.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(

@@ -523,6 +523,15 @@ const ALLOWED_21D_H = new Set([
   "tests/21d_g2_destination_city_state.mjs",
   "tests/21d_h_product_add_to_cart.mjs",
 ]);
+// Phase 21F working-tree scope (reported in 21F report): the checkout
+// payment-retry fix plus this suite family's allow-set syncs. CheckoutPage
+// is already covered by ALLOWED_21D_D; 21D-D / 21D-G2 by ALLOWED_21D_D /
+// ALLOWED_21D_H; this adds the 21D-E2 suite's scope-block edit and the new
+// 21F suite itself.
+const ALLOWED_21F = new Set([
+  "tests/21d_e2_confirmation.mjs",
+  "tests/21f_checkout_payment_retry.mjs",
+]);
 const unexpected = changed.filter(
   (f) =>
     ![
@@ -535,7 +544,8 @@ const unexpected = changed.filter(
     ].includes(f) &&
     !ALLOWED_21C_FIX.has(f) &&
     !ALLOWED_21D_D.has(f) &&
-    !ALLOWED_21D_H.has(f),
+    !ALLOWED_21D_H.has(f) &&
+    !ALLOWED_21F.has(f),
 );
 check(
   "T13.1. Tracked changes limited to the sanctioned implementation sets",

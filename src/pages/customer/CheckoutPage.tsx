@@ -22,6 +22,7 @@ import {
   BadgeCheck,
   Printer,
   X,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -433,8 +434,12 @@ const INITIAL_FORM: CheckoutForm = {
 // ============================================================================
 // Idempotency key — stable per order intent, reused across retries so a
 // double-click, network retry or browser refresh can never create a duplicate
-// order. Persisted in sessionStorage so it survives a refresh mid-submit; it
-// is cleared only after the order is successfully created.
+// order. Persisted in sessionStorage so it survives a refresh mid-submit or
+// navigation away from checkout. 21F: the key is retained past order
+// creation and cleared only when the attempt concludes (payment verified or
+// outside-area request submitted), so a failed or cancelled payment that
+// re-submits reuses the same key and orders.create returns the existing
+// order instead of creating a second one.
 // ============================================================================
 
 const IDEMPOTENCY_KEY_STORAGE = "mb_checkout_idempotency_key";
@@ -1419,6 +1424,12 @@ export default function CheckoutPage() {
         return;
       }
 
+      // 21F — existing order wins. Once an order exists for this checkout
+      // attempt and payment has not succeeded, the main Pay button must
+      // never create a second order: the pending order's Pay Now flow is
+      // the only retry path. Also blocks in-flight double submits.
+      if (isSubmitting || paymentStatus !== "idle" || pendingOrder !== null) return;
+
       setIsSubmitting(true);
       setPaymentStatus("creating_order");
 
@@ -1464,9 +1475,15 @@ export default function CheckoutPage() {
           customerLongitude: customerLocation.location?.longitude,
         });
 
-        const { orderId: newOrderId, orderNumber: newOrderNumber } = orderResult as { orderId: string; orderNumber: string };
-
-        clearIdempotencyKey();
+        const {
+          orderId: newOrderId,
+          orderNumber: newOrderNumber,
+          existing,
+        } = orderResult as {
+          orderId: string;
+          orderNumber: string;
+          existing?: boolean;
+        };
 
         setPendingOrder({
           orderId: newOrderId,
@@ -1474,6 +1491,18 @@ export default function CheckoutPage() {
           amount: pricing.total,
           phone: form.customerPhone.trim(),
         });
+
+        // 21F — the server matched this submit to an order that already
+        // exists for this idempotency key (same phone + total): the
+        // existing order wins. Attach to it and surface the Pay Now retry
+        // path instead of charging again or creating a second order. The
+        // key stays retained (cleared only on the success paths below).
+        if (existing) {
+          toast.info("Payment pending", {
+            description: "Your order is reserved. Pay now to complete it.",
+          });
+          return;
+        }
 
         // Outside-area orders: show "Delivery Request Received" immediately,
         // no payment QR. Customer will be contacted for delivery quote.
@@ -1562,6 +1591,32 @@ export default function CheckoutPage() {
           message.includes("stock") ||
           message.includes("catalogItems") ||
           message.includes("does not match the expected Convex");
+        // 21F — price drift + idempotency conflict: orders.create rejected
+        // the submitted totals (live price/total changed, or this checkout's
+        // key already belongs to an order with different totals). Neither is
+        // retryable as-is — route the customer to review the cart instead of
+        // a generic failure.
+        const isPriceDriftError =
+          message.includes("has changed. Please review your cart") ||
+          message.includes("is out of date. Please review your cart");
+        const isIdempotencyConflict = message.includes(
+          "already been used for a different order",
+        );
+        if (isPriceDriftError || isIdempotencyConflict) {
+          toast.error(
+            isIdempotencyConflict
+              ? "Your cart no longer matches your pending order"
+              : "Your cart changed",
+            {
+              description: "Please review your cart before paying.",
+              action: {
+                label: "Review Cart",
+                onClick: () => navigate(ROUTES.CART),
+              },
+            },
+          );
+          return;
+        }
         // 14D: surface server-side minimum-order rejections verbatim so the
         // configured amount reaches the customer instead of a generic error.
         const isMinOrderError = message.toLowerCase().includes("minimum order");
@@ -1583,7 +1638,7 @@ export default function CheckoutPage() {
         setPaymentStatus("idle");
       }
     },
-    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, checkoutItems, checkoutMealDeals, checkoutMealDealSavings, selectedCheckoutBU, effectiveDeliveryType, destinationCityState]
+    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, checkoutItems, checkoutMealDeals, checkoutMealDealSavings, selectedCheckoutBU, effectiveDeliveryType, destinationCityState, isSubmitting, paymentStatus, pendingOrder, navigate]
   );
 
   // ==========================================================================
@@ -1591,7 +1646,10 @@ export default function CheckoutPage() {
   // ==========================================================================
 
   const handleRetryPayment = useCallback(async () => {
-    if (!pendingOrder) return;
+    // 21F — the Pay Now retry may only start from a settled state: it always
+    // charges the existing pendingOrder and must never race an in-flight
+    // submit or a second retry (one payment modal at a time).
+    if (!pendingOrder || isSubmitting || paymentStatus !== "idle") return;
     setPaymentStatus("processing_payment");
     try {
       const razorpayResult = await openRazorpayCheckout({
@@ -1635,7 +1693,7 @@ export default function CheckoutPage() {
     } finally {
       setPaymentStatus("idle");
     }
-  }, [pendingOrder, form, createRazorpayOrder, verifyRazorpayPayment, selectedCheckoutBU, removeByBusinessUnit]);
+  }, [pendingOrder, isSubmitting, paymentStatus, form, createRazorpayOrder, verifyRazorpayPayment, selectedCheckoutBU, removeByBusinessUnit]);
 
   // ==========================================================================
   // Persisted order confirmation — recovers confirmation page on refresh
@@ -1879,6 +1937,7 @@ export default function CheckoutPage() {
                 <Button
                   size="sm"
                   onClick={handleRetryPayment}
+                  disabled={paymentStatus !== "idle"}
                   className="gap-1.5"
                 >
                   <CreditCard className="h-3.5 w-3.5" />
@@ -2568,6 +2627,24 @@ export default function CheckoutPage() {
                               {item.variantName}
                             </p>
                           )}
+                          {/* 21F — per-line Edit in Cart: plain navigation to
+                              the existing cart route. No cart-store write, so
+                              variant identity, quantity, meal deals and the
+                              mixed-BU cart all stay exactly as they are. */}
+                          <Link
+                            to={ROUTES.CART}
+                            aria-label={`Edit ${item.name} in cart`}
+                            onClick={(e) => {
+                              if (isSubmitting) e.preventDefault();
+                            }}
+                            className={cn(
+                              "mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline",
+                              isSubmitting && "pointer-events-none opacity-50",
+                            )}
+                          >
+                            <Pencil className="h-3 w-3" />
+                            Edit in Cart
+                          </Link>
                           {stalePrice !== null && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 dark:border-amber-800 dark:bg-amber-950/30">
                               <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">
@@ -2863,7 +2940,7 @@ export default function CheckoutPage() {
                     isSubmitting && "opacity-80"
                   )}
                   disabled={
-                    isSubmitting || !storeIsOpen || !canPlaceDelivery ||
+                    isSubmitting || pendingOrder !== null || !storeIsOpen || !canPlaceDelivery ||
                     // Mart: disable while delivery resolution loads or if unavailable
                     (isMartPincodeMode && form.orderType === "delivery" && (
                       martDelivery === undefined ||
@@ -2880,6 +2957,8 @@ export default function CheckoutPage() {
                           ? "Creating Order..."
                           : "Processing..."}
                     </>
+                  ) : pendingOrder !== null ? (
+                    "Payment Pending"
                   ) : !storeIsOpen ? (
                     "Store is Closed"
                   ) : !canPlaceDelivery ? (

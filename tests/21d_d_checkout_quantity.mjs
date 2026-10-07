@@ -356,6 +356,11 @@ const allowed = new Set([
   "src/pages/customer/ProductPage.tsx",
   "tests/21d_g2_destination_city_state.mjs",
   "tests/21c_catalog_ia.mjs",
+  // Phase 21F working-tree scope (reported in 21F report): the checkout
+  // payment-retry fix + this suite family's scope allow-set syncs.
+  "tests/21d_e2_confirmation.mjs",
+  "tests/21d_h_product_add_to_cart.mjs",
+  "tests/21f_checkout_payment_retry.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 // Post-commit / test-only baseline (21D-H harness sync): when the tracked
