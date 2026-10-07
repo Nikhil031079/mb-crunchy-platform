@@ -516,10 +516,12 @@ const ALLOWED_21D_D = new Set([
 ]);
 // Phase 21D-H (product add-to-cart safety) sanctioned implementation set —
 // the ProductPage fix plus the 21D-G2 suite's harness sync in the same
-// working tree (explicitly reported in the 21D-H phase report).
+// working tree (explicitly reported in the 21D-H phase report). The 21D-E2
+// evidence-pin phase adds this suite's own harness sync (21D-H scope block).
 const ALLOWED_21D_H = new Set([
   "src/pages/customer/ProductPage.tsx",
   "tests/21d_g2_destination_city_state.mjs",
+  "tests/21d_h_product_add_to_cart.mjs",
 ]);
 const unexpected = changed.filter(
   (f) =>
