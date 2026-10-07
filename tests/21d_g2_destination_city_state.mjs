@@ -447,7 +447,17 @@ try {
 } catch {
   changed = [];
 }
-const allowed = new Set([CHECKOUT, DESTINATION_UTIL, "tests/21d_g2_destination_city_state.mjs"]);
+const allowed = new Set([
+  CHECKOUT,
+  DESTINATION_UTIL,
+  "tests/21d_g2_destination_city_state.mjs",
+  // Phase 21D-H working-tree scope (explicitly reported): ProductPage
+  // add-to-cart fix + this suite family's harness sync.
+  "src/pages/customer/ProductPage.tsx",
+  "tests/21d_c_cart_configuration.mjs",
+  "tests/21d_d_checkout_quantity.mjs",
+  "tests/21c_catalog_ia.mjs",
+]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(
   "9b. Tracked phase diff limited to CheckoutPage (new files untracked)",

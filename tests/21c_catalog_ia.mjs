@@ -258,11 +258,14 @@ const ALLOWED_21D_B = new Set([
 const ALLOWED_21D_C = new Set([
   "src/stores/cart.ts",
 ]);
+// Phase 21D-H — ALLOWED test-harness paths (tests/) are outside these
+// 21D production scope checks (customer/admin source files only).
+const ALLOWED_TESTS_PATH = "tests/";
 const changed = execSync("git diff --name-only", { cwd: ROOT, encoding: "utf8" })
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
-  .filter((f) => !ALLOWED_21D_B.has(f) && !ALLOWED_21D_C.has(f));
+  .filter((f) => !ALLOWED_21D_B.has(f) && !ALLOWED_21D_C.has(f) && !f.startsWith(ALLOWED_TESTS_PATH));
 
 check(
   "16. No Convex files changed",

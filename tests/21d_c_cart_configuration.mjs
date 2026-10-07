@@ -514,6 +514,13 @@ const ALLOWED_21D_D = new Set([
   "src/pages/customer/CheckoutPage.tsx",
   "tests/21d_d_checkout_quantity.mjs",
 ]);
+// Phase 21D-H (product add-to-cart safety) sanctioned implementation set —
+// the ProductPage fix plus the 21D-G2 suite's harness sync in the same
+// working tree (explicitly reported in the 21D-H phase report).
+const ALLOWED_21D_H = new Set([
+  "src/pages/customer/ProductPage.tsx",
+  "tests/21d_g2_destination_city_state.mjs",
+]);
 const unexpected = changed.filter(
   (f) =>
     ![
@@ -525,7 +532,8 @@ const unexpected = changed.filter(
       SUITE_DC,
     ].includes(f) &&
     !ALLOWED_21C_FIX.has(f) &&
-    !ALLOWED_21D_D.has(f),
+    !ALLOWED_21D_D.has(f) &&
+    !ALLOWED_21D_H.has(f),
 );
 check(
   "T13.1. Tracked changes limited to the sanctioned implementation sets",

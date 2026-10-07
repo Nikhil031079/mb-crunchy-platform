@@ -227,13 +227,29 @@ export default function ProductPage() {
     }
   }, [product?.variants]);
 
-  const selectedVariant = useMemo(
-    () =>
-      product?.variants
-        ? findMatchingVariant(product.variants, selections) ?? getDefaultVariant(product.variants)
-        : undefined,
-    [product?.variants, selections]
-  );
+  const selectedVariant = useMemo(() => {
+    if (!product?.variants) return undefined;
+    if (product.variants.length > 0) {
+      return (
+        findMatchingVariant(product.variants, selections) ??
+        getDefaultVariant(product.variants)
+      );
+    }
+    // Zero-variant product: canonical non-variant identity (Phase 21D-B) —
+    // the same "Default" line resolveQuickAddVariantLine() and the
+    // orders.ts zero-ACTIVE-variant pricing path accept. Priced from the
+    // catalogItems record, which is what the server validates against.
+    return catalogItem
+      ? {
+          optionName: "",
+          optionValue: "Default",
+          price: catalogItem.price,
+          isDefault: true,
+          sortOrder: 0,
+          active: true,
+        }
+      : undefined;
+  }, [product?.variants, selections, catalogItem]);
 
   // Stock status for selected variant
   const stockInfo: StockInfo | undefined = selectedVariant
@@ -383,8 +399,22 @@ export default function ProductPage() {
       return;
     }
 
+    // The catalogItems record is the cart identity. It resolves AFTER the
+    // product query, so the handler must (a) be recreated when it arrives
+    // (it is a dependency below) and (b) fail closed while it is still
+    // loading (undefined) or missing entirely (null) — never dereference it
+    // unguarded.
+    if (!catalogItem) {
+      if (catalogItem === null) {
+        toast.error("Unable to add to cart", {
+          description: `${product.name} could not be added right now. Please try again later.`,
+        });
+      }
+      return;
+    }
+
     const added = await addItem({
-      catalogItemId: catalogItem!._id as Id<"catalogItems">,
+      catalogItemId: catalogItem._id as Id<"catalogItems">,
       itemType: "product",
       businessUnitId: businessUnit._id,
       name: product.name,
@@ -399,7 +429,7 @@ export default function ProductPage() {
         description: `${product.name} (${selectedVariant.optionValue}) x${quantity}`,
       });
     }
-  }, [product, selectedVariant, businessUnit, quantity, addItem, coverSrc, storeIsOpen, nextOpenTime, isOutOfStock]);
+  }, [product, selectedVariant, businessUnit, catalogItem, quantity, addItem, coverSrc, storeIsOpen, nextOpenTime, isOutOfStock]);
 
   // Record recently viewed
   useEffect(() => {
@@ -1017,7 +1047,12 @@ export default function ProductPage() {
                 variant="crunch"
                 onClick={handleAddToCart}
                 className="h-12 w-full gap-2 font-culinary-heading"
-                disabled={!selectedVariant || !storeIsOpen || isOutOfStock}
+                disabled={
+                  !selectedVariant ||
+                  !storeIsOpen ||
+                  isOutOfStock ||
+                  catalogItem === undefined
+                }
               >
                 <ShoppingCart className="h-4 w-4" />
                 {!storeIsOpen
@@ -1313,7 +1348,12 @@ export default function ProductPage() {
             size="lg"
             variant="crunch"
             onClick={handleAddToCart}
-            disabled={!selectedVariant || !storeIsOpen || isOutOfStock}
+            disabled={
+              !selectedVariant ||
+              !storeIsOpen ||
+              isOutOfStock ||
+              catalogItem === undefined
+            }
             className="h-11 shrink-0 gap-2 px-6 font-culinary-heading"
           >
             <ShoppingCart className="h-4 w-4" />

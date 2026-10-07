@@ -2399,6 +2399,7 @@ export default function CheckoutPage() {
                       <div className="space-y-2">
                         <Label htmlFor="deliveryAddress">Delivery Address *</Label>
                         <Textarea
+                          id="deliveryAddress"
                           placeholder="Enter your full delivery address..."
                           value={form.deliveryAddress}
                           onChange={(e) =>

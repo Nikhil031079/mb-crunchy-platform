@@ -351,6 +351,11 @@ const allowed = new Set([
   // Narrow baseline/harness sync (explicitly reported): T12.5 post-commit
   // baseline + T13.1 sanctioned 21D-D set in the 21D-C suite.
   "tests/21d_c_cart_configuration.mjs",
+  // Phase 21D-H working-tree scope (explicitly reported): ProductPage
+  // add-to-cart fix + the 21D-G2 suite harness sync.
+  "src/pages/customer/ProductPage.tsx",
+  "tests/21d_g2_destination_city_state.mjs",
+  "tests/21c_catalog_ia.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(
