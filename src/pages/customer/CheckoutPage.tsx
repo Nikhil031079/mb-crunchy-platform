@@ -34,6 +34,7 @@ import { printOrderReceipt } from "@/utils/orderReceipt";
 import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 import { getActiveVariants } from "@/utils/product-variants";
+import { resolveDestinationCityState } from "@/utils/destinationCityState";
 
 // Hooks
 import { useCart } from "@/stores/cart";
@@ -410,6 +411,8 @@ interface CheckoutForm {
   selectedZoneId: string;
   couponCode: string;
   destinationPincode: string;
+  destinationCity: string;
+  destinationState: string;
 }
 
 const INITIAL_FORM: CheckoutForm = {
@@ -423,6 +426,8 @@ const INITIAL_FORM: CheckoutForm = {
   selectedZoneId: "",
   couponCode: "",
   destinationPincode: "",
+  destinationCity: "",
+  destinationState: "",
 };
 
 // ============================================================================
@@ -1158,6 +1163,8 @@ export default function CheckoutPage() {
         deliveryAddress: defaultAddr.address,
         deliveryNotes: defaultAddr.landmark ? `Landmark: ${defaultAddr.landmark}` : "",
         destinationPincode: defaultAddr.zipCode || prev.destinationPincode,
+        destinationCity: defaultAddr.city?.trim() || "",
+        destinationState: defaultAddr.state?.trim() || "",
       }));
     }
     setProfileAutoFilled(true);
@@ -1235,6 +1242,20 @@ export default function CheckoutPage() {
     form.orderType === "delivery" &&
     !!kitchenServiceability &&
     !kitchenServiceability.serviceable;
+
+  const destinationCityState = useMemo(
+    () =>
+      resolveDestinationCityState({
+        orderType: form.orderType,
+        formCity: form.destinationCity,
+        formState: form.destinationState,
+        destinationPincode: form.destinationPincode,
+        locationCity: customerLocation.location?.city,
+        locationState: customerLocation.location?.state,
+        locationZipCode: customerLocation.location?.zipCode,
+      }),
+    [form, customerLocation.location],
+  );
 
   // ==========================================================================
   // Coupon Validation
@@ -1320,6 +1341,10 @@ export default function CheckoutPage() {
         // state never leaks into the pickup flow.
         if (field === "orderType" && value === "pickup") {
           next.deliveryType = "local";
+        }
+        if (field === "deliveryAddress" || field === "destinationPincode") {
+          next.destinationCity = "";
+          next.destinationState = "";
         }
         return next;
       });
@@ -1427,6 +1452,8 @@ export default function CheckoutPage() {
           deliveryZoneId: undefined,
           deliveryNotes: form.deliveryNotes.trim() || undefined,
           destinationPincode: form.destinationPincode.trim() || undefined,
+          destinationCity: destinationCityState.destinationCity,
+          destinationState: destinationCityState.destinationState,
           offerCode: couponApplied?.valid ? form.couponCode.trim() : undefined,
           paymentMethod: "razorpay",
           idempotencyKey: getOrCreateIdempotencyKey(),
@@ -1556,7 +1583,7 @@ export default function CheckoutPage() {
         setPaymentStatus("idle");
       }
     },
-    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, checkoutItems, checkoutMealDeals, checkoutMealDealSavings, selectedCheckoutBU, effectiveDeliveryType]
+    [validate, cart, form, pricing, createOrder, storeIsOpen, nextOpenTime, couponApplied, redeemPoints, checkoutItems, checkoutMealDeals, checkoutMealDealSavings, selectedCheckoutBU, effectiveDeliveryType, destinationCityState]
   );
 
   // ==========================================================================
@@ -2329,6 +2356,8 @@ export default function CheckoutPage() {
                                       ? `Landmark: ${addr.landmark}`
                                       : addr.deliveryInstructions || prev.deliveryNotes,
                                     destinationPincode: addr.zipCode || prev.destinationPincode,
+                                    destinationCity: addr.city?.trim() || "",
+                                    destinationState: addr.state?.trim() || "",
                                   }));
                                 }}
                               >
