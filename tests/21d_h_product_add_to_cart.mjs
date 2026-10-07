@@ -341,6 +341,9 @@ const allowed = new Set([
   "tests/21d_g2_destination_city_state.mjs",
   // Repo-sanctioned harness sync: 21D-E2 evidence-pin suite (test-only).
   "tests/21d_e2_confirmation.mjs",
+  // Repo-sanctioned harness sync (reported in 21F report): the 21F checkout
+  // payment-retry suite, now part of the diff vs this suite's baseline.
+  "tests/21f_checkout_payment_retry.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(
