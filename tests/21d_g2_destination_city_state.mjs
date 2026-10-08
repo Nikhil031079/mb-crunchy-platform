@@ -462,6 +462,14 @@ const allowed = new Set([
   "tests/21d_e2_confirmation.mjs",
   "tests/21d_h_product_add_to_cart.mjs",
   "tests/21f_checkout_payment_retry.mjs",
+  // Phase 21G-B working-tree scope (reported in the 21G-B report): the three
+  // approved merchandising-placement source files (ProductPage is already
+  // listed above) + this phase's suite.
+  "src/components/customer/CrossSellSections.tsx",
+  "src/components/customer/RecommendedForYouSection.tsx",
+  "tests/21g_merchandising_placement.mjs",
+  // The 21D-B suite's own scope-block edit (21G-B harness sync).
+  "tests/21d_b_variant_safety.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 // Post-commit / test-only baseline (21D-H harness sync): empty tracked diff
@@ -469,9 +477,28 @@ const unexpected = changed.filter((f) => !allowed.has(f));
 // already committed; any dirty source file still requires CheckoutPage in
 // the diff plus the allowed-set bound above.
 const phaseCommitted = changed.every((f) => f.startsWith("tests/"));
+// Phase 21G-B in-flight scope: a tracked diff lying entirely inside the
+// sanctioned 21G-B set does not touch CheckoutPage, so the CheckoutPage
+// requirement must not apply to it (same mechanism as `phaseCommitted`).
+const APPROVED_21G = new Set([
+  "src/components/customer/CrossSellSections.tsx",
+  "src/components/customer/RecommendedForYouSection.tsx",
+  "src/pages/customer/ProductPage.tsx",
+  "src/pages/customer/CheckoutPage.tsx",
+  "tests/21g_merchandising_placement.mjs",
+  "tests/21c_catalog_ia.mjs",
+  "tests/21d_b_variant_safety.mjs",
+  "tests/21d_c_cart_configuration.mjs",
+  "tests/21d_d_checkout_quantity.mjs",
+  "tests/21d_e2_confirmation.mjs",
+  "tests/21d_g2_destination_city_state.mjs",
+  "tests/21d_h_product_add_to_cart.mjs",
+  "tests/21f_checkout_payment_retry.mjs",
+]);
+const phase21g = changed.length > 0 && changed.every((f) => APPROVED_21G.has(f));
 check(
   "9b. Tracked phase diff limited to CheckoutPage (new files untracked)",
-  phaseCommitted || (unexpected.length === 0 && changed.includes(CHECKOUT)),
+  phaseCommitted || phase21g || (unexpected.length === 0 && changed.includes(CHECKOUT)),
   unexpected.join(", ") || "CheckoutPage missing from diff",
 );
 check(

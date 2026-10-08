@@ -105,9 +105,17 @@ export function RecommendedForYouSection({
     [handleAddToCart],
   );
 
+  const isLoading = categoryLoading && signalIds.length > 0;
+
   if (businessUnits.length === 0) return null;
 
-  const isLoading = categoryLoading && signalIds.length > 0;
+  // Phase 21G-B (P1) — no category signal means there is no basis for a
+  // personal recommendation. Render nothing instead of falling through to the
+  // best-sellers weighting, which for a signal-less visitor produced the exact
+  // dataset/order already rendered by BestSellersSection. Best Sellers stays
+  // the canonical fallback rail. While signals are still resolving we keep the
+  // loading skeleton so the active path is unchanged.
+  if (!isLoading && categoryIds.length === 0) return null;
 
   return (
     <ProductGridSection

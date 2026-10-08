@@ -14,7 +14,6 @@ import {
   X,
   ZoomIn,
   Sparkles,
-  TrendingUp,
   Bike,
   Store,
   RotateCcw,
@@ -162,13 +161,6 @@ export default function ProductPage() {
       : "skip"
   ) as CatalogItem[] | undefined;
 
-  const trendingItems = useQuery(
-    api.catalogItems.getTrending,
-    businessUnit?._id
-      ? { businessUnitId: businessUnit._id as Id<"businessUnits">, limit: 4 }
-      : "skip"
-  ) as CatalogItem[] | undefined;
-
   const reviewStats = useQuery(
     api.reviews.getStats,
     catalogItem?._id
@@ -179,22 +171,21 @@ export default function ProductPage() {
   const recommendationIds = useMemo(() => {
     const ids: string[] = [];
     for (const item of relatedItems ?? []) ids.push(item._id);
-    for (const item of trendingItems ?? []) ids.push(item._id);
     return Array.from(new Set(ids)) as Id<"catalogItems">[];
-  }, [relatedItems, trendingItems]);
+  }, [relatedItems]);
 
   const recRatingsMap = useQuery(
     api.reviews.getAverageByCatalogItemIds,
     recommendationIds.length > 0 ? { ids: recommendationIds } : "skip",
   ) as Record<string, { average: number; count: number }> | undefined;
 
-  // Phase 21B — canonical PDP slugs for the related/trending cards below.
+  // Phase 21B — canonical PDP slugs for the related cards below.
   // getRelatedByTags is not scoped to one store, so the business unit slug is
   // resolved per item rather than reusing the current store's slug.
   const businessUnitSlugById = useBusinessUnitSlugById();
   const recommendationItems = useMemo(
-    () => [...(relatedItems ?? []), ...(trendingItems ?? [])],
-    [relatedItems, trendingItems],
+    () => [...(relatedItems ?? [])],
+    [relatedItems],
   );
   const categorySlugBySourceId = useProductCategorySlugs(recommendationItems);
 
@@ -1272,57 +1263,30 @@ export default function ProductPage() {
       {/* RECOMMENDATIONS                                                    */}
       {/* ================================================================== */}
 
-      {((relatedItems && relatedItems.length > 0) ||
-        (trendingItems && trendingItems.length > 0)) && (
+      {relatedItems && relatedItems.length > 0 && (
         <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
           <div className="space-y-10">
-            {relatedItems && relatedItems.length > 0 && (
-              <section className="rounded-3xl glass-tier-1 p-4 sm:p-6">
-                <SectionHeader
-                  title="Related Products"
-                  subtitle="You might also like these"
-                />
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 sm:gap-4">
-                  {relatedItems.map((item) => (
-                    <ProductCard
-                      key={item._id}
-                      product={item}
-                      businessUnitSlug={
-                        businessUnitSlugById.get(item.businessUnitId) ?? buSlug
-                      }
-                      categorySlug={categorySlugBySourceId.get(item.sourceId)}
-                      index={0}
-                      compact
-                      rating={recRatingsMap?.[item._id]}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {trendingItems && trendingItems.length > 0 && (
-              <section className="rounded-3xl glass-tier-1 p-4 sm:p-6">
-                <SectionHeader
-                  title="Trending Now"
-                  subtitle="Popular in your area this week"
-                />
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 sm:gap-4">
-                  {trendingItems.map((item) => (
-                    <ProductCard
-                      key={item._id}
-                      product={item}
-                      businessUnitSlug={
-                        businessUnitSlugById.get(item.businessUnitId) ?? buSlug
-                      }
-                      categorySlug={categorySlugBySourceId.get(item.sourceId)}
-                      index={0}
-                      compact
-                      rating={recRatingsMap?.[item._id]}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
+            <section className="rounded-3xl glass-tier-1 p-4 sm:p-6">
+              <SectionHeader
+                title="Related Products"
+                subtitle="You might also like these"
+              />
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 sm:gap-4">
+                {relatedItems.map((item) => (
+                  <ProductCard
+                    key={item._id}
+                    product={item}
+                    businessUnitSlug={
+                      businessUnitSlugById.get(item.businessUnitId) ?? buSlug
+                    }
+                    categorySlug={categorySlugBySourceId.get(item.sourceId)}
+                    index={0}
+                    compact
+                    rating={recRatingsMap?.[item._id]}
+                  />
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       )}

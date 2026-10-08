@@ -1,29 +1,25 @@
 import { useMemo, useCallback } from "react";
 import { useQuery } from "convex/react";
-import { HeartHandshake, Combine, PartyPopper } from "lucide-react";
-import { toast } from "sonner";
+import { HeartHandshake } from "lucide-react";
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
 import { useAddToCart } from "@/hooks/use-add-to-cart";
-import { useCart } from "@/stores/cart";
-import { useCatalogItemMap } from "@/hooks/use-catalog-map";
 import { useProductCategorySlugs } from "@/hooks/use-product-routes";
 import { useDefaultVariantNames } from "@/hooks/use-default-variant-names";
 import { filterCatalogItemIds } from "@/utils";
 
 import { SectionHeader } from "./SectionHeader";
 import { ProductCard } from "./ProductCard";
-import { ComboCard } from "./ComboCard";
-import { PartyPackCard } from "./PartyPackCard";
 
-import type { BusinessUnit, CatalogItem, Combo, PartyPack } from "@/types";
+import type { BusinessUnit, CatalogItem } from "@/types";
 import type { CardProduct } from "./ProductCard";
 
 // ============================================================================
-// CrossSellSections — "You may also like", "Recommended combo" and "Party
-// pack" blocks rendered below a product, each with graceful fallbacks.
+// CrossSellSections — product-level "You may also like" rendered below a
+// product. Storefront-level combo / party-pack rails were removed by Phase
+// 21G-B: those belong to the homepage + store catalog, not a product page.
 // ============================================================================
 
 interface CrossSellSectionsProps {
@@ -36,8 +32,6 @@ export function CrossSellSections({
   excludeIds,
 }: CrossSellSectionsProps) {
   const handleAddToCart = useAddToCart();
-  const { addItem } = useCart();
-  const { bySource, catalogItemMap } = useCatalogItemMap([businessUnit]);
 
   const buId = businessUnit._id as Id<"businessUnits">;
 
@@ -53,99 +47,13 @@ export function CrossSellSections({
     { businessUnitId: buId, excludeIds: safeExcludeIds as Id<"catalogItems">[], limit: 4 },
   ) as CatalogItem[] | undefined;
 
-  const combos = useQuery(
-    api.combos.getFeatured,
-    { businessUnitId: buId },
-  ) as Combo[] | undefined;
-  const partyPacks = useQuery(
-    api.partyPacks.getFeatured,
-    { businessUnitId: buId },
-  ) as PartyPack[] | undefined;
-
-  const handleAddCombo = useCallback(
-    async (combo: Combo) => {
-      const catalogItem = bySource.get(combo._id);
-      if (!catalogItem) {
-        toast.error("Item unavailable", {
-          description: `${combo.name} is temporarily unavailable. Please try again.`,
-        });
-        return;
-      }
-      const bundleItems = combo.items?.map((ci) => ({
-        name: catalogItemMap.get(ci.catalogItemId)?.name ?? "Item",
-        quantity: ci.quantity,
-      }));
-      const added = await addItem({
-        catalogItemId: catalogItem._id,
-        itemType: "combo",
-        businessUnitId: catalogItem.businessUnitId,
-        name: combo.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: combo.price,
-        image: combo.coverImage || combo.thumbnail || combo.images?.[0],
-        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
-      });
-      if (added) {
-        toast.success("Added to cart", { description: combo.name });
-      }
-    },
-    [addItem, bySource, catalogItemMap],
-  );
-
-  const handleAddPartyPack = useCallback(
-    async (partyPack: PartyPack) => {
-      const catalogItem = bySource.get(partyPack._id);
-      if (!catalogItem) {
-        toast.error("Item unavailable", {
-          description: `${partyPack.name} is temporarily unavailable. Please try again.`,
-        });
-        return;
-      }
-      const bundleItems = partyPack.items?.map((pi) => ({
-        name: catalogItemMap.get(pi.catalogItemId)?.name ?? "Item",
-        quantity: pi.quantity,
-      }));
-      const added = await addItem({
-        catalogItemId: catalogItem._id,
-        itemType: "partyPack",
-        businessUnitId: catalogItem.businessUnitId,
-        name: partyPack.name,
-        variantName: "Default",
-        quantity: 1,
-        unitPrice: partyPack.price,
-        image: partyPack.coverImage || partyPack.thumbnail || partyPack.images?.[0],
-        ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {}),
-      });
-      if (added) {
-        toast.success("Added to cart", { description: partyPack.name });
-      }
-    },
-    [addItem, bySource, catalogItemMap],
-  );
-
   const handleAddProduct = useCallback(
     (product: CatalogItem | CardProduct) =>
       handleAddToCart(product as CatalogItem),
     [handleAddToCart],
   );
 
-  const recommendedCombos = useMemo(
-    () => (combos ?? []).filter((combo) => combo.status === "active").slice(0, 2),
-    [combos],
-  );
-  const recommendedPacks = useMemo(
-    () =>
-      (partyPacks ?? [])
-        .filter((pack) => pack.status === "active")
-        .slice(0, 2),
-    [partyPacks],
-  );
-
-  const hasAny =
-    (mayAlsoLike && mayAlsoLike.length > 0) ||
-    recommendedCombos.length > 0 ||
-    recommendedPacks.length > 0;
+  const hasAny = mayAlsoLike && mayAlsoLike.length > 0;
 
   const categorySlugBySourceId = useProductCategorySlugs(mayAlsoLike);
   const defaultVariantNameBySourceId = useDefaultVariantNames(mayAlsoLike);
@@ -174,50 +82,6 @@ export function CrossSellSections({
                 compact
                 onAddToCart={handleAddProduct}
                 defaultVariantName={defaultVariantNameBySourceId.get(item.sourceId)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {recommendedCombos.length > 0 && (
-        <section>
-          <div className="mb-2 flex items-center gap-2">
-            <Combine className="h-4 w-4 text-accent" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-accent">
-              Bundles
-            </span>
-          </div>
-          <SectionHeader title="Recommended Combo" subtitle="Save more when you bundle" />
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {recommendedCombos.map((combo, index) => (
-              <ComboCard
-                key={combo._id}
-                combo={combo}
-                index={index}
-                onAddToCart={handleAddCombo}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {recommendedPacks.length > 0 && (
-        <section>
-          <div className="mb-2 flex items-center gap-2">
-            <PartyPopper className="h-4 w-4 text-accent" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-accent">
-              For Celebrations
-            </span>
-          </div>
-          <SectionHeader title="Party Packs" subtitle="Perfect for gatherings and events" />
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {recommendedPacks.map((partyPack, index) => (
-              <PartyPackCard
-                key={partyPack._id}
-                partyPack={partyPack}
-                index={index}
-                onAddToCart={handleAddPartyPack}
               />
             ))}
           </div>

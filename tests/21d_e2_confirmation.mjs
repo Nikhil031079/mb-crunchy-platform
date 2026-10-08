@@ -379,6 +379,16 @@ const allowed = new Set([
   "tests/21f_checkout_payment_retry.mjs",
   "tests/21d_d_checkout_quantity.mjs",
   "tests/21d_g2_destination_city_state.mjs",
+  // Phase 21G-B working-tree scope (reported in the 21G-B report): the three
+  // approved merchandising-placement source files + this suite. The suite
+  // family's allow-set syncs (21D-C / 21D-D / 21D-G2 / 21D-H / 21F) are
+  // already listed above.
+  "src/components/customer/CrossSellSections.tsx",
+  "src/components/customer/RecommendedForYouSection.tsx",
+  "src/pages/customer/ProductPage.tsx",
+  "tests/21g_merchandising_placement.mjs",
+  // The 21D-B suite's own scope-block edit (21G-B harness sync).
+  "tests/21d_b_variant_safety.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(

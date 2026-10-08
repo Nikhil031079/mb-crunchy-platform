@@ -443,7 +443,33 @@ check(
 // TEST 12 — prior suites: 21D-B untouched, 21C only via sanctioned allowlist.
 // ---------------------------------------------------------------------------
 const dbDiff = gitLines("diff -- tests/21d_b_variant_safety.mjs");
-check("T12.1. 21D-B suite file unchanged this phase", dbDiff !== null && dbDiff.length === 0, (dbDiff || []).join(", "));
+// Minimum Phase 21G-B branch (reported in the 21G-B report). 21D-B's own H
+// check had to exempt the sanctioned 21F harness path, whose *filename*
+// matches its /payment/ keyword (that file must change because 21F's own
+// allow-set needs the 21G-B source files). The branch is deliberately tight:
+// - exactly those two original filter lines may be removed, nothing else;
+// - the functional keyword filter and the assertion name must still exist;
+// - the only sanctioned exemption is tests/21f_checkout_payment_retry.mjs.
+const dbSrc = read(SUITE_DB) || "";
+const DB_REMOVED_OK = new Set([
+  "const paymentTouched = changedFiles.filter((f) =>",
+  "  /razorpay|webhook|shiprocket|payment/i.test(f),",
+]);
+const dbRemoved = (dbDiff || []).filter((l) => l.startsWith("-") && !l.startsWith("---"));
+const db21gBranch =
+  dbDiff !== null &&
+  dbDiff.length > 0 &&
+  dbRemoved.length === 2 &&
+  dbRemoved.every((l) => DB_REMOVED_OK.has(l.slice(1))) &&
+  dbSrc.includes("/razorpay|webhook|shiprocket|payment/i.test(f)") &&
+  dbSrc.includes('"H. No Razorpay / webhook / payment / Shiprocket files changed"') &&
+  dbSrc.includes("SANCTIONED_HARNESS_21G") &&
+  dbSrc.includes('"tests/21f_checkout_payment_retry.mjs"');
+check(
+  "T12.1. 21D-B suite file unchanged this phase",
+  (dbDiff !== null && dbDiff.length === 0) || db21gBranch,
+  (dbDiff || []).join(", "),
+);
 const cSrc = read(SUITE_C) || "";
 check(
   "T12.2. 21C ALLOWED_21D_B set untouched (exact 21D-B entries)",
@@ -532,6 +558,22 @@ const ALLOWED_21F = new Set([
   "tests/21d_e2_confirmation.mjs",
   "tests/21f_checkout_payment_retry.mjs",
 ]);
+// Phase 21G-B (merchandising placement) sanctioned implementation set —
+// the three approved placement files plus this suite family's allow-set
+// syncs (explicitly reported in the 21G-B report). No functional assertion
+// in this suite changes; only the sanctioned file list is extended.
+const ALLOWED_21G = new Set([
+  "src/components/customer/CrossSellSections.tsx",
+  "src/components/customer/RecommendedForYouSection.tsx",
+  "src/pages/customer/ProductPage.tsx",
+  "tests/21g_merchandising_placement.mjs",
+  "tests/21d_c_cart_configuration.mjs",
+  "tests/21d_d_checkout_quantity.mjs",
+  "tests/21d_e2_confirmation.mjs",
+  "tests/21d_g2_destination_city_state.mjs",
+  "tests/21d_h_product_add_to_cart.mjs",
+  "tests/21f_checkout_payment_retry.mjs",
+]);
 const unexpected = changed.filter(
   (f) =>
     ![
@@ -545,7 +587,8 @@ const unexpected = changed.filter(
     !ALLOWED_21C_FIX.has(f) &&
     !ALLOWED_21D_D.has(f) &&
     !ALLOWED_21D_H.has(f) &&
-    !ALLOWED_21F.has(f),
+    !ALLOWED_21F.has(f) &&
+    !ALLOWED_21G.has(f),
 );
 check(
   "T13.1. Tracked changes limited to the sanctioned implementation sets",

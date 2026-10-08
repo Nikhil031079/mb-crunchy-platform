@@ -344,6 +344,15 @@ const allowed = new Set([
   // Repo-sanctioned harness sync (reported in 21F report): the 21F checkout
   // payment-retry suite, now part of the diff vs this suite's baseline.
   "tests/21f_checkout_payment_retry.mjs",
+  // Repo-sanctioned harness sync (reported in the 21G-B report): the two
+  // other approved merchandising-placement source files (ProductPage is
+  // already listed above) plus this phase's suite.
+  "src/components/customer/CrossSellSections.tsx",
+  "src/components/customer/RecommendedForYouSection.tsx",
+  "tests/21g_merchandising_placement.mjs",
+  // The 21D-B suite's own scope-block edit (its H check exempts this
+  // phase's sanctioned 21F harness path).
+  "tests/21d_b_variant_safety.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(
