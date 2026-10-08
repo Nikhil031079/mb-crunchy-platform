@@ -86,7 +86,6 @@ interface DeliveryZoneFormDialogProps {
 
 function DeliveryZoneFormDialog({ open, zone, onOpenChange, onSubmit }: DeliveryZoneFormDialogProps) {
   const [values, setValues] = useState<DeliveryZoneFormValues>(() => toFormValues(zone));
-  const dialogKey = `${zone?.id ?? "new"}-${open ? "open" : "closed"}`;
   const isEditing = Boolean(zone);
 
   const update = <K extends keyof DeliveryZoneFormValues>(key: K, value: DeliveryZoneFormValues[K]) =>
@@ -102,7 +101,7 @@ function DeliveryZoneFormDialog({ open, zone, onOpenChange, onSubmit }: Delivery
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent key={dialogKey} className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit delivery zone" : "Create delivery zone"}</DialogTitle>
           <DialogDescription>
@@ -339,7 +338,11 @@ export default function DeliveryZonesPage() {
         </section>
       )}
 
+      {/* The form state lives in this component, so the key must live here:
+          remounting DialogContent alone never re-ran toFormValues(), which is
+          why the edit modal opened blank. */}
       <DeliveryZoneFormDialog
+        key={`${editingZone?.id ?? "new"}-${formOpen ? "open" : "closed"}`}
         open={formOpen}
         zone={editingZone}
         onOpenChange={(open) => {
