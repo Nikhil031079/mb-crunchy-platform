@@ -34,6 +34,9 @@ import { join } from "node:path";
 
 const ROOT = process.cwd();
 
+// Phase 21G baseline (the commit 21G-B was built on).
+const BASELINE = "5f6e369";
+
 const NL = String.fromCharCode(10);
 const BS = String.fromCharCode(92);
 
@@ -435,10 +438,19 @@ const requiredSource = [
   "src/components/customer/CrossSellSections.tsx",
   "src/pages/customer/ProductPage.tsx",
 ];
+// Measured against the 21G baseline rather than the live worktree diff: an
+// empty diff just means the change is committed, and a later phase dirtying
+// other files must not invalidate this. `git diff --name-only <baseline>`
+// spans committed AND uncommitted changes, so this stays true for as long as
+// the 21G-B edit is present in the tree and fails if it is ever reverted.
+const sinceBaseline = git("diff --name-only " + BASELINE)
+  .split(NL)
+  .map((s) => s.trim())
+  .filter(Boolean);
 check(
   "6e. all three approved 21G-B source files are part of the change",
-  requiredSource.every((f) => changed.includes(f)),
-  "changed: " + (changed.join(", ") || "(none)"),
+  requiredSource.every((f) => sinceBaseline.includes(f)),
+  "since baseline: " + (sinceBaseline.join(", ") || "(none)"),
 );
 
 // ============================================================================
