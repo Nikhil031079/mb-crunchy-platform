@@ -353,6 +353,15 @@ const allowed = new Set([
   // The 21D-B suite's own scope-block edit (its H check exempts this
   // phase's sanctioned 21F harness path).
   "tests/21d_b_variant_safety.mjs",
+  // Repo-sanctioned harness sync (reported in the master problem-solving
+  // report): this round's root-cause fixes - the bun.lock regeneration that
+  // unblocks Cloudflare's `bun install --frozen-lockfile`, the two banner
+  // PNGs pulled in by merging origin/main, and the delivery-zone edit-modal
+  // remount fix.
+  "bun.lock",
+  "public/DHB.png",
+  "public/MHB.png",
+  "src/pages/admin/DeliveryZonesPage.tsx",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(
