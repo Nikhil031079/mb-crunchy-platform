@@ -2329,8 +2329,13 @@ export default function CheckoutPage() {
                       </div>
                       )}
 
-                      {/* Local Delivery Info — Kitchen only */}
-                      {effectiveDeliveryType === "local" && deliveryPolicy && !localDeliveryUnavailable && (
+                      {/* Local Delivery Info — Kitchen only.
+                          Gated on the same isMartPincodeMode discriminator that
+                          selects the delivery UI above: this card is the summary
+                          of the Kitchen "Delivery Area" RadioGroup, which lives in
+                          that ternary's else-branch, so it must never render when
+                          the Mart pincode/courier branch is active. */}
+                      {!isMartPincodeMode && effectiveDeliveryType === "local" && deliveryPolicy && !localDeliveryUnavailable && (
                         <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 space-y-2">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <Truck className="h-4 w-4 text-primary" />
