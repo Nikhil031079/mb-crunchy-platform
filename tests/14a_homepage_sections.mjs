@@ -396,10 +396,22 @@ check(
   unexpected.length === 0,
   "unexpected: " + (unexpected.join(", ") || "(none)"),
 );
+// Phase 14A is committed, so the HEAD worktree diff is empty by definition
+// and can no longer prove the phase touched its files (the same reason the
+// 21G suite anchors its committed-scope check to a baseline). 8b therefore
+// measures baseline -> worktree, which spans committed AND uncommitted
+// changes: it stays true for as long as the 14A edit is present and fails
+// if any approved file is ever reverted. 8a above is intentionally
+// unchanged and still guards uncommitted drift.
+const BASELINE_14A = "2b09563"; // stable pre-Phase-14A parent commit
+const sinceBaseline14A = git("diff --name-only " + BASELINE_14A)
+  .split("\n")
+  .map((s) => s.trim())
+  .filter(Boolean);
 check(
   "8b. every approved tracked file is actually part of the change",
-  [...APPROVED_14A].every((f) => changed.includes(f)),
-  "missing: " + [...APPROVED_14A].filter((f) => !changed.includes(f)).join(", "),
+  [...APPROVED_14A].every((f) => sinceBaseline14A.includes(f)),
+  "missing: " + [...APPROVED_14A].filter((f) => !sinceBaseline14A.includes(f)).join(", "),
 );
 const protectedHits = changed.filter((f) =>
   [
