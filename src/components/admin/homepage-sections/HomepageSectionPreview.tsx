@@ -25,12 +25,12 @@ interface HomepageSectionPreviewProps {
 }
 
 function formatRange(startDate?: number, endDate?: number) {
-  if (!startDate && !endDate) return "Always on";
+  if (!startDate && !endDate) return "No dates set";
   const fmt = (ts: number) => new Date(ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
   if (startDate && endDate) return `${fmt(startDate)} – ${fmt(endDate)}`;
   if (startDate) return `From ${fmt(startDate)}`;
   if (endDate) return `Until ${fmt(endDate)}`;
-  return "Always on";
+  return "No dates set";
 }
 
 export function HomepageSectionPreview({ open, row, onOpenChange }: HomepageSectionPreviewProps) {
@@ -41,7 +41,7 @@ export function HomepageSectionPreview({ open, row, onOpenChange }: HomepageSect
       open={open}
       onOpenChange={onOpenChange}
       title={row ? sectionTypeLabels[row.sectionType] : "Section preview"}
-      description="A live preview of how this section appears on the storefront."
+      description="Saved settings for this section. This is a summary, not a live storefront preview."
       className="sm:max-w-lg"
     >
       {row && (
@@ -79,12 +79,12 @@ export function HomepageSectionPreview({ open, row, onOpenChange }: HomepageSect
               <dd className="mt-0.5 font-medium">{row.target === "both" ? "Both Stores" : "Selected store"}</dd>
             </div>
             <div className="col-span-2 rounded-lg border p-3">
-              <dt className="text-xs text-muted-foreground">Schedule</dt>
+              <dt className="text-xs text-muted-foreground">Schedule (not enforced)</dt>
               <dd className="mt-0.5 font-medium">{formatRange(row.startDate, row.endDate)}</dd>
             </div>
             <div className="col-span-2 rounded-lg border p-3">
               <dt className="text-xs text-muted-foreground">Status</dt>
-              <dd className="mt-0.5 font-medium">{row.visible ? "Enabled" : "Hidden from homepage"}</dd>
+              <dd className="mt-0.5 font-medium">{row.visible ? "Enabled" : "Disabled"}</dd>
             </div>
           </dl>
         </div>

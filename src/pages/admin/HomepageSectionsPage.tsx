@@ -178,7 +178,9 @@ export default function HomepageSectionsPage() {
         ctaLink: values.ctaLink.trim() || undefined,
         startDate: values.startDate ? new Date(values.startDate).getTime() : undefined,
         endDate: values.endDate ? new Date(values.endDate).getTime() : undefined,
-        priority: values.displayOrder,
+        // Phase 14A: `displayOrder` is the single source of truth for
+        // ordering — no mirrored `settings.priority` is written, so a stale
+        // priority can never override the reorder operation.
         target: values.target,
       };
       const targetBuIds = values.target === "both" ? activeBUs.map((bu) => bu._id) : [values.target as Id<"businessUnits">];
@@ -286,7 +288,7 @@ export default function HomepageSectionsPage() {
     <div>
       <PageHeader
         title="Homepage Sections"
-        description="Design the storefront homepage: order sections, set schedules and target stores."
+        description="Design the storefront homepage: order sections, set visibility and target stores."
       >
         <Button size="sm" onClick={openCreateDialog}>
           <Plus className="mr-1.5 size-4" />

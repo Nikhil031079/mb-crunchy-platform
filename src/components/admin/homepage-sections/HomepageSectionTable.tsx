@@ -36,11 +36,14 @@ function LoadingRows() {
 
 function ScheduleBadge({ startDate, endDate }: { startDate?: number; endDate?: number }) {
   const window = getCampaignWindowStatus(startDate, endDate);
+  // Phase 14A: schedules are stored but NOT enforced on the storefront yet,
+  // so these labels describe the saved date window only — never storefront
+  // effect ("Live now" / "Scheduled" would over-promise).
   const map: Record<string, { label: string; className: string }> = {
-    none: { label: "Always on", className: "border-emerald-200 bg-emerald-500/10 text-emerald-700" },
-    active: { label: "Live now", className: "border-emerald-200 bg-emerald-500/10 text-emerald-700" },
-    scheduled: { label: "Scheduled", className: "border-amber-200 bg-amber-500/10 text-amber-700" },
-    expired: { label: "Expired", className: "border-red-200 bg-red-500/10 text-red-700" },
+    none: { label: "No dates set", className: "border-emerald-200 bg-emerald-500/10 text-emerald-700" },
+    active: { label: "Window active", className: "border-emerald-200 bg-emerald-500/10 text-emerald-700" },
+    scheduled: { label: "Starts in future", className: "border-amber-200 bg-amber-500/10 text-amber-700" },
+    expired: { label: "Window ended", className: "border-red-200 bg-red-500/10 text-red-700" },
   };
   const status = map[window];
 
@@ -64,7 +67,7 @@ export function HomepageSectionTable({
             <TableHead className="w-24">Order</TableHead>
             <TableHead>Section</TableHead>
             <TableHead>Target</TableHead>
-            <TableHead>Schedule</TableHead>
+            <TableHead>Dates</TableHead>
             <TableHead>Visible</TableHead>
             <TableHead className="w-40"><span className="sr-only">Actions</span></TableHead>
           </TableRow>

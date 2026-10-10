@@ -21,8 +21,9 @@ export function HomepageSectionToolbar({
       <div>
         <h2 className="text-sm font-semibold">Homepage Layout</h2>
         <p className="text-xs text-muted-foreground">
-          Order, enable and schedule sections. Changes apply instantly to the
-          storefront.
+          Order and enable sections for the storefront homepage. Visibility
+          and order apply to Featured Products, Combos and Party Packs;
+          start/end dates are not enforced yet.
         </p>
       </div>
       <AdminFilterSelect

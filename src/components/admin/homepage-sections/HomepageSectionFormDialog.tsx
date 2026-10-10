@@ -77,7 +77,7 @@ export function HomepageSectionFormDialog({
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit homepage section" : "Add homepage section"}</DialogTitle>
           <DialogDescription>
-            Control how this section appears on the storefront homepage.
+            Set this section&apos;s title, order, visibility, target store and dates.
           </DialogDescription>
         </DialogHeader>
         <HomepageSectionForm
@@ -214,6 +214,11 @@ function HomepageSectionForm({
             <Input id={`${formId}-end`} type="datetime-local" value={values.endDate} onChange={(e) => update("endDate", e.target.value)} />
           </div>
         </div>
+
+        <p className="text-xs text-muted-foreground">
+          Start and end dates are saved for later use — they are not enforced
+          on the storefront yet.
+        </p>
 
         {error && (
           <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:text-red-400">

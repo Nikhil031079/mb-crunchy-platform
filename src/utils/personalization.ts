@@ -49,10 +49,12 @@ export function isActiveSection(
 
 /**
  * Order homepage sections for rendering:
- *  1. settings.priority (descending) — admins can override order
- *  2. sections tied to the preferred business unit (via businessUnitId or
+ *  1. sections tied to the preferred business unit (via businessUnitId or
  *     settings.target) first — BU personalization, never hiding others
- *  3. displayOrder (ascending)
+ *  2. displayOrder (ascending) — the single source of truth for ordering
+ *     (Phase 14A). `settings.priority` is never consulted, so a stale
+ *     priority stored by an older admin save cannot override the reorder
+ *     operation.
  * Only "active" sections are returned.
  */
 export function sortHomepageSections(
@@ -63,9 +65,6 @@ export function sortHomepageSections(
   return sections
     .filter((section) => isActiveSection(section, now))
     .sort((a, b) => {
-      const priorityA = getHomepageSectionSettings(a).priority;
-      const priorityB = getHomepageSectionSettings(b).priority;
-      if (priorityA !== priorityB) return priorityB - priorityA;
       if (preferredBusinessUnitId) {
         const aPreferred =
           a.businessUnitId === preferredBusinessUnitId ||

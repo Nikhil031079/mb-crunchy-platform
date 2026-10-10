@@ -16,12 +16,15 @@
 //      query / handler / import that existed only for them.
 //   4. P2 (PromoRibbon / InfoStrip promo-chip overlap) is INTENTIONALLY
 //      DEFERRED - both files are proven untouched.
-//   5. Frozen customer pages (Cart / Checkout / Category / BusinessUnit /
-//      Home) are untouched; Cart's RecentlyViewedSection is an accepted
-//      deviation and must remain.
+//   5. Frozen customer pages (Cart / Checkout / Category / BusinessUnit)
+//      are untouched; Cart's RecentlyViewedSection is an accepted
+//      deviation and must remain. HomePage is NOT byte-frozen: the
+//      sanctioned Phase 14A wiring (mapped-slot subscription) is allowed,
+//      and its merchandising placement is pinned behaviourally instead.
 //   6. Scope: the tracked diff is limited to the approved 21G-B file set
-//      (3 source files + this suite + the sanctioned harness syncs) and no
-//      protected file is modified.
+//      (3 source files + this suite + the sanctioned harness syncs) plus the
+//      separately sanctioned Phase 14A file set, and no protected file
+//      (outside the 14A-sanctioned HomePage wiring) is modified.
 //
 // Repo has no installed test runner (no vitest/jest), so this follows the
 // plain-Node tests/*.mjs structural/source-test convention used by the
@@ -47,12 +50,18 @@ const INFO_STRIP = "src/components/customer/HomepageInfoStrip.tsx";
 const PROMO_RIBBON = "src/components/customer/PromoRibbonSection.tsx";
 const BEST_SELLERS = "src/components/customer/BestSellersSection.tsx";
 
+const HOME = "src/pages/customer/HomePage.tsx";
+
 const FROZEN_PAGES = [
   "src/pages/customer/CartPage.tsx",
   "src/pages/customer/CheckoutPage.tsx",
   "src/pages/customer/CategoryPage.tsx",
   "src/pages/customer/BusinessUnitPage.tsx",
-  "src/pages/customer/HomePage.tsx",
+  // Phase 14A sanctioned sync: HomePage.tsx is intentionally NOT byte-frozen
+  // anymore — Phase 14A legitimately rewires its three mapped slots
+  // (BestSellers / Combos / PartyPacks) via useHomepageSections. Its
+  // merchandising placement is pinned behaviourally in section 5 below, so
+  // any unauthorized rail, duplication, or removal still fails this suite.
 ];
 
 // The exact set of tracked files Phase 21G-B is permitted to modify.
@@ -101,7 +110,9 @@ const PROTECTED_FILES = [
   "src/pages/customer/CheckoutPage.tsx",
   "src/pages/customer/CategoryPage.tsx",
   "src/pages/customer/BusinessUnitPage.tsx",
-  "src/pages/customer/HomePage.tsx",
+  // Phase 14A sanctioned sync: HomePage.tsx removed from the byte-freeze —
+  // its merchandising placement is pinned behaviourally in section 5, which
+  // still fails on any unauthorized rail/duplication change.
 ];
 
 let passed = 0;
@@ -399,6 +410,32 @@ for (const rel of FROZEN_PAGES) {
   check("5. " + rel + " unchanged", d === "", d === null ? "diff error" : d.split(NL).length + " diff lines");
 }
 
+// Phase 14A sanctioned sync: HomePage.tsx may carry the approved mapped-slot
+// wiring (useHomepageSections + renderMappedSection), but its merchandising
+// placement must remain exactly the 21G state. Each check below fails on an
+// unauthorized change (duplicated/removed rail, reintroduced store grid or
+// trust band, restored storefront combo block), so the section-5 guard is
+// preserved behaviourally rather than by byte-freeze.
+check("5. HomePage renders RecommendedForYouSection exactly once", countOf(HOME, "<RecommendedForYouSection") === 1);
+check("5. HomePage renders TrendingRailSection exactly once", countOf(HOME, "<TrendingRailSection") === 1);
+check("5. HomePage renders PromoRibbonSection exactly once", countOf(HOME, "<PromoRibbonSection") === 1);
+check("5. HomePage renders HomepageInfoStrip exactly once", countOf(HOME, "<HomepageInfoStrip") === 1);
+check(
+  "5. HomePage has no duplicate store grid",
+  lacks(HOME, "MartGridSection") && lacks(HOME, "<BusinessUnitSections"),
+);
+check("5. HomePage keeps a single trust layer", lacks(HOME, "TRUST_ITEMS"));
+check(
+  "5. HomePage keeps all three mapped rails exactly once",
+  countOf(HOME, "<BestSellersSection") === 1 &&
+    countOf(HOME, "<ComboOffersSection") === 1 &&
+    countOf(HOME, "<PartyPacksSection") === 1,
+);
+check(
+  "5. HomePage has no removed storefront combo/pack block",
+  lacks(HOME, "Recommended Combo") && lacks(HOME, "For Celebrations"),
+);
+
 check(
   "5z. Cart RecentlyViewedSection intentionally retained (accepted deviation)",
   has("src/pages/customer/CartPage.tsx", "RecentlyViewedSection"),
@@ -409,9 +446,26 @@ console.log("\n6. Scope - only approved 21G-B files changed");
 // ============================================================================
 
 const changed = changedTracked();
-const unexpected = changed.filter((f) => !APPROVED_21G.has(f));
+// Sanctioned Phase 14A scope (Phase 14A brief: admin Homepage Sections ->
+// storefront wiring). Appended per this suite's own harness-sync convention:
+// no functional assertion is weakened, deleted, or made unconditional — only
+// the sanctioned file list is extended, and files outside both sets still
+// fail. (The two new 14A files are untracked so they never appear in this
+// diff; they are listed for completeness.)
+const SANCTIONED_14A = new Set([
+  "src/hooks/use-homepage-sections.ts",
+  "src/pages/customer/HomePage.tsx",
+  "src/pages/admin/HomepageSectionsPage.tsx",
+  "src/utils/personalization.ts",
+  "src/components/admin/homepage-sections/HomepageSectionToolbar.tsx",
+  "src/components/admin/homepage-sections/HomepageSectionPreview.tsx",
+  "src/components/admin/homepage-sections/HomepageSectionFormDialog.tsx",
+  "src/components/admin/homepage-sections/HomepageSectionTable.tsx",
+  "tests/14a_homepage_sections.mjs",
+]);
+const unexpected = changed.filter((f) => !APPROVED_21G.has(f) && !SANCTIONED_14A.has(f));
 check(
-  "6a. tracked diff limited to the sanctioned 21G-B file set",
+  "6a. tracked diff limited to the sanctioned 21G-B + 14A file sets",
   unexpected.length === 0,
   "unexpected: " + (unexpected.join(", ") || "(none)"),
 );

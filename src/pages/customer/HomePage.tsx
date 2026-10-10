@@ -8,6 +8,8 @@ import { api } from "@convex/_generated/api";
 
 import { SITE_NAME } from "@/constants";
 import { isContentActive, getContentMarketingSettings } from "@/utils";
+import { useHomepageSections } from "@/hooks/use-homepage-sections";
+import type { MappedSectionType } from "@/hooks/use-homepage-sections";
 
 // Customer Reusable Components
 import {
@@ -154,6 +156,13 @@ export default function HomePage() {
       ),
     [businessUnits]
   );
+
+  // --- Phase 14A: admin Homepage Sections settings for the mapped slots ---
+  // Merged per the approved rules (see use-homepage-sections.ts): a mapped
+  // section is hidden only when an active store hid it, displayOrder is the
+  // single source of truth, and missing configuration never changes the
+  // existing composition.
+  const homepageSections = useHomepageSections(activeBusinessUnits.map((bu) => bu._id));
 
   // --- Selected item state for universal ItemDetailsModal ---
   const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
@@ -314,6 +323,36 @@ export default function HomePage() {
     martBU !== null &&
     kitchenBU._id !== martBU._id;
 
+  // Phase 14A: renders one of the three admin-mapped components in its
+  // assigned slot. An explicitly hidden type renders nothing in place, so
+  // every other section keeps its position and no component ever renders
+  // twice or disappears because configuration is missing.
+  const renderMappedSection = (type: MappedSectionType) => {
+    if (!homepageSections.visible[type]) return null;
+    switch (type) {
+      case "featuredProducts":
+        return <BestSellersSection key={type} businessUnits={activeBusinessUnits} />;
+      case "combos":
+        return (
+          <ComboOffersSection
+            key={type}
+            businessUnits={activeBusinessUnits}
+            onOpenItemDetails={setSelectedItem}
+          />
+        );
+      case "partyPacks":
+        return (
+          <PartyPacksSection
+            key={type}
+            businessUnits={activeBusinessUnits}
+            onOpenItemDetails={setSelectedItem}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     // Culinary Tier 0 canvas (Phase 4) — warm homepage base.
     // Phase 21C: section order now follows the discovery sequence
@@ -403,12 +442,12 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 6. TOP PICKS — best sellers across stores                         */}
+      {/* 6. MAPPED SLOT 7 — Best Sellers, driven by the admin homepage     */}
+      {/*    sections settings (Phase 14A). Renders first of the three       */}
+      {/*    mapped slots, before the personalisation rail.                  */}
       {/* ================================================================ */}
 
-      {!isLoading && (
-        <BestSellersSection businessUnits={activeBusinessUnits} />
-      )}
+      {!isLoading && renderMappedSection(homepageSections.orderedTypes[0])}
 
       {/* ================================================================ */}
       {/* 7. RECOMMENDED FOR YOU — deterministic personalized picks         */}
@@ -422,23 +461,15 @@ export default function HomePage() {
       )}
 
       {/* ================================================================ */}
-      {/* 8. COMBOS + PARTY PACKS — discovery only. Both sections return    */}
-      {/*    null when the store has no data, so nothing empty renders.     */}
+      {/* 8. MAPPED SLOTS 9 + 10 — Combos and Party Packs, ordered by the   */}
+      {/*    admin homepage sections settings (Phase 14A). Both sections    */}
+      {/*    return null when the store has no data, so nothing empty       */}
+      {/*    renders.                                                       */}
       {/* ================================================================ */}
 
-      {!isLoading && (
-        <ComboOffersSection
-          businessUnits={activeBusinessUnits}
-          onOpenItemDetails={setSelectedItem}
-        />
-      )}
+      {!isLoading && renderMappedSection(homepageSections.orderedTypes[1])}
 
-      {!isLoading && (
-        <PartyPacksSection
-          businessUnits={activeBusinessUnits}
-          onOpenItemDetails={setSelectedItem}
-        />
-      )}
+      {!isLoading && renderMappedSection(homepageSections.orderedTypes[2])}
 
       {/* ================================================================ */}
       {/* 9. OFFERS RIBBON — only when an announcement, promo or live       */}
