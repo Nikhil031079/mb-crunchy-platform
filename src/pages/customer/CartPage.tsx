@@ -112,12 +112,6 @@ export default function CartPage() {
     return null;
   }, [cart.businessUnitIds, cart.items]);
 
-  const cartMealDealMatches = useCartMealDealDetection(
-    cart.items,
-    primaryBusinessUnitId,
-    cart.appliedMealDeals,
-  );
-
   // ── PHASE 24P: Multi-BU Meal Deal loading ──
   // Derive distinct Business Unit IDs from cart items.
   // Maximum 4 (MAX_BUSINESS_UNITS = 4 — matches existing codebase convention).
@@ -134,6 +128,28 @@ export default function CartPage() {
   const activeDeals3 = useMealDeals(cartBuIds[3] ?? null);
 
   const allDealsResults = [activeDeals0, activeDeals1, activeDeals2, activeDeals3];
+
+  // Meal-deal discovery input: every distinct cart BU with its own deals.
+  // Reuses the fixed-hook-count queries above (no new subscriptions); each
+  // deal is evaluated against its own BU's lines only. While a BU's query
+  // loads, that BU contributes no matches — same as the prior single-BU
+  // behavior while its query loaded.
+  const dealsByBuForDetection = useMemo(
+    () =>
+      cartBuIds.map((buId, i) => ({
+        businessUnitId: buId,
+        deals: allDealsResults[i],
+      })),
+    // allDealsResults is derived from the four queries below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cartBuIds, activeDeals0, activeDeals1, activeDeals2, activeDeals3],
+  );
+
+  const cartMealDealMatches = useCartMealDealDetection(
+    cart.items,
+    dealsByBuForDetection,
+    cart.appliedMealDeals,
+  );
 
   // Feed each BU's deals into the cart store's BU-aware cache.
   // confirmed=true: query resolved (success or empty array).

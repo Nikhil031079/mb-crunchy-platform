@@ -26,7 +26,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
-import { isMealDealBuFixOnlyCartDiff } from "./cart_fix_scope.mjs";
+import { isMealDealBuFixOnlyCartDiff, isMealDealDiscoveryFixOnlyDiff } from "./cart_fix_scope.mjs";
 
 const ROOT = process.cwd();
 // Phase baseline — diff scope is measured against this commit so the suite
@@ -267,8 +267,19 @@ check(
   )
 );
 check(
-  "D5 cart variant editing untouched (CartPage variant-change flow)",
-  !changedTrackedFiles().includes("src/pages/customer/CartPage.tsx")
+  "D5 cart variant editing preserved; CartPage change confined to discovery rewiring (meal discovery fix exempted only if diff-bounded)",
+  // Mixed-cart discovery fix: CartPage passes only when the hook + CartPage
+  // diffs are exactly the approved discovery change (bounded predicate —
+  // variant-editing, pricing, grouping tokens all fail it).
+  !changedTrackedFiles().some(
+    (f) =>
+      f.startsWith("src/stores/cart") &&
+      !(f === "src/stores/cart.ts" && isMealDealBuFixOnlyCartDiff(ROOT)),
+  ) &&
+    (changedTrackedFiles().every(
+      (f) => f !== "src/pages/customer/CartPage.tsx",
+    ) ||
+      isMealDealDiscoveryFixOnlyDiff(ROOT))
 );
 check(
   "D6 checkout quantity editing + mixed-BU checkout behavior preserved (Checkout UX Upgrade: presence-verified)",

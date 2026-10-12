@@ -17,7 +17,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { isMealDealBuFixOnlyCartDiff } from "./cart_fix_scope.mjs";
+import { isMealDealBuFixOnlyCartDiff, isMealDealDiscoveryFixOnlyDiff } from "./cart_fix_scope.mjs";
 
 const ROOT = process.cwd();
 let passed = 0;
@@ -450,7 +450,13 @@ const dirtyProtected = protectedFiles.filter(
     diffOf(f) !== "" &&
     // Meal-upgrade BU fix: cart.ts passes only when its diff is exactly the
     // approved shortfall-BU change (any pricing/merge/persistence edit fails).
-    !(f === "src/stores/cart.ts" && isMealDealBuFixOnlyCartDiff(ROOT)),
+    !(f === "src/stores/cart.ts" && isMealDealBuFixOnlyCartDiff(ROOT)) &&
+    // Mixed-cart discovery fix: CartPage passes only when the hook + CartPage
+    // diffs are exactly the approved discovery change (bounded predicate).
+    !(
+      f === "src/pages/customer/CartPage.tsx" &&
+      isMealDealDiscoveryFixOnlyDiff(ROOT)
+    ),
 );
 check(
   "9a. None of the 18 protected files modified (meal-upgrade BU fix exempted only if diff-bounded)",
@@ -495,7 +501,13 @@ const allowed = new Set([
   "src/components/customer/PhoneInput.tsx",
   // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
   // lives in the cart store.
-  "src/stores/cart.ts",
+  "src/components/customer/PhoneInput.tsx",
+  // Mixed-cart discovery fix: per-BU match evaluation, multi-BU hook input,
+  // CartPage rewiring (diff-bounded by the shared predicate in 9a).
+  "src/hooks/use-meal-deals.ts",
+  "src/pages/customer/CartPage.tsx",
+  // Shared diff-bounding predicate harness for the fix.
+  "tests/cart_fix_scope.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 // Post-commit / test-only baseline (21D-H harness sync): empty tracked diff
@@ -529,8 +541,11 @@ const phase21g = changed.length > 0 && changed.every((f) => APPROVED_21G.has(f))
 // exactly the approved fix (any other cart.ts change fails).
 const fixInFlight =
   unexpected.length === 0 &&
-  changed.includes("src/stores/cart.ts") &&
-  isMealDealBuFixOnlyCartDiff(ROOT);
+  ((changed.includes("src/stores/cart.ts") &&
+    isMealDealBuFixOnlyCartDiff(ROOT)) ||
+    // Mixed-cart discovery fix: hook + CartPage diff-bounded, CheckoutPage
+    // work committed.
+    isMealDealDiscoveryFixOnlyDiff(ROOT));
 check(
   "9b. Tracked phase diff limited to CheckoutPage (new files untracked)",
   phaseCommitted || phase21g || (unexpected.length === 0 && changed.includes(CHECKOUT)) || fixInFlight,

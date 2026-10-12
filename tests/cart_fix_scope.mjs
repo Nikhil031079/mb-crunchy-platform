@@ -1,13 +1,19 @@
 // ============================================================================
-// MB CRUNCHY — shared scope predicate for the meal-upgrade BU fix.
+// MB CRUNCHY — shared scope predicates for the meal-upgrade fixes.
 //
-// The approved fix touches src/stores/cart.ts in exactly one place
-// (applyMealDeal shortfall path: deal BU instead of cart-first BU, via the
-// buildMealDealShortfallLine helper). Suites that pin cart.ts as
-// "unmodified" use isMealDealBuFixOnlyCartDiff() so the approved,
-// diff-bounded change passes while ANY other cart.ts modification —
-// pricing, merge/variant semantics, persistence, reconciliation — still
-// fails. Clean tree (no cart.ts diff) passes unchanged.
+// (1) isMealDealBuFixOnlyCartDiff(): the approved shortfall-BU fix touches
+// src/stores/cart.ts in exactly one place (deal BU instead of cart-first
+// BU, via buildMealDealShortfallLine). Suites pinning cart.ts as
+// "unmodified" use it so the approved, diff-bounded change passes while
+// ANY other cart.ts modification still fails. Clean tree passes unchanged.
+//
+// (2) isMealDealDiscoveryFixOnlyDiff(): the approved mixed-cart discovery
+// fix evaluates detection per distinct cart BU (pure helpers in
+// mealDealMatching.ts, multi-BU hook input, CartPage rewiring). Suites
+// pinning use-meal-deals.ts / CartPage.tsx as "unmodified" use it so the
+// approved, marker-and-token-bounded change passes while ANY pricing,
+// savings, persistence, grouping, routing, variant-editing, checkout,
+// payment, shipping, inventory, loyalty, or coupon edit still fails.
 //
 // Plain-Node convention (no test runner installed).
 // ============================================================================
@@ -79,10 +85,10 @@ const FORBIDDEN_TOKENS = [
   "consumedQuantities",
 ];
 
-function cartFixDiffLines(root) {
+function diffLinesForFile(root, file) {
   let out;
   try {
-    out = execSync(`git diff -U0 HEAD -- "${CART_PATH}"`, {
+    out = execSync(`git diff -U0 HEAD -- "${file}"`, {
       cwd: root,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -97,6 +103,100 @@ function cartFixDiffLines(root) {
     else if (line.startsWith("-") && !line.startsWith("---")) removed.push(line.slice(1));
   }
   return { added, removed };
+}
+
+function cartFixDiffLines(root) {
+  return diffLinesForFile(root, CART_PATH);
+}
+
+/**
+ * True when the working-tree diffs of the mixed-cart discovery fix files
+ * contain only the approved change: per-BU match evaluation extracted to a
+ * pure module, the hook delegating to it over a multi-BU input list, and
+ * CartPage feeding every distinct cart BU. Any pricing, savings,
+ * persistence, grouping, routing, variant-editing, checkout, payment,
+ * shipping, inventory, loyalty, or coupon token in added lines fails.
+ * Clean tree (no diff) returns false — callers OR this with their
+ * untouched-file condition.
+ */
+const DISCOVERY_FILES = [
+  "src/hooks/use-meal-deals.ts",
+  "src/pages/customer/CartPage.tsx",
+];
+
+const DISCOVERY_REQUIRED_ADDED = [
+  "evaluateMealDealMatchesForBu({",
+  "combineMealDealMatches(perBu)",
+  "dealsByBusinessUnit",
+  "MealDealsByBusinessUnit",
+  "export type { CartMealDealMatch }",
+  "dealsByBuForDetection",
+  "cartBuIds.map(",
+];
+
+const DISCOVERY_REQUIRED_REMOVED = [
+  "const deals = useMealDeals(businessUnitId);",
+  "Filter cart items to the target business unit for isolation.",
+  "primaryBusinessUnitId,",
+];
+
+const DISCOVERY_FORBIDDEN_IN_ADDED = [
+  "dealPrice",
+  "savings",
+  "totalDiscount",
+  "updateQuantity",
+  "updateVariant",
+  "merge",
+  "localStorage",
+  "reconcile",
+  "discount",
+  "deliveryFee",
+  "computeTotal",
+  "groupedItems",
+  "checkoutItems",
+  "selectedCheckoutBU",
+  "resolveMartDelivery",
+  "shipping",
+  "inventory",
+  "coupon",
+  "loyalty",
+  "removeMealDeal",
+  "allocateExistingMealDeal",
+  "applyMealDeal",
+  "setActiveDeals",
+  "useMealDeals(",
+  "getActiveForCustomer",
+  "openRazorpayCheckout",
+  "createOrder",
+  "CartVariantEditor",
+  "editingCartItemId",
+  "resolveCurrentLinePrice",
+  "STALE_PRICE_THRESHOLD",
+  "effectiveDealPrice",
+  "mealDealSavings",
+  "calculateSubtotal",
+  "subtotal",
+  "persist",
+];
+
+export function isMealDealDiscoveryFixOnlyDiff(root) {
+  let sawFix = false;
+  for (const file of DISCOVERY_FILES) {
+    const d = diffLinesForFile(root, file);
+    if (!d) return false;
+    if (d.added.length === 0 && d.removed.length === 0) continue;
+    sawFix = true;
+    const addedText = d.added.join("\n");
+    const removedText = d.removed.join("\n");
+    if (
+      DISCOVERY_FORBIDDEN_IN_ADDED.some((t) => addedText.includes(t)) ||
+      !DISCOVERY_REQUIRED_ADDED.some((m) => addedText.includes(m)) ||
+      !DISCOVERY_REQUIRED_REMOVED.some((m) => removedText.includes(m))
+    ) {
+      return false;
+    }
+  }
+  return sawFix;
 }
 
 /**

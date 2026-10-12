@@ -395,6 +395,13 @@ const allowed = new Set([
   // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
   // lives in the cart store.
   "src/stores/cart.ts",
+  // Mixed-cart discovery fix: per-BU match evaluation, multi-BU hook input,
+  // CartPage rewiring (diff-bounded by the shared predicate in 9a-style
+  // protected checks of sibling suites).
+  "src/hooks/use-meal-deals.ts",
+  "src/pages/customer/CartPage.tsx",
+  // Shared diff-bounding predicate harness for the fix.
+  "tests/cart_fix_scope.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(

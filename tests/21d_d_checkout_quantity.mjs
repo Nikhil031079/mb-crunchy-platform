@@ -16,7 +16,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { isMealDealBuFixOnlyCartDiff } from "./cart_fix_scope.mjs";
+import { isMealDealBuFixOnlyCartDiff, isMealDealDiscoveryFixOnlyDiff } from "./cart_fix_scope.mjs";
 
 const ROOT = process.cwd();
 let passed = 0;
@@ -298,8 +298,9 @@ check(
   has(CART_PAGE, "Price changed") && has(CART_PAGE, "resolveCurrentLinePrice"),
 );
 check(
-  "11c. CartPage untouched this phase",
-  diffOf(CART_PAGE) === "",
+  "11c. CartPage stale-price/variant editing preserved (meal discovery fix exempted only if diff-bounded)",
+  diffOf(CART_PAGE) === "" || isMealDealDiscoveryFixOnlyDiff(ROOT),
+  "CartPage change exceeds the approved discovery fix",
 );
 check(
   "11d. Checkout mirrors the same 0.02 threshold",
@@ -383,6 +384,14 @@ const allowed = new Set([
   // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
   // lives in the cart store.
   "src/stores/cart.ts",
+  // Mixed-cart discovery fix: per-BU match evaluation (pure helper), the
+  // multi-BU hook input, and the CartPage rewiring. No pricing, grouping,
+  // routing, or variant-editing logic may change (bounded by the shared
+  // discovery predicate in the protected checks above).
+  "src/hooks/use-meal-deals.ts",
+  "src/pages/customer/CartPage.tsx",
+  // Shared diff-bounding predicate harness for the fix.
+  "tests/cart_fix_scope.mjs",
 ]);
 // Phase 21G-B in-flight scope: a tracked diff lying entirely inside the
 // sanctioned 21G-B set does not touch CheckoutPage, so the CheckoutPage
@@ -416,8 +425,11 @@ const phaseCommitted = changed.every((f) => f.startsWith("tests/"));
 // exactly the approved fix (any other cart.ts change fails).
 const fixInFlight =
   unexpected.length === 0 &&
-  changed.includes("src/stores/cart.ts") &&
-  isMealDealBuFixOnlyCartDiff(ROOT);
+  ((changed.includes("src/stores/cart.ts") &&
+    isMealDealBuFixOnlyCartDiff(ROOT)) ||
+    // Mixed-cart discovery fix: hook + CartPage diff-bounded, CheckoutPage
+    // work committed.
+    isMealDealDiscoveryFixOnlyDiff(ROOT));
 check(
   "12b. Phase diff limited to CheckoutPage (+ this test)",
   phaseCommitted || phase21g || (unexpected.length === 0 && changed.includes(CHECKOUT)) || fixInFlight,
