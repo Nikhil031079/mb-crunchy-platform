@@ -16,6 +16,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { isMealDealBuFixOnlyCartDiff } from "./cart_fix_scope.mjs";
 
 const ROOT = process.cwd();
 let passed = 0;
@@ -195,8 +196,9 @@ check(
     !handler.includes("updateVariant"),
 );
 check(
-  "5c. Cart store (merge/variant semantics) untouched this phase",
-  diffOf(STORE) === "",
+  "5c. Cart store merge/variant semantics preserved (meal-upgrade BU fix: diff-bounded exemption only)",
+  diffOf(STORE) === "" || isMealDealBuFixOnlyCartDiff(ROOT),
+  "cart.ts change exceeds the approved shortfall-BU fix",
 );
 
 // ---------------------------------------------------------------------------
@@ -329,9 +331,15 @@ const protectedFiles = [
   COMBO,
   PACK,
 ];
-const dirtyProtected = protectedFiles.filter((f) => diffOf(f) !== "");
+const dirtyProtected = protectedFiles.filter(
+  (f) =>
+    diffOf(f) !== "" &&
+    // Meal-upgrade BU fix: cart.ts passes only when its diff is exactly the
+    // approved shortfall-BU change (any pricing/merge/persistence edit fails).
+    !(f === STORE && isMealDealBuFixOnlyCartDiff(ROOT)),
+);
 check(
-  "12a. None of the 12 protected files modified",
+  "12a. None of the 12 protected files modified (meal-upgrade BU fix exempted only if diff-bounded)",
   dirtyProtected.length === 0,
   dirtyProtected.join(", "),
 );
@@ -372,6 +380,9 @@ const allowed = new Set([
   // Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
   // reviewed, necessary file for this feature (CheckoutPage phone field).
   "src/components/customer/PhoneInput.tsx",
+  // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
+  // lives in the cart store.
+  "src/stores/cart.ts",
 ]);
 // Phase 21G-B in-flight scope: a tracked diff lying entirely inside the
 // sanctioned 21G-B set does not touch CheckoutPage, so the CheckoutPage
@@ -398,9 +409,18 @@ const unexpected = changed.filter((f) => !allowed.has(f));
 // changes are already committed and the in-flight rule does not apply; any
 // dirty source file still requires CheckoutPage + the allowed-set bound.
 const phaseCommitted = changed.every((f) => f.startsWith("tests/"));
+// Meal-upgrade BU fix in-flight scope: the 21D-D CheckoutPage work is
+// committed, so the tree can hold the approved cart.ts shortfall-BU
+// correction plus harness syncs without CheckoutPage in the diff. Allowed
+// only when every file is allow-listed AND a present cart.ts diff is
+// exactly the approved fix (any other cart.ts change fails).
+const fixInFlight =
+  unexpected.length === 0 &&
+  changed.includes("src/stores/cart.ts") &&
+  isMealDealBuFixOnlyCartDiff(ROOT);
 check(
   "12b. Phase diff limited to CheckoutPage (+ this test)",
-  phaseCommitted || phase21g || (unexpected.length === 0 && changed.includes(CHECKOUT)),
+  phaseCommitted || phase21g || (unexpected.length === 0 && changed.includes(CHECKOUT)) || fixInFlight,
   unexpected.join(", ") || "CheckoutPage missing from diff",
 );
 

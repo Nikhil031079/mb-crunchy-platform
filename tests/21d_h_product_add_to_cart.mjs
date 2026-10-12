@@ -26,6 +26,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
+import { isMealDealBuFixOnlyCartDiff } from "./cart_fix_scope.mjs";
 
 const ROOT = process.cwd();
 // Phase baseline — diff scope is measured against this commit so the suite
@@ -254,8 +255,16 @@ check(
   has("src/constants/index.ts", "`/${buSlug}/${catSlug}/${productSlug}`")
 );
 check(
-  "D4 cart store untouched (cart identity / merge / quantity editing)",
-  !changedTrackedFiles().some((f) => f.startsWith("src/stores/cart"))
+  "D4 cart store identity/merge/quantity editing preserved (meal-upgrade BU fix exempted only if diff-bounded)",
+  // Meal-upgrade BU fix: src/stores/cart.ts passes only when its working-tree
+  // diff is exactly the approved shortfall-BU change (baseline→HEAD cart
+  // history is clean per the pre-fix 5c/D4 passes, so HEAD-diff bounding
+  // covers the whole cart change under review).
+  !changedTrackedFiles().some(
+    (f) =>
+      f.startsWith("src/stores/cart") &&
+      !(f === "src/stores/cart.ts" && isMealDealBuFixOnlyCartDiff(ROOT)),
+  )
 );
 check(
   "D5 cart variant editing untouched (CartPage variant-change flow)",

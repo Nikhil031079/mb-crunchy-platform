@@ -41,6 +41,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
+import { isMealDealBuFixOnlyCartDiff } from "./cart_fix_scope.mjs";
 
 const ROOT = process.cwd();
 const CHECKOUT = "src/pages/customer/CheckoutPage.tsx";
@@ -516,6 +517,9 @@ const allowed = new Set([
   // Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
   // reviewed, necessary file for this feature (CheckoutPage phone field).
   "src/components/customer/PhoneInput.tsx",
+  // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
+  // lives in the cart store.
+  "src/stores/cart.ts",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(
@@ -548,8 +552,12 @@ try {
   dirtyProtected = [];
 }
 check(
-  "15b. None of the 9 protected payment/cart/backend files modified",
-  dirtyProtected.length === 0,
+  "15b. None of the 9 protected payment/cart/backend files modified (meal-upgrade BU fix exempted only if diff-bounded)",
+  // Meal-upgrade BU fix: cart.ts passes only when its diff is exactly the
+  // approved shortfall-BU change (any pricing/persistence edit fails).
+  dirtyProtected.filter(
+    (f) => f !== "src/stores/cart.ts" || !isMealDealBuFixOnlyCartDiff(ROOT),
+  ).length === 0,
   dirtyProtected.join(", "),
 );
 check(

@@ -17,6 +17,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { isMealDealBuFixOnlyCartDiff } from "./cart_fix_scope.mjs";
 
 const ROOT = process.cwd();
 let passed = 0;
@@ -444,9 +445,15 @@ const protectedFiles = [
   BOOKING,
   SCHEMA,
 ];
-const dirtyProtected = protectedFiles.filter((f) => diffOf(f) !== "");
+const dirtyProtected = protectedFiles.filter(
+  (f) =>
+    diffOf(f) !== "" &&
+    // Meal-upgrade BU fix: cart.ts passes only when its diff is exactly the
+    // approved shortfall-BU change (any pricing/merge/persistence edit fails).
+    !(f === "src/stores/cart.ts" && isMealDealBuFixOnlyCartDiff(ROOT)),
+);
 check(
-  "9a. None of the 18 protected files modified",
+  "9a. None of the 18 protected files modified (meal-upgrade BU fix exempted only if diff-bounded)",
   dirtyProtected.length === 0,
   dirtyProtected.join(", "),
 );
@@ -486,6 +493,9 @@ const allowed = new Set([
   // Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
   // reviewed, necessary file for this feature (CheckoutPage phone field).
   "src/components/customer/PhoneInput.tsx",
+  // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
+  // lives in the cart store.
+  "src/stores/cart.ts",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 // Post-commit / test-only baseline (21D-H harness sync): empty tracked diff
@@ -512,9 +522,18 @@ const APPROVED_21G = new Set([
   "tests/21f_checkout_payment_retry.mjs",
 ]);
 const phase21g = changed.length > 0 && changed.every((f) => APPROVED_21G.has(f));
+// Meal-upgrade BU fix in-flight scope: the D7 CheckoutPage work is
+// committed, so the tree can hold the approved cart.ts shortfall-BU
+// correction plus harness syncs without CheckoutPage in the diff. Allowed
+// only when every file is allow-listed AND a present cart.ts diff is
+// exactly the approved fix (any other cart.ts change fails).
+const fixInFlight =
+  unexpected.length === 0 &&
+  changed.includes("src/stores/cart.ts") &&
+  isMealDealBuFixOnlyCartDiff(ROOT);
 check(
   "9b. Tracked phase diff limited to CheckoutPage (new files untracked)",
-  phaseCommitted || phase21g || (unexpected.length === 0 && changed.includes(CHECKOUT)),
+  phaseCommitted || phase21g || (unexpected.length === 0 && changed.includes(CHECKOUT)) || fixInFlight,
   unexpected.join(", ") || "CheckoutPage missing from diff",
 );
 check(

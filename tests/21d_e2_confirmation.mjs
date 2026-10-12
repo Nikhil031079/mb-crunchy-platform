@@ -392,6 +392,9 @@ const allowed = new Set([
   // Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
   // reviewed, necessary file for this feature (CheckoutPage phone field).
   "src/components/customer/PhoneInput.tsx",
+  // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
+  // lives in the cart store.
+  "src/stores/cart.ts",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(

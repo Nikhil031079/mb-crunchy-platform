@@ -6,6 +6,7 @@ import { api } from "@convex/_generated/api";
 import type { CartItem, CartState, CartAppliedMealDeal, EnrichedMealDeal } from "@/types";
 import { STORAGE_KEYS } from "@/constants";
 import { isCatalogItemId, safeJsonParse } from "@/utils";
+import { buildMealDealShortfallLine } from "@/utils/mealDealLines";
 import { convexClient } from "@/lib/convex";
 
 // ============================================================================
@@ -1253,21 +1254,24 @@ export function useCart() {
           }
 
           // Add any remaining shortfall as new deal-tagged items.
+          // The line's BU is the deal's BU (server-validated same-BU for
+          // all components) — never the cart's first BU, which misroutes
+          // Kitchen-combo upgrades into Mart whenever a Mart line exists.
           if (remaining > 0) {
             const dealCartItemId = generateCartItemId();
-            newItems.push({
-              cartItemId: dealCartItemId,
-              catalogItemId: selectedCatalogItemId,
-              itemType: "product",
-              businessUnitId: prev.businessUnitIds[0] ?? "",
-              name: selectedProductName,
-              variantName: selectedVariant,
-              quantity: remaining,
-              unitPrice: variantUnitPrice,
-              totalPrice: variantUnitPrice * remaining,
-              mealDealId: deal._id,
-              mealDealName: deal.name,
-            });
+            newItems.push(
+              buildMealDealShortfallLine({
+                cartItemId: dealCartItemId,
+                catalogItemId: selectedCatalogItemId,
+                name: selectedProductName,
+                variantName: selectedVariant,
+                quantity: remaining,
+                unitPrice: variantUnitPrice,
+                mealDealId: deal._id,
+                mealDealName: deal.name,
+                dealBusinessUnitId: deal.businessUnitId,
+              }),
+            );
             consumedCartLineIds.push(dealCartItemId);
           }
 
