@@ -36,6 +36,12 @@ import { isStoreCurrentlyOpen, getNextOpenTime } from "@/utils/store-hours";
 import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 import { getActiveVariants } from "@/utils/product-variants";
 import { resolveDestinationCityState } from "@/utils/destinationCityState";
+import {
+  composeDeliveryAddress,
+  composeDeliveryNotes,
+  splitSavedAddress,
+  isValidOptionalEmail,
+} from "@/utils/checkoutAddress";
 
 // Hooks
 import { useCart } from "@/stores/cart";
@@ -409,6 +415,12 @@ interface CheckoutForm {
   deliveryType: "local" | "outside_area";
   deliveryAddress: string;
   deliveryNotes: string;
+  // Structured delivery inputs (UI-only). Composed into deliveryAddress /
+  // deliveryNotes on submit so the order + Shiprocket payload contract is
+  // unchanged (see src/utils/checkoutAddress.ts).
+  houseFlat: string;
+  streetLocality: string;
+  landmark: string;
   selectedZoneId: string;
   couponCode: string;
   destinationPincode: string;
@@ -424,6 +436,9 @@ const INITIAL_FORM: CheckoutForm = {
   deliveryType: "local",
   deliveryAddress: "",
   deliveryNotes: "",
+  houseFlat: "",
+  streetLocality: "",
+  landmark: "",
   selectedZoneId: "",
   couponCode: "",
   destinationPincode: "",
@@ -836,6 +851,11 @@ export default function CheckoutPage() {
 
   const [form, setForm] = useState<CheckoutForm>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutForm, string>>>({});
+  // Touched tracking + submit gate so invalid styling + inline messages only
+  // appear after the customer has interacted with a field or attempted to
+  // submit. A red border is never shown without a visible error message.
+  const [touched, setTouched] = useState<Partial<Record<keyof CheckoutForm, boolean>>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{
     orderNumber: string;
@@ -1159,18 +1179,33 @@ export default function CheckoutPage() {
       customerPhone: prev.customerPhone || extractDigitsForInput(customer.phone || ""),
       customerEmail: prev.customerEmail || customer.email || "",
     }));
-    // Auto-select default address
+    // Auto-select default address. The saved single-string address is split
+    // best-effort into the structured inputs; the landmark and stored
+    // delivery instructions are preserved separately (previously the
+    // instructions were discarded whenever a landmark existed).
     if (savedAddresses && savedAddresses.length > 0 && !selectedAddressId) {
       const defaultAddr = savedAddresses.find((a) => a.isDefault) ?? savedAddresses[0];
       setSelectedAddressId(defaultAddr._id);
-      setForm((prev) => ({
-        ...prev,
-        deliveryAddress: defaultAddr.address,
-        deliveryNotes: defaultAddr.landmark ? `Landmark: ${defaultAddr.landmark}` : "",
-        destinationPincode: defaultAddr.zipCode || prev.destinationPincode,
-        destinationCity: defaultAddr.city?.trim() || "",
-        destinationState: defaultAddr.state?.trim() || "",
-      }));
+      setForm((prev) => {
+        const split = splitSavedAddress(defaultAddr.address ?? "");
+        const landmark = (defaultAddr.landmark ?? "").trim();
+        const instructions = (defaultAddr.deliveryInstructions ?? "").trim();
+        return {
+          ...prev,
+          houseFlat: prev.houseFlat || split.houseFlat,
+          streetLocality: prev.streetLocality || split.streetLocality,
+          landmark: prev.landmark || landmark,
+          deliveryAddress: composeDeliveryAddress({
+            houseFlat: prev.houseFlat || split.houseFlat,
+            streetLocality: prev.streetLocality || split.streetLocality,
+            landmark: prev.landmark || landmark,
+          }),
+          deliveryNotes: prev.deliveryNotes || instructions,
+          destinationPincode: defaultAddr.zipCode || prev.destinationPincode,
+          destinationCity: defaultAddr.city?.trim() || "",
+          destinationState: defaultAddr.state?.trim() || "",
+        };
+      });
     }
     setProfileAutoFilled(true);
   }, [customer, savedAddresses, profileAutoFilled, selectedAddressId]);
@@ -1342,12 +1377,24 @@ export default function CheckoutPage() {
     <K extends keyof CheckoutForm>(field: K, value: CheckoutForm[K]) => {
       setForm((prev) => {
         const next = { ...prev, [field]: value };
-        // When switching to pickup, clear deliveryType so stale outside_area
-        // state never leaks into the pickup flow.
+        // When switching to pickup, reset deliveryType so stale outside_area
+        // state never leaks into the pickup flow. Entered delivery values are
+        // preserved so switching back does not lose them.
         if (field === "orderType" && value === "pickup") {
           next.deliveryType = "local";
         }
-        if (field === "deliveryAddress" || field === "destinationPincode") {
+        // Keep the derived deliveryAddress in sync with the structured inputs.
+        // The composed string is what orders.create + Shiprocket receive.
+        if (field === "houseFlat" || field === "streetLocality" || field === "landmark") {
+          next.deliveryAddress = composeDeliveryAddress({
+            houseFlat: field === "houseFlat" ? (value as string) : prev.houseFlat,
+            streetLocality: field === "streetLocality" ? (value as string) : prev.streetLocality,
+            landmark: field === "landmark" ? (value as string) : prev.landmark,
+          });
+        }
+        // Only a pincode change invalidates a saved-address city/state. Street
+        // edits must not wipe them.
+        if (field === "destinationPincode") {
           next.destinationCity = "";
           next.destinationState = "";
         }
@@ -1361,8 +1408,40 @@ export default function CheckoutPage() {
           return next;
         });
       }
+      // Switching to pickup hides delivery fields: drop their stale errors
+      // while keeping every entered value intact.
+      if (field === "orderType" && value === "pickup") {
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.houseFlat;
+          delete next.streetLocality;
+          delete next.deliveryAddress;
+          delete next.destinationPincode;
+          return next;
+        });
+      }
     },
     [errors]
+  );
+
+  const markTouched = useCallback(
+    <K extends keyof CheckoutForm>(field: K) => {
+      setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+    },
+    []
+  );
+
+  // Whether the error for a field is currently visible: only after the
+  // customer has touched the field or attempted to submit. This keeps the
+  // normal/focused states free of red borders.
+  const showFieldError = useCallback(
+    (field: keyof CheckoutForm): string | undefined => {
+      const message = errors[field];
+      if (!message) return undefined;
+      if (touched[field] || submitAttempted) return message;
+      return undefined;
+    },
+    [errors, touched, submitAttempted]
   );
 
   // ==========================================================================
@@ -1373,18 +1452,40 @@ export default function CheckoutPage() {
     const newErrors: Partial<Record<keyof CheckoutForm, string>> = {};
 
     if (!form.customerName.trim()) {
-      newErrors.customerName = "Name is required";
+      newErrors.customerName = "Enter your full name";
     }
     if (!form.customerPhone.trim()) {
       newErrors.customerPhone = "Phone number is required";
     } else if (!validateIndianPhone(form.customerPhone)) {
       newErrors.customerPhone = "Enter a valid 10-digit Indian mobile number";
     }
-    if (form.orderType === "delivery" && !form.deliveryAddress.trim()) {
-      newErrors.deliveryAddress = "Delivery address is required";
+    if (form.customerEmail.trim() && !isValidOptionalEmail(form.customerEmail)) {
+      newErrors.customerEmail = "Enter a valid email address";
+    }
+    if (form.orderType === "delivery") {
+      if (!form.houseFlat.trim()) {
+        newErrors.houseFlat = "Enter your house, flat, or building";
+      }
+      if (!form.streetLocality.trim()) {
+        newErrors.streetLocality = "Enter your street or locality";
+      }
+      // Back-compat guard: the composed address must never be empty for a
+      // delivery order, even if a legacy value was loaded.
+      if (
+        !newErrors.houseFlat &&
+        !newErrors.streetLocality &&
+        !composeDeliveryAddress({
+          houseFlat: form.houseFlat,
+          streetLocality: form.streetLocality,
+          landmark: form.landmark,
+        }).trim()
+      ) {
+        newErrors.deliveryAddress = "Delivery address is required";
+      }
     }
 
-    // Mart pincode validation
+    // Mart pincode validation (PIN-based courier shipping stays Mart-only;
+    // Kitchen never asks for a destination PIN).
     if (form.orderType === "delivery" && isMartPincodeMode) {
       if (!form.destinationPincode.trim()) {
         newErrors.destinationPincode = "Pincode is required for delivery";
@@ -1393,7 +1494,8 @@ export default function CheckoutPage() {
       }
     }
 
-    // Local delivery minimum order check
+    // Local delivery minimum order check (section-level notice surfaced under
+    // the address fields; keyed on deliveryAddress as before).
     if (form.orderType === "delivery" && form.deliveryType === "local" && deliveryPolicy?.minimumOrder) {
       if (pricing.afterDiscount < deliveryPolicy.minimumOrder) {
         newErrors.deliveryAddress = `Minimum order for local delivery is ${formatCurrency(deliveryPolicy.minimumOrder)}. Add ${formatCurrency(deliveryPolicy.minimumOrder - pricing.afterDiscount)} more to your cart.`;
@@ -1401,6 +1503,7 @@ export default function CheckoutPage() {
     }
 
     setErrors(newErrors);
+    setSubmitAttempted(true);
     return Object.keys(newErrors).length === 0;
   }, [form, isMartPincodeMode, deliveryPolicy, pricing]);
 
@@ -1456,12 +1559,25 @@ export default function CheckoutPage() {
           total: pricing.total,
           orderType: form.orderType,
           deliveryType: effectiveDeliveryType,
+          // Structured inputs are composed into the existing string fields so
+          // the order payload, order display, and Shiprocket billing/shipping
+          // address contract are unchanged.
           deliveryAddress:
             form.orderType === "delivery"
-              ? form.deliveryAddress.trim()
+              ? composeDeliveryAddress({
+                  houseFlat: form.houseFlat,
+                  streetLocality: form.streetLocality,
+                  landmark: form.landmark,
+                }).trim()
               : undefined,
           deliveryZoneId: undefined,
-          deliveryNotes: form.deliveryNotes.trim() || undefined,
+          deliveryNotes:
+            form.orderType === "delivery"
+              ? composeDeliveryNotes({
+                  landmark: form.landmark,
+                  deliveryInstructions: form.deliveryNotes,
+                }).trim() || undefined
+              : undefined,
           destinationPincode: form.destinationPincode.trim() || undefined,
           destinationCity: destinationCityState.destinationCity,
           destinationState: destinationCityState.destinationState,
@@ -2034,7 +2150,7 @@ export default function CheckoutPage() {
                 transition={{ duration: 0.3, delay: 0.05 }}
                 className="rounded-2xl glass-tier-1 border border-border/60 p-5 sm:p-6"
               >
-                <h2 className="font-culinary-heading font-bold mb-4">Contact Information</h2>
+                <h2 className="font-culinary-heading font-bold mb-4">1. Contact Information</h2>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -2043,41 +2159,61 @@ export default function CheckoutPage() {
                     </Label>
                     <Input
                       id="customerName"
-                      placeholder="John Doe"
+                      placeholder="e.g. Priya Sharma"
+                      autoComplete="name"
                       value={form.customerName}
                       onChange={(e) => updateField("customerName", e.target.value)}
-                      className={cn(errors.customerName && "border-destructive")}
+                      onBlur={() => markTouched("customerName")}
+                      aria-invalid={!!showFieldError("customerName")}
+                      aria-describedby={showFieldError("customerName") ? "customerName-error" : undefined}
+                      className={cn(showFieldError("customerName") && "border-destructive focus-visible:ring-destructive/20")}
                     />
-                    {errors.customerName && (
-                      <p className="text-xs text-destructive">{errors.customerName}</p>
+                    {showFieldError("customerName") && (
+                      <p id="customerName-error" role="alert" className="text-xs text-destructive">{showFieldError("customerName")}</p>
                     )}
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="customerPhone">
-                        Phone Number <span className="text-destructive">*</span>
+                        Mobile Number <span className="text-destructive">*</span>
                       </Label>
                       <PhoneInput
                         id="customerPhone"
                         value={form.customerPhone}
                         onChange={(val) => updateField("customerPhone", val)}
-                        error={!!errors.customerPhone}
+                        onBlur={() => markTouched("customerPhone")}
+                        error={!!showFieldError("customerPhone")}
+                        ariaDescribedby={showFieldError("customerPhone") ? "customerPhone-error" : undefined}
                       />
-                      {errors.customerPhone && (
-                        <p className="text-xs text-destructive">{errors.customerPhone}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Used for order-related contact and delivery coordination.
+                      </p>
+                      {showFieldError("customerPhone") && (
+                        <p id="customerPhone-error" role="alert" className="text-xs text-destructive">{showFieldError("customerPhone")}</p>
                       )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="customerEmail">Email (optional)</Label>
+                      <Label htmlFor="customerEmail">Email Address <span className="text-muted-foreground font-normal">(optional)</span></Label>
                       <Input
                         id="customerEmail"
                         type="email"
+                        autoComplete="email"
                         placeholder="john@example.com"
                         value={form.customerEmail}
                         onChange={(e) => updateField("customerEmail", e.target.value)}
+                        onBlur={() => markTouched("customerEmail")}
+                        aria-invalid={!!showFieldError("customerEmail")}
+                        aria-describedby={showFieldError("customerEmail") ? "customerEmail-error" : "customerEmail-help"}
+                        className={cn(showFieldError("customerEmail") && "border-destructive focus-visible:ring-destructive/20")}
                       />
+                      <p id="customerEmail-help" className="text-xs text-muted-foreground">
+                        Optional — for order updates, where supported.
+                      </p>
+                      {showFieldError("customerEmail") && (
+                        <p id="customerEmail-error" role="alert" className="text-xs text-destructive">{showFieldError("customerEmail")}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2090,7 +2226,7 @@ export default function CheckoutPage() {
                 transition={{ duration: 0.3, delay: 0.1 }}
                 className="rounded-2xl glass-tier-1 border border-border/60 p-5 sm:p-6"
               >
-                <h2 className="font-culinary-heading font-bold mb-4">Order Type</h2>
+                <h2 className="font-culinary-heading font-bold mb-4">2. Order Type</h2>
 
                 <RadioGroup
                   value={form.orderType}
@@ -2166,9 +2302,11 @@ export default function CheckoutPage() {
                     className="overflow-hidden"
                   >
                     <div className="rounded-2xl glass-tier-1 border border-border/60 p-5 sm:p-6 space-y-4">
-                      <h2 className="font-culinary-heading font-bold">Delivery Details</h2>
+                      <h2 className="font-culinary-heading font-bold">3. Delivery Address</h2>
 
-                      {/* Mart Pincode Delivery — when BU uses pincode_region mode */}
+                      {/* Mart Pincode Delivery — when BU uses pincode_region mode.
+                          PIN-based courier shipping stays Mart-only; Kitchen never
+                          renders this block (see else-branch below). */}
                       {isMartPincodeMode ? (
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
@@ -2176,17 +2314,22 @@ export default function CheckoutPage() {
                             <Label className="text-sm font-medium">Home Delivery</Label>
                           </div>
                           <div className="grid gap-2 sm:max-w-xs">
-                            <Label htmlFor="destinationPincode">Destination Pincode *</Label>
+                            <Label htmlFor="destinationPincode">Destination PIN Code <span className="text-destructive">*</span></Label>
                             <Input
                               id="destinationPincode"
+                              inputMode="numeric"
+                              autoComplete="postal-code"
                               value={form.destinationPincode}
                               onChange={(e) => updateField("destinationPincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
-                              placeholder="6-digit pincode"
+                              onBlur={() => markTouched("destinationPincode")}
+                              placeholder="e.g. 500001"
                               maxLength={6}
-                              required
+                              aria-invalid={!!showFieldError("destinationPincode")}
+                              aria-describedby={showFieldError("destinationPincode") ? "destinationPincode-error" : undefined}
+                              className={cn(showFieldError("destinationPincode") && "border-destructive focus-visible:ring-destructive/20")}
                             />
-                            {errors.destinationPincode && (
-                              <p className="text-xs text-destructive">{errors.destinationPincode}</p>
+                            {showFieldError("destinationPincode") && (
+                              <p id="destinationPincode-error" role="alert" className="text-xs text-destructive">{showFieldError("destinationPincode")}</p>
                             )}
                           </div>
                           {form.destinationPincode.length === 6 && (
@@ -2413,16 +2556,28 @@ export default function CheckoutPage() {
                                 )}
                                 onClick={() => {
                                   setSelectedAddressId(addr._id);
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    deliveryAddress: addr.address,
-                                    deliveryNotes: addr.landmark
-                                      ? `Landmark: ${addr.landmark}`
-                                      : addr.deliveryInstructions || prev.deliveryNotes,
-                                    destinationPincode: addr.zipCode || prev.destinationPincode,
-                                    destinationCity: addr.city?.trim() || "",
-                                    destinationState: addr.state?.trim() || "",
-                                  }));
+                                  setForm((prev) => {
+                                    const split = splitSavedAddress(addr.address ?? "");
+                                    const landmark = (addr.landmark ?? "").trim();
+                                    const instructions = (addr.deliveryInstructions ?? "").trim();
+                                    const houseFlat = split.houseFlat || prev.houseFlat;
+                                    const streetLocality = split.streetLocality || prev.streetLocality;
+                                    return {
+                                      ...prev,
+                                      houseFlat,
+                                      streetLocality,
+                                      landmark: landmark || prev.landmark,
+                                      deliveryAddress: composeDeliveryAddress({
+                                        houseFlat,
+                                        streetLocality,
+                                        landmark: landmark || prev.landmark,
+                                      }),
+                                      deliveryNotes: instructions || prev.deliveryNotes,
+                                      destinationPincode: addr.zipCode || prev.destinationPincode,
+                                      destinationCity: addr.city?.trim() || "",
+                                      destinationState: addr.state?.trim() || "",
+                                    };
+                                  });
                                 }}
                               >
                                 <div
@@ -2460,41 +2615,100 @@ export default function CheckoutPage() {
                         </div>
                       )}
 
-                      <div className="space-y-2">
-                        <Label htmlFor="deliveryAddress">Delivery Address *</Label>
-                        <Textarea
-                          id="deliveryAddress"
-                          placeholder="Enter your full delivery address..."
-                          value={form.deliveryAddress}
-                          onChange={(e) =>
-                            updateField("deliveryAddress", e.target.value)
-                          }
-                          className={cn(
-                            "min-h-[80px]",
-                            errors.deliveryAddress && "border-destructive"
+                      {/* Structured delivery address — composed into the existing
+                          deliveryAddress / deliveryNotes payload on submit, so
+                          order display, admin views, and the Shiprocket
+                          billing/shipping address contract are unchanged. */}
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="houseFlat">House / Flat / Building <span className="text-destructive">*</span></Label>
+                          <Input
+                            id="houseFlat"
+                            autoComplete="address-line1"
+                            placeholder="e.g. Flat 4B, Plot 12"
+                            value={form.houseFlat}
+                            onChange={(e) => updateField("houseFlat", e.target.value)}
+                            onBlur={() => markTouched("houseFlat")}
+                            aria-invalid={!!showFieldError("houseFlat")}
+                            aria-describedby={showFieldError("houseFlat") ? "houseFlat-error" : undefined}
+                            className={cn(showFieldError("houseFlat") && "border-destructive focus-visible:ring-destructive/20")}
+                          />
+                          {showFieldError("houseFlat") && (
+                            <p id="houseFlat-error" role="alert" className="text-xs text-destructive">{showFieldError("houseFlat")}</p>
                           )}
-                        />
-                        {errors.deliveryAddress && (
-                          <p className="text-xs text-destructive">
-                            {errors.deliveryAddress}
-                          </p>
-                        )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="streetLocality">Street / Locality <span className="text-destructive">*</span></Label>
+                          <Input
+                            id="streetLocality"
+                            autoComplete="address-line2"
+                            placeholder="e.g. Road No. 12, Banjara Hills"
+                            value={form.streetLocality}
+                            onChange={(e) => updateField("streetLocality", e.target.value)}
+                            onBlur={() => markTouched("streetLocality")}
+                            aria-invalid={!!showFieldError("streetLocality")}
+                            aria-describedby={showFieldError("streetLocality") ? "streetLocality-error" : undefined}
+                            className={cn(showFieldError("streetLocality") && "border-destructive focus-visible:ring-destructive/20")}
+                          />
+                          {showFieldError("streetLocality") && (
+                            <p id="streetLocality-error" role="alert" className="text-xs text-destructive">{showFieldError("streetLocality")}</p>
+                          )}
+                        </div>
                       </div>
+
+                      <div className="space-y-2 sm:max-w-md">
+                        <Label htmlFor="landmark">Landmark <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                        <Input
+                          id="landmark"
+                          placeholder="e.g. Near City Mall"
+                          value={form.landmark}
+                          onChange={(e) => updateField("landmark", e.target.value)}
+                          onBlur={() => markTouched("landmark")}
+                        />
+                      </div>
+                      {isMartPincodeMode && (
+                        <p className="text-xs text-muted-foreground">
+                          Double-check your PIN code above — courier charges depend on it.
+                        </p>
+                      )}
 
                       <div className="space-y-2">
                         <Label htmlFor="deliveryNotes">
-                          Delivery Notes (optional)
+                          Delivery Instructions <span className="text-muted-foreground font-normal">(optional)</span>
                         </Label>
                         <Textarea
                           id="deliveryNotes"
-                          placeholder="Apartment number, gate code, special instructions..."
+                          placeholder="e.g. Call on arrival, leave with security…"
                           value={form.deliveryNotes}
                           onChange={(e) =>
                             updateField("deliveryNotes", e.target.value)
                           }
+                          onBlur={() => markTouched("deliveryNotes")}
                           className="min-h-[60px]"
                         />
                       </div>
+
+                      {/* Section-level notice (minimum-order, back-compat
+                          deliveryAddress guard). Rendered separately from the
+                          per-field errors above so a red border is never shown
+                          without its message. */}
+                      {(() => {
+                        const sectionError = showFieldError("deliveryAddress");
+                        if (!sectionError) return null;
+                        // Field-level address errors already render inline above;
+                        // this slot is for the minimum-order/compat notice.
+                        if (
+                          sectionError === "Delivery address is required" &&
+                          (showFieldError("houseFlat") || showFieldError("streetLocality"))
+                        ) {
+                          return null;
+                        }
+                        return (
+                          <p role="alert" className="text-xs text-destructive">
+                            {sectionError}
+                          </p>
+                        );
+                      })()}
                     </div>
                   </motion.div>
                 )}

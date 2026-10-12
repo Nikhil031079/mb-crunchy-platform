@@ -574,6 +574,12 @@ const ALLOWED_21G = new Set([
   "tests/21d_h_product_add_to_cart.mjs",
   "tests/21f_checkout_payment_retry.mjs",
 ]);
+// Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
+// reviewed, necessary file for this feature (CheckoutPage phone field).
+// No functional assertion in this suite changes.
+const ALLOWED_UX = new Set([
+  "src/components/customer/PhoneInput.tsx",
+]);
 const unexpected = changed.filter(
   (f) =>
     ![
@@ -588,7 +594,8 @@ const unexpected = changed.filter(
     !ALLOWED_21D_D.has(f) &&
     !ALLOWED_21D_H.has(f) &&
     !ALLOWED_21F.has(f) &&
-    !ALLOWED_21G.has(f),
+    !ALLOWED_21G.has(f) &&
+    !ALLOWED_UX.has(f),
 );
 check(
   "T13.1. Tracked changes limited to the sanctioned implementation sets",

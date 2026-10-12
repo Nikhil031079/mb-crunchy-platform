@@ -389,6 +389,9 @@ const allowed = new Set([
   "tests/21g_merchandising_placement.mjs",
   // The 21D-B suite's own scope-block edit (21G-B harness sync).
   "tests/21d_b_variant_safety.mjs",
+  // Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
+  // reviewed, necessary file for this feature (CheckoutPage phone field).
+  "src/components/customer/PhoneInput.tsx",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(

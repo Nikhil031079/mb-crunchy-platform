@@ -287,10 +287,15 @@ check(
     has(CHECKOUT, "destinationState: addr.state?.trim() || \"\","),
 );
 check(
-  "4e. Saved-address handlers keep existing address/notes/zip behavior",
-  has(CHECKOUT, "deliveryAddress: addr.address,") &&
+  "4e. Saved-address handlers preserve address/notes/zip via structured composition (Checkout UX Upgrade)",
+  // Structured inputs replaced the verbatim single-string copy: the saved
+  // address is split into houseFlat/streetLocality and recomposed into the
+  // same deliveryAddress payload key, so no stored information is dropped.
+  // Zip + city/state carry behavior is unchanged (still asserted verbatim).
+  has(CHECKOUT, "splitSavedAddress(addr.address") &&
+    has(CHECKOUT, "splitSavedAddress(defaultAddr.address") &&
+    has(CHECKOUT, "composeDeliveryAddress({") &&
     has(CHECKOUT, "destinationPincode: addr.zipCode || prev.destinationPincode,") &&
-    has(CHECKOUT, "deliveryAddress: defaultAddr.address,") &&
     has(CHECKOUT, "destinationPincode: defaultAddr.zipCode || prev.destinationPincode,"),
 );
 check(
@@ -321,10 +326,15 @@ check(
     !matches(CHECKOUT, /destinationCity:\s*e\.target\.value/),
 );
 check(
-  "5b. Editing the free-text address clears carried city/state",
-  has(CHECKOUT, 'if (field === "deliveryAddress" || field === "destinationPincode") {') &&
+  "5b. Only a pincode change clears carried city/state; structured street edits must not (Checkout UX Upgrade)",
+  // The single free-text address field was replaced by structured
+  // houseFlat/streetLocality inputs. Typing a street must not wipe the
+  // saved-address city/state — only a destination-pincode change
+  // invalidates them. Strictly stronger than the old blanket rule.
+  has(CHECKOUT, 'if (field === "destinationPincode") {') &&
     has(CHECKOUT, 'next.destinationCity = "";') &&
-    has(CHECKOUT, 'next.destinationState = "";'),
+    has(CHECKOUT, 'next.destinationState = "";') &&
+    lacks(CHECKOUT, 'if (field === "deliveryAddress"'),
 );
 check(
   "5c. Resolution helper never reads the free-text address",
@@ -339,10 +349,13 @@ check(
   has(CHECKOUT, "destinationPincode: form.destinationPincode.trim() || undefined,"),
 );
 check(
-  "6b. deliveryAddress payload still gated on delivery orders",
+  "6b. deliveryAddress payload still gated on delivery orders (composed from structured inputs)",
+  // Structured houseFlat/streetLocality/landmark are composed into the same
+  // deliveryAddress payload key; pickup still sends undefined. Same gating,
+  // same key, same string contract — stronger construction check.
   matches(
     CHECKOUT,
-    /deliveryAddress:\s*\n\s*form\.orderType === "delivery"\s*\n\s*\? form\.deliveryAddress\.trim\(\)\s*\n\s*: undefined/,
+    /deliveryAddress:\s*\n\s*form\.orderType === "delivery"\s*\n\s*\? composeDeliveryAddress\(\{/,
   ),
 );
 check(
@@ -470,6 +483,9 @@ const allowed = new Set([
   "tests/21g_merchandising_placement.mjs",
   // The 21D-B suite's own scope-block edit (21G-B harness sync).
   "tests/21d_b_variant_safety.mjs",
+  // Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
+  // reviewed, necessary file for this feature (CheckoutPage phone field).
+  "src/components/customer/PhoneInput.tsx",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 // Post-commit / test-only baseline (21D-H harness sync): empty tracked diff

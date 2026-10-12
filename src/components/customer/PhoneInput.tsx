@@ -29,10 +29,14 @@ interface PhoneInputProps {
   className?: string;
   /** Additional CSS classes for the digit input. */
   inputClassName?: string;
-  /** Error state — applies destructive border. */
+  /** Error state — applies destructive border. Only set when the error message is visible. */
   error?: boolean;
   /** HTML id for the input element. */
   id?: string;
+  /** Called when the digit input loses focus (for touched tracking). */
+  onBlur?: () => void;
+  /** ID of the element describing the input (error or helper text). */
+  ariaDescribedby?: string;
 }
 
 export function PhoneInput({
@@ -44,6 +48,8 @@ export function PhoneInput({
   inputClassName,
   error = false,
   id,
+  onBlur,
+  ariaDescribedby,
 }: PhoneInputProps) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,7 +103,10 @@ export function PhoneInput({
         value={value}
         onChange={handleChange}
         onPaste={handlePaste}
+        onBlur={onBlur}
         disabled={disabled}
+        aria-invalid={error}
+        aria-describedby={ariaDescribedby}
         className={cn(
           "rounded-l-none",
           error && "border-destructive",
