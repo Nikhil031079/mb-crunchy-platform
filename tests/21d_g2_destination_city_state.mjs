@@ -501,13 +501,15 @@ const allowed = new Set([
   "src/components/customer/PhoneInput.tsx",
   // Meal-upgrade BU fix: the approved applyMealDeal shortfall-path correction
   // lives in the cart store.
-  "src/components/customer/PhoneInput.tsx",
+  "src/stores/cart.ts",
   // Mixed-cart discovery fix: per-BU match evaluation, multi-BU hook input,
   // CartPage rewiring (diff-bounded by the shared predicate in 9a).
   "src/hooks/use-meal-deals.ts",
   "src/pages/customer/CartPage.tsx",
   // Shared diff-bounding predicate harness for the fix.
   "tests/cart_fix_scope.mjs",
+  // This fix's own regression suite.
+  "tests/meal_deal_mixed_discovery.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 // Post-commit / test-only baseline (21D-H harness sync): empty tracked diff

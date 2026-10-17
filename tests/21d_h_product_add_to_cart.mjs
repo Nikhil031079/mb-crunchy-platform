@@ -267,10 +267,14 @@ check(
   )
 );
 check(
-  "D5 cart variant editing preserved; CartPage change confined to discovery rewiring (meal discovery fix exempted only if diff-bounded)",
-  // Mixed-cart discovery fix: CartPage passes only when the hook + CartPage
-  // diffs are exactly the approved discovery change (bounded predicate —
-  // variant-editing, pricing, grouping tokens all fail it).
+  "D5 cart variant editing preserved; CartPage change confined to the reviewed discovery fix (baseline-bounded)",
+  // changedTrackedFiles() spans BASELINE→worktree (committed + uncommitted),
+  // so a HEAD-diff predicate goes blind once the fix is committed. The
+  // exemption is therefore evaluated against the BASELINE diff: it holds
+  // both while the fix is uncommitted and after it is committed with an
+  // empty tree — and fails on any unrelated, partial, or contaminated
+  // change either way. (Neither discovery file changed between BASELINE and
+  // the fix's parent, so the baseline-spanning diff IS the approved fix.)
   !changedTrackedFiles().some(
     (f) =>
       f.startsWith("src/stores/cart") &&
@@ -279,7 +283,7 @@ check(
     (changedTrackedFiles().every(
       (f) => f !== "src/pages/customer/CartPage.tsx",
     ) ||
-      isMealDealDiscoveryFixOnlyDiff(ROOT))
+      isMealDealDiscoveryFixOnlyDiff(ROOT, BASELINE))
 );
 check(
   "D6 checkout quantity editing + mixed-BU checkout behavior preserved (Checkout UX Upgrade: presence-verified)",

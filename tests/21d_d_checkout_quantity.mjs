@@ -392,6 +392,8 @@ const allowed = new Set([
   "src/pages/customer/CartPage.tsx",
   // Shared diff-bounding predicate harness for the fix.
   "tests/cart_fix_scope.mjs",
+  // This fix's own regression suite.
+  "tests/meal_deal_mixed_discovery.mjs",
 ]);
 // Phase 21G-B in-flight scope: a tracked diff lying entirely inside the
 // sanctioned 21G-B set does not touch CheckoutPage, so the CheckoutPage

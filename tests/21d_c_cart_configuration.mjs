@@ -591,6 +591,8 @@ const ALLOWED_MEALDEAL_DISCOVERY = new Set([
   // Shared diff-bounding predicate harness for the fix (used by the
   // protected checks; content-bounded, not a behavior change).
   "tests/cart_fix_scope.mjs",
+  // This fix's own regression suite.
+  "tests/meal_deal_mixed_discovery.mjs",
 ]);
 const unexpected = changed.filter(
   (f) =>

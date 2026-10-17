@@ -7,13 +7,19 @@
 // "unmodified" use it so the approved, diff-bounded change passes while
 // ANY other cart.ts modification still fails. Clean tree passes unchanged.
 //
-// (2) isMealDealDiscoveryFixOnlyDiff(): the approved mixed-cart discovery
-// fix evaluates detection per distinct cart BU (pure helpers in
-// mealDealMatching.ts, multi-BU hook input, CartPage rewiring). Suites
-// pinning use-meal-deals.ts / CartPage.tsx as "unmodified" use it so the
-// approved, marker-and-token-bounded change passes while ANY pricing,
+// (2) isMealDealDiscoveryFixOnlyDiff(root, baseRef = "HEAD"): the approved
+// mixed-cart discovery fix evaluates detection per distinct cart BU (pure
+// helpers in mealDealMatching.ts, multi-BU hook input, CartPage rewiring).
+// Suites pinning use-meal-deals.ts / CartPage.tsx as "unmodified" use it so
+// the approved, marker-and-token-bounded change passes while ANY pricing,
 // savings, persistence, grouping, routing, variant-editing, checkout,
 // payment, shipping, inventory, loyalty, or coupon edit still fails.
+// baseRef selects the diff base: "HEAD" for in-flight working-tree review;
+// a stable baseline commit for guards spanning committed history (so the
+// same approved change passes both before AND after it is committed).
+// All seven required-added and all three required-removed markers must
+// appear across the combined per-file diffs (they span both files, so the
+// check is aggregate, not per-file).
 //
 // Plain-Node convention (no test runner installed).
 // ============================================================================
@@ -85,10 +91,10 @@ const FORBIDDEN_TOKENS = [
   "consumedQuantities",
 ];
 
-function diffLinesForFile(root, file) {
+function diffLinesForFile(root, file, baseRef = "HEAD") {
   let out;
   try {
-    out = execSync(`git diff -U0 HEAD -- "${file}"`, {
+    out = execSync(`git diff -U0 ${baseRef} -- "${file}"`, {
       cwd: root,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -110,14 +116,17 @@ function cartFixDiffLines(root) {
 }
 
 /**
- * True when the working-tree diffs of the mixed-cart discovery fix files
- * contain only the approved change: per-BU match evaluation extracted to a
- * pure module, the hook delegating to it over a multi-BU input list, and
- * CartPage feeding every distinct cart BU. Any pricing, savings,
- * persistence, grouping, routing, variant-editing, checkout, payment,
- * shipping, inventory, loyalty, or coupon token in added lines fails.
- * Clean tree (no diff) returns false — callers OR this with their
- * untouched-file condition.
+ * True when the diffs of the mixed-cart discovery fix files (against
+ * baseRef, default HEAD) contain only the approved change: per-BU match
+ * evaluation extracted to a pure module, the hook delegating to it over a
+ * multi-BU input list, and CartPage feeding every distinct cart BU. Any
+ * pricing, savings, persistence, grouping, routing, variant-editing,
+ * checkout, payment, shipping, inventory, loyalty, or coupon token in any
+ * added line fails. All seven required-added markers and all three
+ * required-removed markers must appear across the combined per-file diffs
+ * (the marker set spans both files, so the check is aggregate). Clean tree
+ * (no diff) returns false — callers OR this with their untouched-file
+ * condition.
  */
 const DISCOVERY_FILES = [
   "src/hooks/use-meal-deals.ts",
@@ -179,24 +188,30 @@ const DISCOVERY_FORBIDDEN_IN_ADDED = [
   "persist",
 ];
 
-export function isMealDealDiscoveryFixOnlyDiff(root) {
+export function isMealDealDiscoveryFixOnlyDiff(root, baseRef = "HEAD") {
   let sawFix = false;
+  const combinedAdded = [];
+  const combinedRemoved = [];
   for (const file of DISCOVERY_FILES) {
-    const d = diffLinesForFile(root, file);
+    const d = diffLinesForFile(root, file, baseRef);
     if (!d) return false;
     if (d.added.length === 0 && d.removed.length === 0) continue;
     sawFix = true;
-    const addedText = d.added.join("\n");
-    const removedText = d.removed.join("\n");
-    if (
-      DISCOVERY_FORBIDDEN_IN_ADDED.some((t) => addedText.includes(t)) ||
-      !DISCOVERY_REQUIRED_ADDED.some((m) => addedText.includes(m)) ||
-      !DISCOVERY_REQUIRED_REMOVED.some((m) => removedText.includes(m))
-    ) {
+    if (DISCOVERY_FORBIDDEN_IN_ADDED.some((t) =>
+      d.added.some((line) => line.includes(t)),
+    )) {
       return false;
     }
+    combinedAdded.push(...d.added);
+    combinedRemoved.push(...d.removed);
   }
-  return sawFix;
+  if (!sawFix) return false;
+  const addedText = combinedAdded.join("\n");
+  const removedText = combinedRemoved.join("\n");
+  return (
+    DISCOVERY_REQUIRED_ADDED.every((m) => addedText.includes(m)) &&
+    DISCOVERY_REQUIRED_REMOVED.every((m) => removedText.includes(m))
+  );
 }
 
 /**
