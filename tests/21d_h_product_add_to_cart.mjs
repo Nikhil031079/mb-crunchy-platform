@@ -397,6 +397,36 @@ const allowed = new Set([
   // Checkout UX Upgrade review: PhoneInput touched-gating + aria wiring is a
   // reviewed, necessary file for this feature (CheckoutPage phone field).
   "src/components/customer/PhoneInput.tsx",
+  // Historical-drift sync (owner-reviewed allow-list repair): paths committed
+  // to main after this suite's pinned baseline without an F1 re-sync. Each
+  // group is the full set of that phase's files in the baseline diff.
+  // Homepage-section feature (4e8dbb3).
+  "src/components/admin/homepage-sections/HomepageSectionFormDialog.tsx",
+  "src/components/admin/homepage-sections/HomepageSectionPreview.tsx",
+  "src/components/admin/homepage-sections/HomepageSectionTable.tsx",
+  "src/components/admin/homepage-sections/HomepageSectionToolbar.tsx",
+  "src/hooks/use-homepage-sections.ts",
+  "src/pages/admin/HomepageSectionsPage.tsx",
+  "src/pages/customer/HomePage.tsx",
+  "src/utils/personalization.ts",
+  // Checkout UX structured address (743bf99) — same phase as the PhoneInput
+  // sync above; these two files were missed in that sync.
+  "src/utils/checkoutAddress.ts",
+  "tests/checkout_ux_upgrade.mjs",
+  // 14A scope-guard baseline re-anchor (082ad9b).
+  "tests/14a_homepage_sections.mjs",
+  // Shortfall business-unit fix (0b5bc3a).
+  "src/stores/cart.ts",
+  "src/utils/mealDealLines.ts",
+  "tests/cart_fix_scope.mjs",
+  "tests/meal_deal_bu_assignment.mjs",
+  // Mixed-cart meal-upgrade discovery fix (d5c2093) and its scope-guard
+  // repair (a6c33e5): CartPage/use-meal-deals content remains bounded by the
+  // D5 baseline-anchored predicate; these entries close F1's path set.
+  "src/hooks/use-meal-deals.ts",
+  "src/pages/customer/CartPage.tsx",
+  "src/utils/mealDealMatching.ts",
+  "tests/meal_deal_mixed_discovery.mjs",
 ]);
 const unexpected = changed.filter((f) => !allowed.has(f));
 check(
