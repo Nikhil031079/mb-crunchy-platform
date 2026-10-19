@@ -1,5 +1,21 @@
-.env.local
-.env.production
+# dependencies
 node_modules
+
+# build output
 dist
-src/convex/_generated
+.tmp
+*.tsbuildinfo
+
+# environment & deploy config (never commit)
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
