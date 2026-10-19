@@ -108,8 +108,8 @@ Always:
 - Do not change code outside the task's scope; report unrelated problems.
 - Read the current official docs for Razorpay, Shiprocket and Convex before
   changing integrations; do not rely on memory.
-- Do not add anything new that depends on the Vly platform
-  (`@vly-ai/*`, `VLY_*`); it is being removed.
+- The Vly platform has been removed. Do not reintroduce `@vly-ai/*`, `VLY_*`
+  variables, or Vly-hosted services.
 
 ---
 

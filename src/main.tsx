@@ -1,6 +1,4 @@
-import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
-import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { AdminAuthProvider } from "@/hooks/use-admin-auth";
@@ -98,22 +96,6 @@ function RouteLoading() {
 // ============================================================================
 // Error Boundaries
 // ============================================================================
-
-class ToolbarErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(err: Error) {
-    console.warn("[VlyToolbar] Caught error, toolbar disabled:", err.message);
-  }
-  render() {
-    return this.state.hasError ? null : this.props.children;
-  }
-}
 
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -332,9 +314,6 @@ function AppRoutes() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
-      <ToolbarErrorBoundary>
-        <VlyToolbar />
-      </ToolbarErrorBoundary>
       <ConvexAuthProvider client={convex}>
         <BrandingProvider>
           <BrowserRouter>

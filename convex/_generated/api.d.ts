@@ -12,7 +12,6 @@ import type * as addresses from "../addresses.js";
 import type * as adminAuth from "../adminAuth.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
-import type * as auth_emailOtp from "../auth/emailOtp.js";
 import type * as auth_phoneOtp from "../auth/phoneOtp.js";
 import type * as businessUnits from "../businessUnits.js";
 import type * as catalogItems from "../catalogItems.js";
@@ -77,7 +76,6 @@ declare const fullApi: ApiFromModules<{
   adminAuth: typeof adminAuth;
   analytics: typeof analytics;
   auth: typeof auth;
-  "auth/emailOtp": typeof auth_emailOtp;
   "auth/phoneOtp": typeof auth_phoneOtp;
   businessUnits: typeof businessUnits;
   catalogItems: typeof catalogItems;

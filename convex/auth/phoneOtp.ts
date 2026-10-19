@@ -10,7 +10,7 @@ import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
  * Environment variables:
  *   PHONE_OTP_API_ENDPOINT — URL that accepts POST with { phone, otp, appName }
  *   PHONE_OTP_API_KEY      — API key for the SMS endpoint (sent as x-api-key header)
- *   VLY_APP_NAME           — App name displayed in SMS (optional)
+ *   OTP_APP_NAME           — App name displayed in the OTP message (optional)
  *
  * The endpoint must accept:
  *   POST { phone: string, otp: string, appName: string }
@@ -53,7 +53,7 @@ export const phoneOtp = Phone({
       body: JSON.stringify({
         phone,
         otp: token,
-        appName: process.env.VLY_APP_NAME || "MB Crunchy",
+        appName: process.env.OTP_APP_NAME || "MB Crunchy",
       }),
     });
 
