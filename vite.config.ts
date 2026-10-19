@@ -1,10 +1,14 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Test-only environment: the backend refuses to load without SESSION_SECRET.
+  test: {
+    env: { SESSION_SECRET: "test-only-secret-not-used-in-production-0123456789" },
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: [

@@ -1,20 +1,23 @@
 import { Phone } from "@convex-dev/auth/providers/Phone";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
+import { readWhatsAppOtpConfig, sendWhatsAppOtp } from "./whatsappOtp";
 
 /**
  * Phone OTP provider for customer authentication.
  *
- * Uses @convex-dev/auth's built-in Phone provider.
- * SMS delivery is handled via a configurable HTTP endpoint.
+ * Delivery order:
+ *   1. WhatsApp Cloud API (authentication template) when configured. No DLT
+ *      registration is needed. See ./whatsappOtp.ts for the variables.
+ *   2. Optional HTTP endpoint fallback (for example an SMS gateway) when
+ *      PHONE_OTP_API_ENDPOINT is set. Used if WhatsApp is not configured or
+ *      the WhatsApp send fails.
  *
- * Environment variables:
- *   PHONE_OTP_API_ENDPOINT — URL that accepts POST with { phone, otp, appName }
- *   PHONE_OTP_API_KEY      — API key for the SMS endpoint (sent as x-api-key header)
- *   OTP_APP_NAME           — App name displayed in the OTP message (optional)
+ * If neither is configured, sending fails loudly so OTPs are never silently lost.
  *
- * The endpoint must accept:
+ * Fallback endpoint contract:
  *   POST { phone: string, otp: string, appName: string }
- *   Headers: { x-api-key: string }
+ *   Headers: { x-api-key: string } (only if PHONE_OTP_API_KEY is set)
+ *   OTP_APP_NAME - app name passed to the endpoint (optional)
  */
 export const phoneOtp = Phone({
   id: "phone",
@@ -31,23 +34,33 @@ export const phoneOtp = Phone({
   },
 
   async sendVerificationRequest({ identifier: phone, token }) {
+    const whatsApp = readWhatsAppOtpConfig(process.env);
     const apiEndpoint = process.env.PHONE_OTP_API_ENDPOINT;
-    const apiKey = process.env.PHONE_OTP_API_KEY;
 
-    if (!apiEndpoint) {
+    if (!whatsApp && !apiEndpoint) {
       throw new Error(
-        "Phone OTP is not configured. Set PHONE_OTP_API_ENDPOINT environment variable.",
+        "Phone OTP is not configured. Set the WHATSAPP_* variables (preferred) or PHONE_OTP_API_ENDPOINT.",
       );
     }
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (apiKey) {
-      headers["x-api-key"] = apiKey;
+    let whatsAppError: unknown;
+    if (whatsApp) {
+      try {
+        await sendWhatsAppOtp(whatsApp, phone, token);
+        return;
+      } catch (error) {
+        whatsAppError = error;
+        console.error("[phoneOtp]", error instanceof Error ? error.message : "WhatsApp OTP failed");
+        if (!apiEndpoint) throw error;
+      }
     }
 
-    const response = await fetch(apiEndpoint, {
+    // Fallback: generic HTTP endpoint
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const apiKey = process.env.PHONE_OTP_API_KEY;
+    if (apiKey) headers["x-api-key"] = apiKey;
+
+    const response = await fetch(apiEndpoint!, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -59,8 +72,9 @@ export const phoneOtp = Phone({
 
     if (!response.ok) {
       const body = await response.text();
+      const prefix = whatsAppError ? "WhatsApp and fallback both failed. " : "";
       throw new Error(
-        `Failed to send OTP: ${response.status} ${response.statusText} — ${body}`,
+        `${prefix}Failed to send OTP: ${response.status} ${response.statusText} - ${body}`,
       );
     }
   },

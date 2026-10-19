@@ -50,10 +50,14 @@ bun run lint
 
 ## Testing
 
-`tests/` contains numbered audit reports and script-style checks. Many assert
-on source text rather than runtime behavior, and there is no single test
-command yet. Treat a green result there as weak evidence. Money, tax, stock and
-webhook logic need real behavioral tests (planned).
+```bash
+bun run test          # behavioral unit tests (tests/unit) - must stay green
+bun run test:legacy   # older suites in tests/ (many assert on source text)
+```
+
+`tests/unit` holds real behavioral tests (GST/FSSAI validation, WhatsApp OTP
+request). Money, tax, stock and webhook logic should get tests there. The
+legacy suites still pass but are weaker evidence; replace them over time.
 
 ## Payments and shipping (summary)
 

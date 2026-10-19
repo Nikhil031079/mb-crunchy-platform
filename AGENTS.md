@@ -115,7 +115,7 @@ Always:
 
 ## Definition of Done
 
-`npx tsc -b` passes, `npx vite build` passes, relevant tests pass, and the
+`npx tsc -b` passes, `npx vite build` passes, `bun run test` passes, and the
 task summary lists the manual steps to verify.
 
 ---

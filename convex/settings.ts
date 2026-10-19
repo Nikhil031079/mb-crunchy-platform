@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireAdminRole } from "./utils/adminAuth";
 import { normalizeIndianPhone, requireIndianPhone } from "./utils/phone";
+import { normalizeBusinessProfile } from "./utils/businessProfile";
 
 // ============================================================================
 // Queries
@@ -106,12 +107,28 @@ export const upsertGlobalSettings = mutation({
         paymentInstructions: v.optional(v.string()),
       })
     ),
+    businessProfile: v.optional(
+      v.object({
+        legalName: v.optional(v.string()),
+        gstin: v.optional(v.string()),
+        stateCode: v.optional(v.string()),
+        registeredAddress: v.optional(v.string()),
+        fssaiNumber: v.optional(v.string()),
+        invoicePrefix: v.optional(v.string()),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     await requireAdminRole(ctx, args.sessionToken, ["superadmin", "admin"]);
 
     const { sessionToken: _, ...insertArgs } = args;
     const now = Date.now();
+
+    // Validate GSTIN (with checksum), FSSAI (14 digits), state and invoice prefix.
+    // Throws a readable error; blank fields are simply dropped.
+    if (insertArgs.businessProfile) {
+      insertArgs.businessProfile = normalizeBusinessProfile(insertArgs.businessProfile);
+    }
 
     // Normalize and validate phone fields
     if (insertArgs.supportPhone) {

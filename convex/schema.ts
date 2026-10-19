@@ -890,6 +890,18 @@ const globalSettings = defineTable({
       paymentInstructions: v.optional(v.string()),
     })
   ),
+  // Legal / tax identity used on invoices and the storefront footer.
+  // All fields optional: GSTIN stays blank until registration is complete.
+  businessProfile: v.optional(
+    v.object({
+      legalName: v.optional(v.string()),
+      gstin: v.optional(v.string()),
+      stateCode: v.optional(v.string()),
+      registeredAddress: v.optional(v.string()),
+      fssaiNumber: v.optional(v.string()),
+      invoicePrefix: v.optional(v.string()),
+    })
+  ),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
