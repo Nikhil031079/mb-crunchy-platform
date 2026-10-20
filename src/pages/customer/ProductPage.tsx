@@ -1120,9 +1120,6 @@ export default function ProductPage() {
                 <DetailFact label="Category" value={category.name} />
               )}
               {prod.unit && <DetailFact label="Unit" value={prod.unit} />}
-              {prod.taxPercentage !== undefined && (
-                <DetailFact label="Tax" value={`${prod.taxPercentage}%`} />
-              )}
               {prod.tags.length > 0 && (
                 <DetailFact label="Tags" value={prod.tags.slice(0, 4).join(", ")} />
               )}

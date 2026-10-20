@@ -371,7 +371,7 @@ function ProductForm({ product, businessUnits, categories, isEditing, isSaving, 
           {/* Row: Veg/Non-Veg + Tax */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2"><Label htmlFor={`${formId}-veg`}>Veg / Non-Veg</Label><Select value={values.vegNonVeg} onValueChange={(v) => update("vegNonVeg", v as VegNonVeg)}><SelectTrigger id={`${formId}-veg`}><SelectValue /></SelectTrigger><SelectContent>{vegNonVegOptions.map((o) => <SelectItem key={o} value={o}>{o === "veg" ? "Vegetarian" : "Non-Vegetarian"}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid gap-2"><Label htmlFor={`${formId}-tax`}>Tax % <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id={`${formId}-tax`} type="number" min="0" max="100" step="0.5" value={values.taxPercentage} onChange={(event) => update("taxPercentage", event.target.value)} placeholder="0" /></div>
+            <div className="grid gap-2"><Label htmlFor={`${formId}-tax`}>Tax % <span className="font-normal text-muted-foreground">(not used for billing - set GST in Admin &gt; GST Setup)</span></Label><Input id={`${formId}-tax`} type="number" min="0" max="100" step="0.5" value={values.taxPercentage} onChange={(event) => update("taxPercentage", event.target.value)} placeholder="0" /></div>
           </div>
         </FormSection>
 
@@ -710,7 +710,7 @@ function VariantRow({ variant, index, onUpdate, onRemove, onSetDefault, canRemov
             />
           </div>
           <div className="grid gap-1">
-            <Label className="text-[10px] text-muted-foreground">Tax %</Label>
+            <Label className="text-[10px] text-muted-foreground" title="Not used for billing. Set GST in Admin > GST Setup.">Tax % (unused)</Label>
             <Input
               type="number"
               min="0"

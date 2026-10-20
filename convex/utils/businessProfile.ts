@@ -106,8 +106,8 @@ export function validateFssai(raw: string): { ok: true; value: string } | { ok: 
 
 export function validateInvoicePrefix(raw: string): { ok: true; value: string } | { ok: false; error: string } {
   const value = raw.trim().toUpperCase();
-  if (!/^[A-Z0-9-]{1,8}$/.test(value)) {
-    return { ok: false, error: "Invoice prefix must be 1-8 letters, digits or hyphens" };
+  if (!/^[A-Z0-9]{1,4}$/.test(value)) {
+    return { ok: false, error: "Invoice prefix must be 1-4 letters or digits (invoice numbers are limited to 16 characters)" };
   }
   return { ok: true, value };
 }
@@ -164,4 +164,24 @@ export function normalizeBusinessProfile(input: BusinessProfileInput): BusinessP
   }
 
   return out;
+}
+
+/** HSN codes are 4, 6 or 8 digits (turnover decides how many your invoices need). */
+export function validateHsn(raw: string): { ok: true; value: string } | { ok: false; error: string } {
+  const value = raw.replace(/\s+/g, "");
+  if (!/^[0-9]{4}([0-9]{2}){0,2}$/.test(value)) {
+    return { ok: false, error: "HSN must be 4, 6 or 8 digits" };
+  }
+  return { ok: true, value };
+}
+
+/** GST rate in percent: 0 to 40, up to 3 decimal places (e.g. 0.25, 5, 18). */
+export function validateGstRate(value: number): { ok: true; value: number } | { ok: false; error: string } {
+  if (!Number.isFinite(value) || value < 0 || value > 40) {
+    return { ok: false, error: "GST rate must be between 0 and 40" };
+  }
+  if (Math.round(value * 1000) / 1000 !== value) {
+    return { ok: false, error: "GST rate can have at most 3 decimal places" };
+  }
+  return { ok: true, value };
 }

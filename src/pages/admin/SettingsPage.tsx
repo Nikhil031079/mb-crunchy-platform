@@ -383,7 +383,7 @@ function GlobalSettingsSection() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="invoicePrefix">Invoice Prefix <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                <Input id="invoicePrefix" value={form.invoicePrefix} onChange={(e) => setForm((f) => ({ ...f, invoicePrefix: e.target.value.toUpperCase() }))} placeholder="MBC" maxLength={8} className="font-mono" />
+                <Input id="invoicePrefix" value={form.invoicePrefix} onChange={(e) => setForm((f) => ({ ...f, invoicePrefix: e.target.value.toUpperCase() }))} placeholder="MBC" maxLength={4} className="font-mono" />
               </div>
             </div>
             <div className="grid gap-2">

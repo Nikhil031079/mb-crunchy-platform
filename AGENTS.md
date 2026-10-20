@@ -67,7 +67,10 @@ Always:
 
 ## Money, Payment and Webhook Rules (non-negotiable)
 
-- Amounts are integers in the smallest unit (paise). Never use floats for money.
+- Stored order and product amounts are rupee decimals rounded to 2 places.
+  Any calculation that must be exact (tax, invoices, refunds) converts to
+  integer paise first, computes, and only then converts back. Never sum raw
+  float rupees. Prices are tax-inclusive: GST is carved out of the price.
 - The amount charged is always derived on the server from the stored order.
   Never trust an amount sent by the client.
 - Payment is confirmed only by a signature-verified Razorpay call or webhook,

@@ -63,6 +63,7 @@ export const ROUTES = {
     SHIPPING_ZONES: "/admin/shipping-zones",
     SHIPPING_RATES: "/admin/shipping-rates",
     SHIPPING_CONFIG: "/admin/shipping-config",
+    GST_SETUP: "/admin/gst-setup",
     SHIPROCKET: "/admin/shiprocket",
     BANNERS: "/admin/banners",
     HOMEPAGE_SECTIONS: "/admin/homepage-sections",
@@ -164,6 +165,7 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = [
     children: [
       { label: "Offers", href: ROUTES.ADMIN.OFFERS, icon: "Tag" },
       { label: "Orders", href: ROUTES.ADMIN.ORDERS, icon: "ShoppingCart" },
+      { label: "GST Setup", href: ROUTES.ADMIN.GST_SETUP, icon: "Tag" },
       { label: "Delivery Zones", href: ROUTES.ADMIN.DELIVERY_ZONES, icon: "Truck" },
       { label: "Serviceable Areas", href: ROUTES.ADMIN.MART_PINCODES, icon: "MapPin" },
       { label: "Shipping Pricing", href: ROUTES.ADMIN.SHIPPING_ZONES, icon: "Truck" },

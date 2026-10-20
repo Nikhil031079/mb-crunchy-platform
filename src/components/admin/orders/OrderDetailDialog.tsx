@@ -176,6 +176,11 @@ export function OrderDetailDialog({ open, order, onOpenChange, focusQuoteSection
           <div className="flex flex-wrap items-center justify-between gap-2">
             <DialogTitle className="min-w-0 break-all font-mono">{order.orderNumber}</DialogTitle>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Button asChild variant="outline" size="sm" className="gap-1.5">
+                <a href={`/invoice/${encodeURIComponent(order.orderNumber)}`} target="_blank" rel="noopener noreferrer">
+                  Invoice
+                </a>
+              </Button>
               <PrintInvoice order={order} />
               <PrintPackingSlip order={order} />
               <PrintKitchenTicket order={order} />

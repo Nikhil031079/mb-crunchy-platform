@@ -61,6 +61,8 @@ const MartPincodeServiceabilityPage = lazy(() => import("@/pages/admin/MartPinco
 const ShippingZonesPage = lazy(() => import("@/pages/admin/ShippingZonesPage"));
 const ShippingRatesPage = lazy(() => import("@/pages/admin/ShippingRatesPage"));
 const ShippingConfigPage = lazy(() => import("@/pages/admin/ShippingConfigPage"));
+const GstSetupPage = lazy(() => import("@/pages/admin/GstSetupPage"));
+const InvoicePage = lazy(() => import("@/pages/InvoicePage"));
 const ShipmentsPage = lazy(() => import("@/pages/admin/ShipmentsPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
@@ -254,6 +256,7 @@ function AppRoutes() {
           <Route path="shipping-zones" element={<ShippingZonesPage />} />
           <Route path="shipping-rates" element={<ShippingRatesPage />} />
           <Route path="shipping-config" element={<ShippingConfigPage />} />
+          <Route path="gst-setup" element={<GstSetupPage />} />
           <Route path="shiprocket" element={<ShipmentsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="banners" element={<BannersPage />} />
@@ -301,6 +304,7 @@ function AppRoutes() {
         </Route>
 
         {/* ============ 404 ============ */}
+        <Route path="/invoice/:orderNumber" element={<AdminAuthProvider><InvoicePage /></AdminAuthProvider>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { escapeHtml as esc } from "@/lib/html-sanitizer";
 
 import type { OrderRecord } from "./types";
 import { PAYMENT_STATUS_LABELS, STATUS_LABELS } from "./types";
@@ -78,16 +79,16 @@ export function PrintInvoice({ order }: PrintInvoiceProps) {
   const updatedDate = new Date(order.updatedAt);
 
   const printContent = printBase(
-    `Invoice ${order.orderNumber}`,
+    `Invoice ${esc(order.orderNumber)}`,
     `
       <div class="masthead">
         <div>
           <h1>MB Crunchy</h1>
-          <p class="muted">${order.businessUnitName}</p>
+          <p class="muted">${esc(order.businessUnitName)}</p>
         </div>
         <div class="right">
           <h2>Invoice</h2>
-          <p class="muted">${order.orderNumber}</p>
+          <p class="muted">${esc(order.orderNumber)}</p>
         </div>
       </div>
 
@@ -101,14 +102,14 @@ export function PrintInvoice({ order }: PrintInvoiceProps) {
       <div class="grid-2">
         <div class="box">
           <p class="label">Billed To</p>
-          <p class="value"><strong>${order.customerName}</strong></p>
-          <p class="value">${order.customerPhone}${order.customerEmail ? `<br>${order.customerEmail}` : ""}</p>
+          <p class="value"><strong>${esc(order.customerName)}</strong></p>
+          <p class="value">${esc(order.customerPhone)}${order.customerEmail ? `<br>${esc(order.customerEmail)}` : ""}</p>
         </div>
         <div class="box">
           <p class="label">Order Details</p>
-          <p class="value"><strong>${order.orderNumber}</strong></p>
+          <p class="value"><strong>${esc(order.orderNumber)}</strong></p>
           <p class="value">${order.itemCount} item${order.itemCount === 1 ? "" : "s"}</p>
-          ${order.deliveryAddress ? `<p class="value">${order.deliveryAddress}</p>` : ""}
+          ${order.deliveryAddress ? `<p class="value">${esc(order.deliveryAddress)}</p>` : ""}
         </div>
       </div>
 
@@ -126,8 +127,8 @@ export function PrintInvoice({ order }: PrintInvoiceProps) {
         <tbody>
           ${order.items.map((i) => `
             <tr>
-              <td>${i.name}</td>
-              <td>${i.variantName}</td>
+              <td>${esc(i.name)}</td>
+              <td>${esc(i.variantName)}</td>
               <td class="right">${i.quantity}</td>
               <td class="right">₹${i.unitPrice.toLocaleString()}</td>
               <td class="right">₹${i.totalPrice.toLocaleString()}</td>
@@ -152,9 +153,9 @@ export function PrintInvoice({ order }: PrintInvoiceProps) {
   );
 
   return (
-    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Invoice ${order.orderNumber}`, printContent)} className="gap-1.5">
+    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Invoice ${esc(order.orderNumber)}`, printContent)} className="gap-1.5">
       {PRINT_ICON}
-      Print Invoice
+      Receipt
     </Button>
   );
 }
@@ -167,7 +168,7 @@ export function PrintPackingSlip({ order }: PrintInvoiceProps) {
   const createdDate = new Date(order.createdAt);
 
   const printContent = printBase(
-    `Packing Slip ${order.orderNumber}`,
+    `Packing Slip ${esc(order.orderNumber)}`,
     `
       <div class="masthead">
         <h1>MB Crunchy</h1>
@@ -175,24 +176,24 @@ export function PrintPackingSlip({ order }: PrintInvoiceProps) {
       </div>
 
       <div class="box">
-        <p><strong>Order:</strong> ${order.orderNumber}</p>
-        <p><strong>Customer:</strong> ${order.customerName}</p>
-        <p><strong>Phone:</strong> ${order.customerPhone}</p>
-        ${order.customerEmail ? `<p><strong>Email:</strong> ${order.customerEmail}</p>` : ""}
+        <p><strong>Order:</strong> ${esc(order.orderNumber)}</p>
+        <p><strong>Customer:</strong> ${esc(order.customerName)}</p>
+        <p><strong>Phone:</strong> ${esc(order.customerPhone)}</p>
+        ${order.customerEmail ? `<p><strong>Email:</strong> ${esc(order.customerEmail)}</p>` : ""}
         <p><strong>Type:</strong> ${orderTypeLabel(order.orderType).toUpperCase()}</p>
       </div>
 
       ${order.deliveryAddress ? `
         <h3>Delivery Address</h3>
         <div class="box">
-          ${order.deliveryAddress}
+          ${esc(order.deliveryAddress)}
         </div>
       ` : ""}
 
       ${order.deliveryNotes ? `
         <h3>Delivery Notes</h3>
         <div class="box">
-          ${order.deliveryNotes}
+          ${esc(order.deliveryNotes)}
         </div>
       ` : ""}
 
@@ -208,8 +209,8 @@ export function PrintPackingSlip({ order }: PrintInvoiceProps) {
         <tbody>
           ${order.items.map((i) => `
             <tr>
-              <td>${i.name}</td>
-              <td>${i.variantName}</td>
+              <td>${esc(i.name)}</td>
+              <td>${esc(i.variantName)}</td>
               <td class="right">${i.quantity}</td>
             </tr>
           `).join("")}
@@ -224,7 +225,7 @@ export function PrintPackingSlip({ order }: PrintInvoiceProps) {
   );
 
   return (
-    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Packing Slip ${order.orderNumber}`, printContent)} className="gap-1.5">
+    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Packing Slip ${esc(order.orderNumber)}`, printContent)} className="gap-1.5">
       {PRINT_ICON}
       Print Packing Slip
     </Button>
@@ -240,31 +241,31 @@ export function PrintKitchenTicket({ order }: PrintInvoiceProps) {
   const elapsedMinutes = Math.max(0, order.elapsedMinutes);
 
   const printContent = printBase(
-    `Kitchen Ticket ${order.orderNumber}`,
+    `Kitchen Ticket ${esc(order.orderNumber)}`,
     `
       <div class="masthead">
         <div>
           <h1>MB Crunchy</h1>
-          <p class="muted">${order.businessUnitName}</p>
+          <p class="muted">${esc(order.businessUnitName)}</p>
         </div>
         <div class="right">
           <h2>Kitchen Order Ticket</h2>
-          <p class="muted">${order.orderNumber}</p>
+          <p class="muted">${esc(order.orderNumber)}</p>
         </div>
       </div>
 
       <div class="meta">
         <p><strong>Placed:</strong> ${createdDate.toLocaleString()}<br>
         <strong>Age:</strong> ${elapsedMinutes}m</p>
-        <p class="right"><strong>Customer:</strong> ${order.customerName}<br>
-        <strong>Phone:</strong> ${order.customerPhone}<br>
+        <p class="right"><strong>Customer:</strong> ${esc(order.customerName)}<br>
+        <strong>Phone:</strong> ${esc(order.customerPhone)}<br>
         <strong>Type:</strong> ${orderTypeLabel(order.orderType).toUpperCase()}</p>
       </div>
 
       ${order.deliveryNotes ? `
         <h3>Special Instructions</h3>
         <div class="box">
-          ${order.deliveryNotes}
+          ${esc(order.deliveryNotes)}
         </div>
       ` : ""}
 
@@ -280,8 +281,8 @@ export function PrintKitchenTicket({ order }: PrintInvoiceProps) {
         <tbody>
           ${order.items.map((i) => `
             <tr>
-              <td>${i.name}</td>
-              <td>${i.variantName}</td>
+              <td>${esc(i.name)}</td>
+              <td>${esc(i.variantName)}</td>
               <td class="right"><strong>${i.quantity}</strong></td>
             </tr>
           `).join("")}
@@ -295,7 +296,7 @@ export function PrintKitchenTicket({ order }: PrintInvoiceProps) {
   );
 
   return (
-    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Kitchen Ticket ${order.orderNumber}`, printContent)} className="gap-1.5">
+    <Button variant="outline" size="sm" onClick={() => openPrintWindow(`Kitchen Ticket ${esc(order.orderNumber)}`, printContent)} className="gap-1.5">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path>
         <path d="M7 2v20"></path>
