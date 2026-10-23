@@ -262,6 +262,10 @@ const catalogItems = defineTable({
   metaDescription: v.optional(v.string()),
   metaKeywords: v.optional(v.string()),
   canonicalUrl: v.optional(v.string()),
+  // Tax data for invoicing. Set in Admin > GST Setup; the catalog sync never
+  // overwrites these. Prices are tax-inclusive (GST is carved out of the price).
+  hsnCode: v.optional(v.string()),
+  gstRatePercent: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -890,10 +894,86 @@ const globalSettings = defineTable({
       paymentInstructions: v.optional(v.string()),
     })
   ),
+  // Legal / tax identity used on invoices and the storefront footer.
+  // All fields optional: GSTIN stays blank until registration is complete.
+  businessProfile: v.optional(
+    v.object({
+      legalName: v.optional(v.string()),
+      gstin: v.optional(v.string()),
+      stateCode: v.optional(v.string()),
+      registeredAddress: v.optional(v.string()),
+      fssaiNumber: v.optional(v.string()),
+      invoicePrefix: v.optional(v.string()),
+    })
+  ),
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
 });
+
+// ============================================================================
+// INVOICES (immutable snapshots; numbers are sequential per financial year)
+// ============================================================================
+
+const invoiceLine = v.object({
+  kind: v.union(v.literal("item"), v.literal("delivery")),
+  description: v.string(),
+  hsnCode: v.optional(v.string()),
+  quantity: v.number(),
+  ratePercent: v.number(),
+  taxableValuePaise: v.number(),
+  cgstPaise: v.number(),
+  sgstPaise: v.number(),
+  igstPaise: v.number(),
+  totalPaise: v.number(),
+});
+
+const invoices = defineTable({
+  orderId: v.id("orders"),
+  orderNumber: v.string(),
+  invoiceNumber: v.string(),
+  docType: v.union(v.literal("tax_invoice"), v.literal("bill_of_supply")),
+  financialYear: v.string(),
+  issuedAt: v.number(),
+  seller: v.object({
+    siteName: v.string(),
+    legalName: v.optional(v.string()),
+    gstin: v.optional(v.string()),
+    address: v.optional(v.string()),
+    stateCode: v.optional(v.string()),
+    fssaiNumber: v.optional(v.string()),
+  }),
+  buyer: v.object({
+    name: v.string(),
+    phone: v.string(),
+    email: v.optional(v.string()),
+    address: v.optional(v.string()),
+    stateName: v.optional(v.string()),
+    stateCode: v.optional(v.string()),
+  }),
+  supplyType: v.union(v.literal("intra_state"), v.literal("inter_state"), v.literal("not_applicable")),
+  placeOfSupplyStateCode: v.optional(v.string()),
+  lines: v.array(invoiceLine),
+  totals: v.object({
+    taxableValuePaise: v.number(),
+    cgstPaise: v.number(),
+    sgstPaise: v.number(),
+    igstPaise: v.number(),
+    totalTaxPaise: v.number(),
+    grandTotalPaise: v.number(),
+  }),
+  paymentMethod: v.optional(v.string()),
+  createdAt: v.number(),
+})
+  .index("by_order", ["orderId"])
+  .index("by_invoice_number", ["invoiceNumber"]);
+
+const invoiceCounters = defineTable({
+  // "<financial year>:<docType>", e.g. "2026-27:tax_invoice"
+  key: v.string(),
+  lastSequence: v.number(),
+  updatedAt: v.number(),
+}).index("by_key", ["key"]);
 
 // ============================================================================
 // ADMIN SESSIONS
@@ -1175,6 +1255,8 @@ export default defineSchema({
   analyticsEvents,
   settings,
   globalSettings,
+  invoices,
+  invoiceCounters,
   admins,
   adminSessions,
   reviews,

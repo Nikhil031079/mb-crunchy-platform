@@ -1,6 +1,4 @@
-import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
-import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { AdminAuthProvider } from "@/hooks/use-admin-auth";
@@ -63,6 +61,8 @@ const MartPincodeServiceabilityPage = lazy(() => import("@/pages/admin/MartPinco
 const ShippingZonesPage = lazy(() => import("@/pages/admin/ShippingZonesPage"));
 const ShippingRatesPage = lazy(() => import("@/pages/admin/ShippingRatesPage"));
 const ShippingConfigPage = lazy(() => import("@/pages/admin/ShippingConfigPage"));
+const GstSetupPage = lazy(() => import("@/pages/admin/GstSetupPage"));
+const InvoicePage = lazy(() => import("@/pages/InvoicePage"));
 const ShipmentsPage = lazy(() => import("@/pages/admin/ShipmentsPage"));
 const SettingsPage = lazy(() => import("@/pages/admin/SettingsPage"));
 const BannersPage = lazy(() => import("@/pages/admin/BannersPage"));
@@ -98,22 +98,6 @@ function RouteLoading() {
 // ============================================================================
 // Error Boundaries
 // ============================================================================
-
-class ToolbarErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(err: Error) {
-    console.warn("[VlyToolbar] Caught error, toolbar disabled:", err.message);
-  }
-  render() {
-    return this.state.hasError ? null : this.props.children;
-  }
-}
 
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -272,6 +256,7 @@ function AppRoutes() {
           <Route path="shipping-zones" element={<ShippingZonesPage />} />
           <Route path="shipping-rates" element={<ShippingRatesPage />} />
           <Route path="shipping-config" element={<ShippingConfigPage />} />
+          <Route path="gst-setup" element={<GstSetupPage />} />
           <Route path="shiprocket" element={<ShipmentsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="banners" element={<BannersPage />} />
@@ -319,6 +304,7 @@ function AppRoutes() {
         </Route>
 
         {/* ============ 404 ============ */}
+        <Route path="/invoice/:orderNumber" element={<AdminAuthProvider><InvoicePage /></AdminAuthProvider>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
@@ -332,9 +318,6 @@ function AppRoutes() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
-      <ToolbarErrorBoundary>
-        <VlyToolbar />
-      </ToolbarErrorBoundary>
       <ConvexAuthProvider client={convex}>
         <BrandingProvider>
           <BrowserRouter>

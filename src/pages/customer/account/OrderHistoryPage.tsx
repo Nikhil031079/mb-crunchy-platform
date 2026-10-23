@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "convex/react";
-import { Package, ChevronDown, ChevronUp, ShoppingCart, Printer } from
+import { Link } from "react-router";
+import { Package, ChevronDown, ChevronUp, ShoppingCart, Printer, FileText } from
 "lucide-react";
 import { toast } from "sonner";
 
@@ -380,6 +381,17 @@ export default function OrderHistoryPage() {
                           <Printer className="h-3.5 w-3.5" />
                           Print Receipt
                         </Button>
+                        {/* GST invoice / bill of supply (paid orders only) */}
+                        {order.paymentStatus === "paid" &&
+                          order.status !== "cancelled" &&
+                          order.status !== "refunded" && (
+                            <Button asChild variant="outline" size="sm" className="gap-1.5">
+                              <Link to={`/invoice/${encodeURIComponent(order.orderNumber)}`}>
+                                <FileText className="h-3.5 w-3.5" />
+                                Invoice
+                              </Link>
+                            </Button>
+                          )}
 
                         {/* Payment pending / continuation */}
                         {(order.paymentStatus === "failed" ||

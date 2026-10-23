@@ -29,5 +29,5 @@
       "@convex/*": ["./convex/*"]
     }
   },
-  "include": ["src", "vly-toolbar-readonly.tsx"]
+  "include": ["src"]
 }

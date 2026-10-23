@@ -21,6 +21,7 @@ import { ROUTES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { normalizeIndianPhone, validateIndianPhone, extractDigitsForInput } from "@/utils/phone";
 import { PhoneInput } from "@/components/customer/PhoneInput";
+import { GST_STATES, deriveInvoiceMode, validateFssai, validateGstin } from "@convex/utils/businessProfile";
 
 import type { Id } from "@convex/_generated/dataModel";
 
@@ -119,6 +120,12 @@ function GlobalSettingsSection() {
     supportEmail: "",
     supportPhone: "",
     whatsappNumber: "",
+    legalName: "",
+    gstin: "",
+    stateCode: "",
+    registeredAddress: "",
+    fssaiNumber: "",
+    invoicePrefix: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -134,6 +141,12 @@ function GlobalSettingsSection() {
         supportEmail: globalSettings.supportEmail ?? "",
         supportPhone: extractDigitsForInput(globalSettings.supportPhone ?? ""),
         whatsappNumber: extractDigitsForInput(globalSettings.paymentConfig?.whatsappNumber ?? ""),
+        legalName: globalSettings.businessProfile?.legalName ?? "",
+        gstin: globalSettings.businessProfile?.gstin ?? "",
+        stateCode: globalSettings.businessProfile?.stateCode ?? "",
+        registeredAddress: globalSettings.businessProfile?.registeredAddress ?? "",
+        fssaiNumber: globalSettings.businessProfile?.fssaiNumber ?? "",
+        invoicePrefix: globalSettings.businessProfile?.invoicePrefix ?? "",
       });
       setLoaded(true);
     }
@@ -144,10 +157,32 @@ function GlobalSettingsSection() {
       toast.error("Site name is required");
       return;
     }
+    if (form.gstin.trim()) {
+      const gst = validateGstin(form.gstin);
+      if (!gst.ok) {
+        toast.error(gst.error);
+        return;
+      }
+    }
+    if (form.fssaiNumber.trim()) {
+      const fssai = validateFssai(form.fssaiNumber);
+      if (!fssai.ok) {
+        toast.error(fssai.error);
+        return;
+      }
+    }
     setIsSaving(true);
     try {
       await upsertGlobal({
         sessionToken: getSessionToken()!,
+        businessProfile: {
+          legalName: form.legalName.trim() || undefined,
+          gstin: form.gstin.trim() || undefined,
+          stateCode: form.stateCode || undefined,
+          registeredAddress: form.registeredAddress.trim() || undefined,
+          fssaiNumber: form.fssaiNumber.trim() || undefined,
+          invoicePrefix: form.invoicePrefix.trim() || undefined,
+        },
         siteName: form.siteName.trim(),
         siteDescription: form.siteDescription.trim() || undefined,
         logo: form.logo.trim() || undefined,
@@ -285,6 +320,75 @@ function GlobalSettingsSection() {
               <p className="text-xs text-muted-foreground">
                 Used for delivery assistance links. Customers outside the delivery area can message this number.
               </p>
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Business & Compliance */}
+        <div>
+          <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            Business &amp; Compliance
+          </h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Shown on invoices and in the storefront footer.{" "}
+            {deriveInvoiceMode({ gstin: form.gstin }) === "tax_invoice"
+              ? "A valid GSTIN is on file, so orders will be issued as GST tax invoices."
+              : "No GSTIN yet, so orders will be issued as Bill of Supply (no GST charged). Add your GSTIN once registration is approved."}
+          </p>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="legalName">Legal Business Name <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Input id="legalName" value={form.legalName} onChange={(e) => setForm((f) => ({ ...f, legalName: e.target.value }))} placeholder="As on your GST / FSSAI certificate" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="gstin">GSTIN <span className="font-normal text-muted-foreground">(leave blank until approved)</span></Label>
+                <Input
+                  id="gstin"
+                  value={form.gstin}
+                  onChange={(e) => setForm((f) => ({ ...f, gstin: e.target.value.toUpperCase() }))}
+                  placeholder="15-character GSTIN"
+                  maxLength={15}
+                  className="font-mono"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="fssaiNumber">FSSAI Licence / Registration No. <span className="font-normal text-muted-foreground">(14 digits)</span></Label>
+                <Input
+                  id="fssaiNumber"
+                  value={form.fssaiNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, fssaiNumber: e.target.value.replace(/[^0-9]/g, "") }))}
+                  placeholder="14-digit number"
+                  maxLength={14}
+                  inputMode="numeric"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="stateCode">Business State</Label>
+                <Select value={form.stateCode || undefined} onValueChange={(val) => setForm((f) => ({ ...f, stateCode: val }))}>
+                  <SelectTrigger id="stateCode"><SelectValue placeholder="Select state" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(GST_STATES).map(([code, name]) => (
+                      <SelectItem key={code} value={code}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Decides CGST+SGST vs IGST on invoices.</p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="invoicePrefix">Invoice Prefix <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                <Input id="invoicePrefix" value={form.invoicePrefix} onChange={(e) => setForm((f) => ({ ...f, invoicePrefix: e.target.value.toUpperCase() }))} placeholder="MBC" maxLength={4} className="font-mono" />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="registeredAddress">Registered Address <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Textarea id="registeredAddress" value={form.registeredAddress} onChange={(e) => setForm((f) => ({ ...f, registeredAddress: e.target.value }))} rows={2} placeholder="Address printed on invoices" />
             </div>
           </div>
         </div>

@@ -210,9 +210,21 @@ export function CustomerFooter({
 
         {/* Bottom Bar */}
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/40 pt-6 sm:flex-row">
-          <p className="text-xs text-muted-foreground">
-            &copy; {currentYear} {siteName}. All rights reserved.
-          </p>
+          <div className="space-y-1 text-center text-xs text-muted-foreground sm:text-left">
+            <p>
+              &copy; {currentYear} {siteName}. All rights reserved.
+            </p>
+            {(globalSettings?.businessProfile?.fssaiNumber || globalSettings?.businessProfile?.gstin) && (
+              <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 sm:justify-start">
+                {globalSettings?.businessProfile?.fssaiNumber && (
+                  <span>FSSAI Lic. No. {globalSettings.businessProfile.fssaiNumber}</span>
+                )}
+                {globalSettings?.businessProfile?.gstin && (
+                  <span>GSTIN: {globalSettings.businessProfile.gstin}</span>
+                )}
+              </p>
+            )}
+          </div>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             <Link
               to={ROUTES.HOME}

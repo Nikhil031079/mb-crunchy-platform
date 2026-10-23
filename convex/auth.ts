@@ -1,4 +1,4 @@
-// THIS FILE IS READ ONLY. Do not touch this file unless you are correctly adding a new auth provider in accordance to the vly auth documentation
+// Auth providers: Anonymous (guest) and phone OTP. Add new providers here only with a reviewed plan.
 
 import { convexAuth } from "@convex-dev/auth/server";
 import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
